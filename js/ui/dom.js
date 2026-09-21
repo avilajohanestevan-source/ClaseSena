@@ -1,0 +1,92 @@
+// Utilidades de DOM: creación de elementos, íconos de línea y formatos.
+
+/**
+ * h('button', { class: 'btn', onclick }, 'Texto', otroNodo)
+ * Props especiales: class, style (objeto), dataset, on* (eventos). Los
+ * valores false/null/undefined no se agregan; true agrega el atributo vacío.
+ */
+export function h(tag, props = {}, ...hijos) {
+  const el = document.createElementNS(tag === 'svg' || props?.__svg ? 'http://www.w3.org/2000/svg' : 'http://www.w3.org/1999/xhtml', tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v === false || v === null || v === undefined || k === '__svg') continue;
+    if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k === 'dataset') Object.assign(el.dataset, v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else if (k === 'value' && 'value' in el) el.value = v;
+    else if (k === 'checked' || k === 'disabled' || k === 'selected' || k === 'hidden') el[k] = !!v;
+    else el.setAttribute(k === 'className' ? 'class' : k, v === true ? '' : v);
+  }
+  agregar(el, hijos);
+  return el;
+}
+
+function agregar(el, hijos) {
+  for (const hijo of hijos.flat(Infinity)) {
+    if (hijo === null || hijo === undefined || hijo === false) continue;
+    el.append(hijo instanceof Node ? hijo : document.createTextNode(String(hijo)));
+  }
+}
+
+export function vaciar(el, ...hijos) {
+  el.replaceChildren();
+  agregar(el, hijos);
+  return el;
+}
+
+const RUTAS_ICONOS = {
+  qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2zM16 16h2v2h-2z',
+  escanear: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16',
+  camara: 'M4 8h3l2-3h6l2 3h3v11H4zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  caja: 'M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7M12 11v10',
+  alerta: 'M12 3l10 18H2L12 3zM12 10v5M12 18v.5',
+  historial: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
+  salir: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11',
+  campana: 'M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0',
+  cerrar: 'M6 6l12 12M18 6L6 18',
+  check: 'M5 12l5 5L20 7',
+  descargar: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  subir: 'M12 16V5M7 10l5-5 5 5M5 20h14',
+  reloj: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+  prohibido: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM5.6 5.6l12.8 12.8',
+  ojo: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  herramienta: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z',
+  usuarios: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21v-1a7 7 0 0 1 14 0v1M16 3.1a4 4 0 0 1 0 7.8M22 21v-1a7 7 0 0 0-4-6.3',
+  filtro: 'M3 5h18l-7 8v6l-4 2v-8L3 5z',
+  archivo: 'M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6',
+  reintentar: 'M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5',
+  flecha: 'M5 12h14M13 6l6 6-6 6',
+};
+
+export function icono(nombre, clase = 'icon') {
+  const svg = h('svg', { class: clase, viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+  svg.append(h('path', { __svg: true, d: RUTAS_ICONOS[nombre] || '' }));
+  return svg;
+}
+
+const fmtFecha = new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+const fmtHora = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit' });
+const fmtFechaHora = new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' });
+
+export const formato = {
+  fecha: (v) => (v ? fmtFecha.format(new Date(v)) : '—'),
+  hora: (v) => (v ? fmtHora.format(new Date(v)) : '—'),
+  fechaHora: (v) => (v ? fmtFechaHora.format(new Date(v)) : '—'),
+};
+
+/** Crea un Blob y dispara la descarga en el navegador (exportes simulados). */
+export function descargar(nombre, contenido, tipo) {
+  const url = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+  const a = h('a', { href: url, download: nombre });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Muestra un error de campo debajo del control (o lo quita si no hay mensaje). */
+export function errorCampo(control, mensaje) {
+  const contenedor = control.closest('.campo') || control.parentElement;
+  contenedor.querySelector(':scope > .field-error')?.remove();
+  control.toggleAttribute('aria-invalid', !!mensaje);
+  if (mensaje) contenedor.append(h('div', { class: 'field-error', role: 'alert' }, mensaje));
+}

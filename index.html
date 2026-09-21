@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00304D">
+  <title>Asistencia y ambientes · SENA</title>
+  <link rel="icon" type="image/png" href="img/sena-logo-verde.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/sena-base.css">
+  <link rel="stylesheet" href="css/ambientes.css">
+</head>
+<body>
+  <div id="app">
+    <noscript>Esta aplicación necesita JavaScript.</noscript>
+  </div>
+
+  <!-- Librerías sin build (se cargan como scripts clásicos y quedan en window). -->
+  <script src="vendor/qr/qrcode.min.js"></script>
+  <script src="vendor/qr/jsQR.js"></script>
+  <script src="vendor/zxing/zxing.min.js"></script>
+  <!-- GSAP: núcleo + plugins que ya usa el módulo. El resto de plugins
+       (ScrollTrigger, SplitText, MorphSVG, MotionPath...) está en
+       vendor/gsap para agregarlos cuando se necesiten. -->
+  <script src="vendor/gsap/gsap.min.js"></script>
+  <script src="vendor/gsap/CustomEase.min.js"></script>
+  <script src="vendor/gsap/DrawSVGPlugin.min.js"></script>
+  <script src="vendor/gsap/Flip.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+# Dependencias de npm: se instalan con `npm install` y se copian con `npm run vendor`.
+/node_modules/
