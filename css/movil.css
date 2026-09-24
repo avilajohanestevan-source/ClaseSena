@@ -216,30 +216,69 @@ body[data-vista="login"]::before{ display:none; }
 .login-form{ display:grid; gap:0; }
 .login-form .campo{ margin-bottom:14px; }
 
-/* Selector de rol: 4 roles en rejilla 2×2; el indicador se desliza en X e Y. */
-.segmento{
-  --x:0; --y:0; position:relative; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:4px;
-  padding:4px; border-radius:22px; background:var(--color-surface-muted);
+/* Selector de rol desplegable (js/ui/selector-rol.js). La lista flota sobre
+   el formulario: se despliega desde arriba con un resorte suave y las
+   opciones entran escalonadas (--i). */
+.rol-selector{ position:relative; z-index:5; }
+.rol-etiqueta{ display:block; margin:0 0 6px 4px; font-size:13px; font-weight:700; color:var(--color-heading); }
+.rol-boton{
+  display:flex; align-items:center; gap:12px; width:100%; min-height:64px; padding:8px 14px 8px 8px;
+  border:1.5px solid var(--color-border-strong); border-radius:20px; background:var(--color-surface);
+  font:inherit; text-align:left; color:inherit; cursor:pointer;
+  transition:border-color var(--dur-micro-2) var(--ease-standard), box-shadow var(--dur-micro-2) var(--ease-standard);
 }
-.segmento-indicador{
-  position:absolute; top:4px; left:4px; width:calc((100% - 12px) / 2); height:calc((100% - 12px) / 2);
-  border-radius:18px; background:var(--color-surface); box-shadow:var(--sh-2);
-  transform:translate(calc(var(--x) * (100% + 4px)), calc(var(--y) * (100% + 4px)));
-  transition:transform 280ms var(--ease-bounce);
+.rol-boton:hover{ border-color:var(--c-verde-300, var(--color-brand)); }
+.rol-boton:focus-visible{ outline:none; box-shadow:0 0 0 3px var(--color-focus); }
+.rol-selector--abierto .rol-boton{ border-color:var(--color-brand); box-shadow:0 0 0 4px var(--c-verde-50); }
+.rol-boton[aria-invalid]{ border-color:var(--color-danger); }
+.rol-icono{
+  width:46px; height:46px; flex-shrink:0; display:grid; place-items:center; border-radius:14px;
+  background:var(--c-verde-50); color:var(--c-verde-700);
 }
-.segmento-opcion{ position:relative; z-index:1; margin:0; }
-.segmento-opcion input{ position:absolute; opacity:0; pointer-events:none; }
-.segmento-opcion span{
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
-  min-height:52px; padding:4px 2px; border-radius:var(--r-pill); cursor:pointer;
-  font-size:12.5px; font-weight:600; color:var(--color-text-muted);
-  transition:color var(--dur-micro-2) var(--ease-standard);
+.rol-icono .icon{ width:24px; height:24px; }
+.rol-icono--pop{ animation:rol-pop 420ms var(--ease-bounce); }
+@keyframes rol-pop{ 0%{ transform:scale(.6) rotate(-12deg); } 60%{ transform:scale(1.12) rotate(4deg); } 100%{ transform:none; } }
+.rol-texto{ flex:1; min-width:0; display:grid; gap:1px; line-height:1.25; }
+.rol-texto strong{ font-size:15.5px; color:var(--color-heading); }
+.rol-texto span{ font-size:12.5px; color:var(--color-text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rol-chevron{
+  width:32px; height:32px; flex-shrink:0; display:grid; place-items:center; border-radius:50%;
+  background:var(--color-surface-muted); color:var(--color-heading);
+  transition:transform 320ms var(--ease-bounce), background-color var(--dur-micro-2) var(--ease-standard);
 }
-.segmento-opcion .icon{ width:20px; height:20px; }
-.segmento-opcion span:hover{ color:var(--color-heading); }
-.segmento-opcion input:checked + span{ color:var(--color-primary); }
-.segmento-opcion input:focus-visible + span{ box-shadow:0 0 0 3px var(--color-focus); }
-.segmento[aria-invalid]{ box-shadow:0 0 0 2px var(--color-danger); }
+.rol-chevron .icon{ width:18px; height:18px; }
+.rol-selector--abierto .rol-chevron{ transform:rotate(180deg); background:var(--c-verde-100); color:var(--c-verde-800); }
+
+.rol-panel{
+  position:absolute; left:0; right:0; top:calc(100% + 8px);
+  padding:6px; border-radius:20px; background:var(--color-surface);
+  border:1px solid var(--color-border); box-shadow:var(--sh-4);
+  transform-origin:top center; transform:translateY(-8px) scale(.96); opacity:0; visibility:hidden;
+  clip-path:inset(0 0 100% 0 round 20px);
+  transition:transform 260ms var(--ease-out-cubic), opacity 200ms var(--ease-standard),
+             clip-path 300ms var(--ease-out-cubic), visibility 0s linear 300ms;
+}
+.rol-selector--abierto .rol-panel{
+  transform:none; opacity:1; visibility:visible; clip-path:inset(0 0 0 0 round 20px);
+  transition:transform 380ms var(--ease-bounce), opacity 200ms var(--ease-standard), clip-path 340ms var(--ease-out-cubic);
+}
+.rol-lista{ list-style:none; margin:0; padding:0; display:grid; gap:2px; outline:none; }
+.rol-opcion{
+  display:flex; align-items:center; gap:12px; min-height:var(--hit-min); padding:8px 10px 8px 8px;
+  border-radius:14px; cursor:pointer;
+  opacity:0; transform:translateY(-6px);
+  transition:background-color var(--dur-micro-1) var(--ease-standard), opacity 200ms var(--ease-standard), transform 260ms var(--ease-out-cubic);
+}
+.rol-selector--abierto .rol-opcion{ opacity:1; transform:none; transition-delay:0s, calc(60ms + var(--i) * 45ms), calc(60ms + var(--i) * 45ms); }
+.rol-opcion .rol-icono{ width:38px; height:38px; border-radius:12px; background:var(--color-surface-muted); color:var(--color-text-muted); transition:background-color var(--dur-micro-2), color var(--dur-micro-2); }
+.rol-opcion .rol-icono .icon{ width:20px; height:20px; }
+.rol-opcion--activa{ background:var(--color-surface-muted); }
+.rol-lista:focus-visible .rol-opcion--activa{ box-shadow:inset 0 0 0 2px var(--color-focus); }
+.rol-opcion[aria-selected="true"] .rol-icono{ background:var(--c-verde-100); color:var(--c-verde-800); }
+.rol-opcion[aria-selected="true"] .rol-texto strong{ color:var(--color-primary); }
+.rol-check{ width:24px; display:grid; place-items:center; color:var(--color-brand); opacity:0; transform:scale(.4); transition:opacity 180ms, transform 260ms var(--ease-bounce); }
+.rol-check .icon{ width:20px; height:20px; }
+.rol-opcion[aria-selected="true"] .rol-check{ opacity:1; transform:none; }
 
 /* Campo con etiqueta flotante (píldora) */
 .campo-flotante{ position:relative; }
@@ -303,7 +342,6 @@ body[data-vista="login"]::before{ display:none; }
 
 @media (min-width:480px){
   .login-tarjeta{ padding:32px 32px 24px; }
-  .segmento-opcion span{ flex-direction:row; gap:6px; min-height:var(--hit-min); font-size:13.5px; }
 }
 @media (min-width:900px){
   .login-cabecera{ padding:28px 48px 8px; }
@@ -450,7 +488,7 @@ button.adm-kpi:active{ transform:scale(.98); }
 @media (max-width:360px){
   .login-pieza--a{ top:-84px; right:-62%; }
   .login-tarjeta{ padding:24px 16px 16px; }
-  .segmento-opcion span{ font-size:11.5px; }
+  .rol-texto span{ font-size:12px; }
   .campo-flotante-prefijo{ width:70px; padding-left:12px !important; }
   .campo-flotante--prefijo .campo-flotante-input{ padding-left:86px !important; }
   .campo-flotante--prefijo .campo-flotante-etiqueta{ left:87px; max-width:calc(100% - 96px); }

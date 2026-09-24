@@ -1,17 +1,19 @@
-// Inspección en curso (instructor), en una sola columna pensada para el celular:
-//  1. Cabecera con el ambiente, la hora de inicio y el QR de la inspección.
+// Revisión del ambiente (portero), en una sola columna pensada para el celular.
+// El portero la hace con el instructor en el salón, antes de entregárselo:
+//  1. Cabecera con el ambiente y la hora de inicio.
 //  2. Botón grande "Escanear QR de ítem" → formulario de daño (tipo, severidad, foto, comentario).
 //  3. Checklist visible (Bien / Novedad) que se guarda solo, y observaciones.
 //  4. Inventario del ambiente con "Reportar daño" por ítem y la lista de daños reportados.
-//  5. Barra fija: "Ambiente OK y firmar" o "Confirmar con novedades y firmar".
-// Si la inspección ya no está en curso, se muestra su planilla.
+//  5. Barra fija: "Entregar y generar QR". El portero firma y se abre la planilla
+//     con el QR grande que el instructor escanea para recibir el ambiente.
+// Si la revisión ya no está en curso, se muestra su planilla.
 import { h, anexar, icono, vaciar, errorCampo } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { toast, abrirModal, confirmar } from '../ui/avisos.js';
 import { crearEscaner } from '../ui/escaner.js';
 import { crearCapturaFoto } from '../ui/camara.js';
 import { pedirFirma } from '../ui/firma.js';
-import { chipItem, chipSeveridad, etiquetaTipoDano, fecha, qr } from '../ui/ambientes-ui.js';
+import { chipItem, chipSeveridad, etiquetaTipoDano, fecha } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado, emitir } from '../estado.js';
 import { leerQrItem, validarReporteDano, progresoChecklist, resultadoInspeccion, TIPOS_DANO, PRIORIDADES } from '../reglas.js';
@@ -21,7 +23,7 @@ const AYUDA_SEVERIDAD = { leve: 'Se puede seguir usando.', moderada: 'Funciona c
 export async function render(raiz, { params, alSalir }) {
   const id = Number(params.get('id'));
   let d = await apiAmb.inspeccion(id);
-  if (d.estado !== 'en_curso' || d.instructor.id !== estado.usuario.id) {
+  if (d.estado !== 'en_curso' || d.portero.id !== estado.usuario.id) {
     location.replace(`#/planilla?id=${id}`);
     return;
   }
@@ -33,26 +35,15 @@ export async function render(raiz, { params, alSalir }) {
   const intervalo = setInterval(reloj, 30_000);
   alSalir(() => clearInterval(intervalo));
 
-  const qrCaja = h('div', { class: 'insp-qr', hidden: true },
-    qr(d.qr, 168, 'QR de la inspección'),
-    h('p', { class: 'text-muted' }, 'El portero puede escanear este código para abrir la planilla.'),
-    h('code', { class: 'insp-qr-texto' }, d.qr));
-  const verQr = h('button', { class: 'btn btn-outline btn-sm', type: 'button', 'aria-expanded': 'false', onclick: () => {
-    qrCaja.hidden = !qrCaja.hidden;
-    verQr.setAttribute('aria-expanded', String(!qrCaja.hidden));
-    verQr.lastChild.textContent = qrCaja.hidden ? 'Ver QR de la inspección' : 'Ocultar QR';
-  } }, icono('qr'), h('span', {}, 'Ver QR de la inspección'));
-
   const cab = h('section', { class: 'card insp-cabecera', 'data-anim': '' },
     h('div', { class: 'insp-cabecera-fila' },
       h('span', { class: 'amb-numero amb-numero--grande' }, d.ambiente.codigo),
       h('div', {},
-        h('span', { class: 'eyebrow eyebrow-verde' }, 'Inspección en curso'),
+        h('span', { class: 'eyebrow eyebrow-verde' }, 'Revisión antes de entregar'),
         h('h2', { class: 'vista-titulo' }, d.ambiente.nombre),
         h('p', { class: 'section-sub' }, transcurrido))),
-    h('div', { class: 'insp-cabecera-acciones' }, verQr,
-      h('span', { class: 'text-muted' }, `Recibe: ${d.ambiente.portero || 'portería'}`)),
-    qrCaja);
+    h('p', { class: 'insp-cabecera-ayuda' }, icono('qr'),
+      h('span', {}, 'Revisa el salón con el instructor. Al terminar se genera un QR que él escanea para recibirlo.')));
 
   /* --- escanear ítem --- */
   const escanearBtn = h('button', { class: 'btn btn-primary btn-block btn-lg', type: 'button', onclick: () => escanearItem() },
@@ -114,7 +105,7 @@ export async function render(raiz, { params, alSalir }) {
         h('div', { class: 'reporte-chips' }, h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(r.tipoDano)), chipSeveridad(r.severidad)),
         h('p', {}, r.comentario)),
       h('button', { class: 'btn btn-outline btn-sm btn-icono', type: 'button', 'aria-label': `Quitar el reporte de ${r.nombre}`, onclick: () => quitar(r) }, icono('basura'))))
-      : h('p', { class: 'text-muted reportes-vacio' }, 'Ningún daño reportado. Si todo está bien, marca el checklist y firma.'));
+      : h('p', { class: 'text-muted reportes-vacio' }, 'Ningún daño reportado. Si todo está bien, marca el checklist y entrega el ambiente.'));
   }
 
   async function quitar(r) {
@@ -206,17 +197,17 @@ export async function render(raiz, { params, alSalir }) {
   /* --- pie fijo: confirmar y firmar --- */
   const ayudaPie = h('p', { class: 'insp-pie-ayuda', role: 'status' });
   const confirmarBtn = h('button', { class: 'btn btn-primary btn-block btn-lg', type: 'button', onclick: () => confirmarInspeccion() });
-  const cancelarBtn = h('button', { class: 'btn btn-outline', type: 'button', onclick: () => cancelar() }, 'Cancelar inspección');
+  const cancelarBtn = h('button', { class: 'btn btn-outline', type: 'button', onclick: () => cancelar() }, 'Cancelar revisión');
 
   function pintarPie() {
     const p = progresoChecklist(d.checklist);
     const resultado = resultadoInspeccion(d);
     confirmarBtn.disabled = !p.completo;
     confirmarBtn.className = `btn btn-block btn-lg ${resultado === 'ok' ? 'btn-primary' : 'btn-out'}`;
-    vaciar(confirmarBtn, icono(resultado === 'ok' ? 'check' : 'alerta'),
-      resultado === 'ok' ? 'Ambiente OK y firmar' : `Confirmar con novedades y firmar`);
+    vaciar(confirmarBtn, icono('qr'),
+      resultado === 'ok' ? 'Entregar en buen estado y generar QR' : 'Entregar con novedades y generar QR');
     ayudaPie.textContent = p.completo
-      ? (resultado === 'ok' ? 'Todo en orden. Firma para enviar la planilla al portero.' : `${d.reportes.length} daño(s) y ${p.novedades} novedad(es) en el checklist.`)
+      ? (resultado === 'ok' ? 'Todo en orden. Firma y muéstrale el QR al instructor.' : `${d.reportes.length} daño(s) y ${p.novedades} novedad(es): se avisará a coordinación cuando el instructor reciba.`)
       : `Falta revisar ${p.total - p.revisados} punto(s) del checklist.`;
   }
 
@@ -230,10 +221,12 @@ export async function render(raiz, { params, alSalir }) {
     }
     const resultado = resultadoInspeccion(d);
     const firma = await pedirFirma({
-      titulo: 'Firma del instructor',
-      declaracion: `Declaro que revisé el ambiente ${d.ambiente.codigo} y que ${resultado === 'ok' ? 'lo recibo sin novedades' : `reporté ${d.reportes.length} daño(s) y las novedades indicadas`}.`,
+      titulo: 'Firma del portero',
+      declaracion: `Entrego el ambiente ${d.ambiente.codigo} ${resultado === 'ok' ? 'en buen estado' : `con ${[
+        d.reportes.length && `${d.reportes.length} daño(s) reportado(s)`, p.novedades && `${p.novedades} novedad(es) en el checklist`,
+      ].filter(Boolean).join(' y ')}`}.`,
       nombre: estado.usuario.nombre,
-      textoConfirmar: 'Firmar y enviar',
+      textoConfirmar: 'Firmar y generar QR',
     });
     if (!firma) return;
     confirmarBtn.disabled = true;
@@ -243,39 +236,22 @@ export async function render(raiz, { params, alSalir }) {
       });
       clearTimeout(temporizador); temporizador = null;
       emitir('inspecciones');
-      exito();
+      location.hash = `#/planilla?id=${id}&qr=1`;
     } catch (e) {
-      toast('error', 'No se confirmó', e.message);
+      toast('error', 'No se confirmó la entrega', e.message);
       confirmarBtn.disabled = false;
     }
   }
 
   async function cancelar() {
-    if (!await confirmar({ titulo: '¿Cancelar la inspección?', mensaje: 'Se borran los daños reportados y el ambiente queda libre para otra inspección.', textoAceptar: 'Cancelar inspección', peligro: true })) return;
+    if (!await confirmar({ titulo: '¿Cancelar la revisión?', mensaje: 'Se borran los daños reportados y el ambiente queda libre para otra revisión.', textoAceptar: 'Cancelar revisión', peligro: true })) return;
     try {
       await apiAmb.cancelarInspeccion(id);
       clearTimeout(temporizador); temporizador = null;
       emitir('inspecciones');
-      toast('info', 'Inspección cancelada');
+      toast('info', 'Revisión cancelada');
       location.hash = '#/inspecciones';
     } catch (e) { toast('error', 'No se canceló', e.message); }
-  }
-
-  function exito() {
-    const icono_ = h('svg', { class: 'resultado-icono', viewBox: '0 0 64 64', 'aria-hidden': 'true' },
-      h('circle', { __svg: true, cx: 32, cy: 32, r: 28 }), h('path', { __svg: true, d: 'M19 33l9 9 17-19' }));
-    const tarjeta = h('section', { class: 'resultado resultado--aceptado insp-exito' },
-      icono_,
-      h('div', { class: 'resultado-texto' },
-        h('strong', {}, 'Inspección enviada al portero'),
-        h('span', {}, `Ambiente ${d.ambiente.codigo} · firmada a las ${fecha.hora(d.confirmadaEn)} por ${d.firmaInstructor.nombre}.`),
-        h('span', {}, `${d.ambiente.portero || 'Portería'} recibió la notificación para revisar la planilla y firmar la recepción.`),
-        h('div', { class: 'form-actions' },
-          h('a', { class: 'btn btn-primary', href: `#/planilla?id=${id}` }, icono('archivo'), 'Ver planilla'),
-          h('a', { class: 'btn btn-outline', href: '#/inicio' }, 'Ir al inicio'))));
-    vaciar(raiz, tarjeta);
-    anim.resultado(tarjeta);
-    window.scrollTo({ top: 0 });
   }
 
   function pintarTodo() { pintarChecklist(); pintarInventario(); pintarPie(); }

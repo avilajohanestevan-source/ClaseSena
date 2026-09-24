@@ -41,12 +41,13 @@ function rutaReporte(): never
     );
 
     $danos = filas(
-        "SELECT d.*, it.codigo, it.nombre AS item, it.estado AS estado_actual, e.codigo AS ambiente, u.nombre AS instructor, s.id AS inspeccion
+        "SELECT d.*, it.codigo, it.nombre AS item, it.estado AS estado_actual, e.codigo AS ambiente, u.nombre AS instructor, p.nombre AS portero, s.id AS inspeccion
          FROM inspection_items d
          JOIN inspections s ON s.id = d.inspection_id
          JOIN inventory_items it ON it.id = d.inventory_item_id
          JOIN environments e ON e.id = s.environment_id
-         JOIN users u ON u.id = s.instructor_id
+         JOIN users p ON p.id = s.portero_id
+         LEFT JOIN users u ON u.id = s.instructor_id
          WHERE $w ORDER BY d.reportado_en DESC LIMIT 300",
         $params
     );
@@ -78,6 +79,7 @@ function rutaReporte(): never
             'comentario' => $d['comentario'],
             'foto' => $d['foto'],
             'instructor' => $d['instructor'],
+            'portero' => $d['portero'],
             'reportadoEn' => iso($d['reportado_en']),
         ], $danos),
     ]);

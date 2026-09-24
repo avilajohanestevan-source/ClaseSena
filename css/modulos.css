@@ -391,3 +391,29 @@ label.ajuste{ justify-content:flex-start; }
   .table-wrap{ overflow:visible; border:0; }
   .table-wrap th:first-child, .table-wrap td:first-child{ position:static; box-shadow:none; }
 }
+
+/* ================= Entrega con QR (portero → instructor) ================= */
+button.accion-grande{ width:100%; border:0; font:inherit; text-align:left; cursor:pointer; }
+.insp-instructor{ display:grid; gap:16px; margin-top:16px; }
+.insp-cabecera-ayuda{
+  display:flex; align-items:flex-start; gap:10px; margin:14px 0 0; padding:10px 12px; border-radius:var(--r-md);
+  background:var(--c-verde-50); color:var(--c-verde-800); font-size:13.5px; line-height:1.4;
+}
+.insp-cabecera-ayuda .icon{ width:20px; height:20px; flex-shrink:0; margin-top:1px; }
+.entrega-qr{ display:grid; justify-items:center; gap:10px; margin-bottom:16px; text-align:center; border:2px solid var(--c-verde-200); }
+.entrega-qr-titulo{ margin:0; font-size:21px; line-height:1.25; color:var(--color-heading); }
+.entrega-qr > p{ margin:0; max-width:46ch; font-size:14px; }
+.entrega-qr-marco{
+  padding:14px; border-radius:20px; background:#fff; box-shadow:var(--sh-2);
+  outline:3px solid var(--color-brand); outline-offset:6px; animation:entrega-marco 2.4s var(--ease-standard) infinite;
+}
+.entrega-qr-marco .qr-caja img, .entrega-qr-marco .qr-caja canvas{ display:block; max-width:100%; height:auto; }
+@keyframes entrega-marco{ 50%{ outline-offset:10px; outline-color:var(--c-verde-200); } }
+.entrega-qr-estado{ display:inline-flex; align-items:center; gap:10px; font-weight:600; color:var(--c-verde-800); }
+.entrega-qr-pulso{ position:relative; width:10px; height:10px; border-radius:50%; background:var(--color-brand); }
+.entrega-qr-pulso::after{
+  content:""; position:absolute; inset:0; border-radius:50%; background:var(--color-brand);
+  animation:entrega-pulso 1.6s ease-out infinite;
+}
+@keyframes entrega-pulso{ to{ transform:scale(3); opacity:0; } }
+.entrega-aviso{ margin-bottom:16px; }

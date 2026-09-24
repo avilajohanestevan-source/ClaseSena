@@ -1,11 +1,12 @@
 // FormLogin (rediseño móvil v1): fondo blanco con dos piezas decorativas
 // (rectángulos con bordes circulares) ancladas a las esquinas de la
-// tarjeta, selector de rol segmentado, campos con etiqueta flotante y
+// tarjeta, selector de rol desplegable y animado, campos con etiqueta flotante y
 // mensajes para cada error de la API (401, 403, 423, red). Al validar,
 // la tarjeta hace un micro-rebote y las piezas salen de la pantalla antes
 // de pasar al panel (ver anim.salidaLogin).
 import { h, icono, errorCampo } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
+import { crearSelectorRol } from '../ui/selector-rol.js';
 import { ROLES, validarLogin } from '../reglas.js';
 import { api } from '../api/contratos.js';
 import { apiAmb } from '../api/ambientes.js';
@@ -46,21 +47,14 @@ export function render(raiz, { desdeSalida = false } = {}) {
   const textoEnviar = h('span', {}, 'Ingresar');
   const enviar = h('button', { class: 'btn btn-primary btn-block login-enviar', type: 'submit' }, textoEnviar, icono('flecha'));
 
-  /* --- selector de rol segmentado: el indicador se desliza con rebote --- */
-  const indicador = h('span', { class: 'segmento-indicador', 'aria-hidden': 'true' });
-  const opcionesRol = h('div', { class: 'segmento', role: 'radiogroup', 'aria-label': 'Rol' },
-    indicador,
-    ROLES.map((r, i) => h('label', { class: 'segmento-opcion' },
-      h('input', { type: 'radio', name: 'rol', value: r.clave, checked: r.clave === rol, onchange: () => {
-        rol = r.clave;
-        indicador.style.setProperty('--x', i % 2);
-        indicador.style.setProperty('--y', Math.floor(i / 2));
-        errorCampo(opcionesRol, null);
-      } }),
-      h('span', {}, icono(r.clave), r.etiqueta))));
+  /* --- selector de rol desplegable --- */
+  const selectorRol = crearSelectorRol({
+    opciones: ROLES, valor: rol,
+    alCambiar: (v) => { rol = v; errorCampo(selectorRol.boton, null); },
+  });
 
   const form = h('form', { class: 'login-form', novalidate: true, onsubmit: ingresar },
-    h('div', { class: 'campo' }, opcionesRol),
+    h('div', { class: 'campo' }, selectorRol.el),
     h('div', { class: 'campo' },
       h('div', { class: 'campo-flotante campo-flotante--prefijo' },
         tipoDocumento, identificacion, h('label', { class: 'campo-flotante-etiqueta', for: 'login-id' }, 'Número de documento'))),
@@ -122,7 +116,7 @@ export function render(raiz, { desdeSalida = false } = {}) {
     const errores = validarLogin(datos);
     errorCampo(identificacion, errores.identificacion);
     errorCampo(password, errores.password);
-    errorCampo(opcionesRol, errores.rol);
+    errorCampo(selectorRol.boton, errores.rol);
     if (Object.keys(errores).length) { anim.sacudir(tarjeta); form.querySelector('[aria-invalid]')?.focus?.(); return; }
 
     enviar.disabled = true;
@@ -160,7 +154,7 @@ export function render(raiz, { desdeSalida = false } = {}) {
       h('ul', {}, USUARIOS_DEMO.map((u) => h('li', {},
         h('button', { class: 'chip-boton', type: 'button', onclick: () => {
           identificacion.value = u.identificacion; password.value = 'Sena2026*'; tipoDocumento.value = u.tipo || 'CC';
-          form.querySelector(`input[value="${u.rol}"]`).click();
+          rol = u.rol; selectorRol.fijar(u.rol);
           errorCampo(identificacion, null); errorCampo(password, null);
         } }, u.identificacion),
         h('span', {}, `${u.nombre} · ${u.rol}`)))));

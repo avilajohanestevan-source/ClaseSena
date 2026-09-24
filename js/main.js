@@ -25,8 +25,8 @@ const RUTAS = {
   perfil: { vista: () => import('./vistas/perfil.js'), roles: TODOS, titulo: 'Mi perfil', icono: 'perfil', grupo: 'general' },
   ambientes: { vista: () => import('./vistas/ambientes.js'), roles: TODOS, titulo: 'Ambientes', icono: 'ambiente', grupo: 'ambientes' },
   inspecciones: { vista: () => import('./vistas/inspecciones.js'), roles: PERSONAL, titulo: 'Inspecciones', icono: 'inspeccion', grupo: 'ambientes' },
-  inspeccion: { vista: () => import('./vistas/inspeccion.js'), roles: ['instructor'], titulo: 'Inspección en curso', activa: 'inspecciones' },
-  planilla: { vista: () => import('./vistas/planilla.js'), roles: PERSONAL, titulo: 'Planilla de inspección', activa: 'inspecciones' },
+  inspeccion: { vista: () => import('./vistas/inspeccion.js'), roles: ['portero'], titulo: 'Revisión del ambiente', activa: 'inspecciones' },
+  planilla: { vista: () => import('./vistas/planilla.js'), roles: PERSONAL, titulo: 'Planilla de entrega', activa: 'inspecciones' },
   inventario: { vista: () => import('./vistas/inventario.js'), roles: PERSONAL, titulo: 'Inventario', icono: 'caja', grupo: 'ambientes' },
   etiquetas: { vista: () => import('./vistas/etiquetas.js'), roles: PERSONAL, titulo: 'Etiquetas QR', activa: 'inventario' },
   reportes: { vista: () => import('./vistas/reportes.js'), roles: ['administrativo'], titulo: 'Reportes', icono: 'reporte', grupo: 'ambientes' },
@@ -90,14 +90,13 @@ function pintarMenu(u) {
   shell.campana.replaceChildren(u.rol === 'aprendiz' ? '' : bandeja.el);
 }
 
-/** Insignia de Inspecciones: pendientes de recibir (portero/administrativo) o en curso (instructor). */
+/** Insignia de Inspecciones: entregas esperando al instructor (portero y administrativo). */
 async function actualizarInsignias() {
   const u = estado.usuario;
-  if (!u || u.rol === 'aprendiz') return;
-  const filtro = u.rol === 'instructor' ? { estado: 'en_curso' } : { estado: 'pendiente_recepcion', asignados: u.rol === 'portero' ? 1 : undefined };
+  if (!u || u.rol === 'aprendiz' || u.rol === 'instructor') return;
   try {
-    const n = (await apiAmb.inspecciones(filtro)).length;
-    shell.insignia('inspecciones', n, u.rol === 'instructor' ? 'en curso' : 'pendientes de recibir');
+    const n = (await apiAmb.inspecciones({ estado: 'pendiente_recepcion', asignados: u.rol === 'portero' ? 1 : undefined })).length;
+    shell.insignia('inspecciones', n, 'esperando al instructor');
   } catch { /* la insignia es informativa */ }
 }
 escuchar('bandeja', actualizarInsignias);

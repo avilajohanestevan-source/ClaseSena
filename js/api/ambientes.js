@@ -18,7 +18,7 @@ import { pedirAmbientes as p } from './cliente.js';
  *   severidad:'leve'|'moderada'|'grave', comentario:string, foto:?string, reportadoEn:string}} ReporteDano
  * @typedef {{id:number, estado:'en_curso'|'pendiente_recepcion'|'recibida'|'cancelada', resultado:?('ok'|'con_danos'),
  *   qr:string, ambiente:{id:number, codigo:string, nombre:string, bloque:?string, porteroId:?number, portero:?string},
- *   instructor:{id:number, nombre:string}, portero:?{id:number, nombre:string},
+ *   portero:{id:number, nombre:string}, instructor:?{id:number, nombre:string},
  *   iniciadaEn:string, confirmadaEn:?string, recibidaEn:?string, danos:number, danosGraves:number}} Inspeccion
  * @typedef {Inspeccion & {checklist:PuntoChecklist[], observaciones:?string, firmaInstructor:?Firma,
  *   firmaPortero:?Firma, reportes:ReporteDano[], inventario:(Item & {reportado:boolean})[]}} InspeccionDetalle
@@ -50,13 +50,13 @@ export const apiAmb = {
   // Inspecciones
   inspecciones: (filtros) => p('GET', '/inspections', filtros),       // → Inspeccion[]
   inspeccion: (id) => p('GET', `/inspections/${id}`),                 // → InspeccionDetalle
-  inspeccionPorQr: (token) => p('GET', `/inspections/by-qr/${token}`),
+  inspeccionPorQr: (token) => p('GET', `/inspections/by-qr/${token}`),      // portero y administrativo
   iniciarInspeccion: (ambienteId) => p('POST', '/inspections', { ambienteId }),
   guardarChecklist: (id, checklist, observaciones) => p('PATCH', `/inspections/${id}/checklist`, { checklist, observaciones }),
   reportarDano: (id, datos) => p('POST', `/inspections/${id}/items`, datos), // {itemId|codigo, tipoDano, severidad, comentario, foto?}
   quitarDano: (id, reporteId) => p('DELETE', `/inspections/${id}/items/${reporteId}`),
-  confirmarInspeccion: (id, datos) => p('POST', `/inspections/${id}/confirm`, datos), // {checklist, observaciones, firma, nombreFirma}
-  recibirInspeccion: (id, datos) => p('POST', `/inspections/${id}/receive`, datos),   // {firma, nombreFirma}
+  confirmarInspeccion: (id, datos) => p('POST', `/inspections/${id}/confirm`, datos), // portero: {checklist, observaciones, firma, nombreFirma} → genera el QR
+  recibirPorQr: (token) => p('POST', `/inspections/by-qr/${token}/receive`), // instructor: escanea el QR del portero
   cancelarInspeccion: (id) => p('POST', `/inspections/${id}/cancel`),
 
   // Notificaciones

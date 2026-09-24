@@ -20,7 +20,7 @@ async function pedir(metodo, ruta, { token, cuerpo } = {}) {
 }
 const ingresar = async (identificacion, rol) => (await pedir('POST', '/auth/login', { cuerpo: { identificacion, password: CLAVE, rol } })).datos;
 
-test('flujo completo: inspección con daño, confirmación, notificación al portero y recepción', async (t) => {
+test('flujo completo: el portero revisa y entrega con QR, el instructor lo escanea y coordinación recibe los daños', async (t) => {
   let disponible = true;
   await fetch(API + '/me').catch(() => { disponible = false; });
   if (!disponible) { t.skip('API no disponible (enciende Apache y MySQL en XAMPP)'); return; }
@@ -42,49 +42,58 @@ test('flujo completo: inspección con daño, confirmación, notificación al por
   const aprendiz = await ingresar('1122334455', 'aprendiz');
   assert.equal((await pedir('GET', '/inspections', { token: aprendiz.token })).status, 403);
 
-  // El instructor Diana (109 → portera Martha) inicia la inspección
+  // La portera Martha (109) revisa el ambiente; el instructor no puede iniciar la revisión
+  const portero = await ingresar('4040404041', 'portero');
   const instructor = await ingresar('1010101012', 'instructor');
   const amb = ambientes.find((x) => x.codigo === '109');
-  const inicio = await pedir('POST', '/inspections', { token: instructor.token, cuerpo: { ambienteId: amb.id } });
+  assert.equal((await pedir('POST', '/inspections', { token: instructor.token, cuerpo: { ambienteId: amb.id } })).status, 403);
+  const inicio = await pedir('POST', '/inspections', { token: portero.token, cuerpo: { ambienteId: amb.id } });
   assert.ok([200, 201].includes(inicio.status), JSON.stringify(inicio.datos));
   const insp = inicio.datos;
   assert.equal(insp.estado, 'en_curso');
-  assert.ok(insp.iniciadaEn && insp.qr.startsWith('SENA-INSP:'));
+  assert.equal(insp.portero.nombre, 'Martha Lucía Peña');
+  assert.equal(insp.instructor, null);
 
-  // Reporte de daño → inspection_items vinculado a inventory_items
+  // Reporte de daño → inspection_items vinculado a inventory_items; el inventario queda "danado"
   const item = insp.inventario.find((i) => !i.reportado && i.estado === 'operativo');
   const dano = await pedir('POST', `/inspections/${insp.id}/items`, {
-    token: instructor.token, cuerpo: { codigo: item.qr, tipoDano: 'rotura', severidad: 'moderada', comentario: 'Prueba automática de reporte de daño' },
+    token: portero.token, cuerpo: { codigo: item.qr, tipoDano: 'rotura', severidad: 'moderada', comentario: 'Prueba automática de reporte de daño' },
   });
   assert.equal(dano.status, 201);
-  const reporte = dano.datos.reportes.find((r) => r.itemId === item.id);
-  assert.ok(reporte, 'el reporte debe apuntar al ítem del inventario');
-  assert.equal((await pedir('GET', `/items/by-code/${item.codigo}`, { token: instructor.token })).datos.estado, 'danado');
+  assert.ok(dano.datos.reportes.find((r) => r.itemId === item.id), 'el reporte debe apuntar al ítem del inventario');
+  assert.equal((await pedir('GET', `/items/by-code/${item.codigo}`, { token: portero.token })).datos.estado, 'danado');
 
-  // Confirmación con firma
+  // El portero confirma la entrega con firma: se genera el QR
   const checklist = insp.checklist.map((c) => ({ clave: c.clave, ok: true }));
   const conf = await pedir('POST', `/inspections/${insp.id}/confirm`, {
-    token: instructor.token, cuerpo: { checklist, firma: FIRMA, nombreFirma: 'Diana Marcela Ruiz' },
+    token: portero.token, cuerpo: { checklist, firma: FIRMA, nombreFirma: 'Martha Lucía Peña' },
   });
   assert.equal(conf.status, 200, JSON.stringify(conf.datos));
   assert.equal(conf.datos.estado, 'pendiente_recepcion');
   assert.equal(conf.datos.resultado, 'con_danos');
-  assert.ok(conf.datos.firmaInstructor.fecha);
+  assert.ok(conf.datos.firmaPortero.fecha && conf.datos.firmaPortero.imagen);
+  assert.notEqual(conf.datos.qr, insp.qr, 'el QR se regenera al confirmar');
+  const token = conf.datos.qr.replace('SENA-INSP:', '');
+  assert.equal((await pedir('POST', `/inspections/by-qr/${insp.qr.replace('SENA-INSP:', '')}/receive`, { token: instructor.token })).status, 404);
 
-  // El portero asignado recibe la notificación
-  const portero = await ingresar('4040404041', 'portero');
-  const bandeja = (await pedir('GET', '/inbox', { token: portero.token })).datos;
-  assert.ok(bandeja.notificaciones.some((n) => n.inspeccionId === insp.id && n.tipo === 'inspeccion_confirmada'));
-
-  // Firma de recepción: queda con instructor_id, portero_id, firmas y timestamps
-  const rec = await pedir('POST', `/inspections/${insp.id}/receive`, { token: portero.token, cuerpo: { firma: FIRMA, nombreFirma: 'Martha Lucia Pena' } });
-  assert.equal(rec.status, 200);
+  // El instructor escanea el QR y recibe el ambiente
+  const rec = await pedir('POST', `/inspections/by-qr/${token}/receive`, { token: instructor.token });
+  assert.equal(rec.status, 200, JSON.stringify(rec.datos));
   const final = rec.datos;
   assert.equal(final.estado, 'recibida');
-  assert.equal(final.instructor.nombre, 'Diana Marcela Ruiz');
   assert.equal(final.portero.nombre, 'Martha Lucía Peña');
+  assert.equal(final.instructor.nombre, 'Diana Marcela Ruiz');
   assert.ok(final.iniciadaEn && final.confirmadaEn && final.recibidaEn);
-  assert.ok(final.firmaInstructor.imagen && final.firmaPortero.imagen);
+  assert.equal(final.firmaInstructor.nombre, 'Diana Marcela Ruiz');
+  // El mismo QR no sirve para otro instructor
+  const otro = await ingresar('1010101010', 'instructor');
+  assert.equal((await pedir('POST', `/inspections/by-qr/${token}/receive`, { token: otro.token })).status, 409);
+
+  // Notificaciones: al portero (recibido) y a coordinación (daños)
+  const bPortero = (await pedir('GET', '/inbox', { token: portero.token })).datos;
+  assert.ok(bPortero.notificaciones.some((n) => n.inspeccionId === insp.id && n.tipo === 'entrega_recibida'));
+  const bAdmin = (await pedir('GET', '/inbox', { token: admin.token })).datos;
+  assert.ok(bAdmin.notificaciones.some((n) => n.inspeccionId === insp.id && n.tipo === 'dano_reportado'));
 
   // El administrativo lo ve en el reporte
   const rep = (await pedir('GET', '/reports', { token: admin.token })).datos;

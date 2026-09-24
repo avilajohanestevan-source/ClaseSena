@@ -220,9 +220,9 @@ export const TIPOS_DANO = [
 
 /** [etiqueta, clase de .status-chip] por estado de la inspección. */
 export const ESTADOS_INSPECCION = {
-  en_curso: ['En curso', 'azul'],
-  pendiente_recepcion: ['Pendiente de recepción', 'out'],
-  recibida: ['Recibida', 'in'],
+  en_curso: ['En revisión', 'azul'],
+  pendiente_recepcion: ['Esperando al instructor', 'out'],
+  recibida: ['Entregado', 'in'],
   cancelada: ['Cancelada', 'neutro'],
 };
 

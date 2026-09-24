@@ -4,9 +4,9 @@ Prueba de concepto móvil y web para la **entrega y revisión de ambientes**
 de formación, más el módulo de **asistencia a clases** que ya existía.
 
 - **Entrega y revisión de ambientes** (backend real: PHP + MySQL de XAMPP):
-  login por rol, perfiles, CRUD de ambientes e inventario, inspección
-  matutina con QR, checklist, reporte de daños con foto, firmas del
-  instructor y del portero, notificaciones y reportes.
+  login por rol, perfiles, CRUD de ambientes e inventario, revisión del
+  ambiente por el portero (checklist y daños con foto), entrega con QR que
+  el instructor escanea para recibirlo, avisos a coordinación y reportes.
 - **Asistencia a clases** (QR de clase, semáforo de faltas, P004): sigue
   con datos simulados en el navegador (`js/api/mock`), como antes.
 
@@ -35,6 +35,8 @@ foto del código o escribirlo.
 ### Usuarios de prueba
 
 Contraseña de todos: `Sena2026*` (también se pueden elegir en el login).
+El rol se elige en el desplegable *Ingresar como* (`js/ui/selector-rol.js`),
+que también funciona con el teclado.
 
 | Documento | Rol | Nombre |
 |---|---|---|
@@ -53,27 +55,25 @@ anteriores para que los reportes tengan datos.
 
 ## Flujo de la demostración
 
-1. **Portero** (4040404040) abre el menú lateral: ve sus ambientes
-   asignados en Inicio y Ambientes.
-2. **Instructor** (1010101010) → *Inspecciones* → elige el ambiente 107 →
-   **Iniciar inspección** (se registra la hora de inicio).
-3. La pantalla de inspección muestra el **QR de la inspección** y el botón
-   **Escanear QR de ítem**. Las etiquetas QR de los ítems están en
-   *Inventario → Etiquetas QR* (se pueden escanear desde otra pantalla o
-   escribir el código, por ejemplo `AMB107-005`).
-4. El instructor marca el checklist:
-   - Todo bien → **Ambiente OK y firmar**.
-   - Con daño → escanea el ítem, llena tipo de daño, severidad, foto y
-     comentario, y **Confirmar con novedades y firmar**.
-   La firma queda con nombre y fecha/hora.
-5. El **portero** recibe la notificación (campana, se consulta cada 15 s),
-   revisa la **planilla** (imprimible) y **firma la recepción**. También
-   puede abrirla escaneando el QR de la inspección.
-6. Queda guardada con `instructor_id`, `portero_id`, horas de inicio,
-   confirmación y recepción, las dos firmas y los daños en `inspection_items`.
-7. **Administrativo** (2020202020) consulta el historial en *Inspecciones* y
-   genera **Reportes** filtrados por fecha, ambiente e instructor (CSV o
-   impresión).
+1. **Portero** (4040404040) → *Inspecciones* → elige el ambiente 107 →
+   **Iniciar revisión** (se registra la hora de inicio). Lo revisa con el
+   instructor en el salón:
+   - marca el checklist (Bien / Novedad);
+   - si hay un daño, **Escanear QR de ítem** (etiquetas en *Inventario →
+     Etiquetas QR*, o escribe el código, p. ej. `AMB107-005`) y llena tipo,
+     severidad, foto y comentario. El ítem queda *Dañado* en el inventario.
+2. **Entregar y generar QR**: el portero firma y aparece un **QR grande**
+   con "Esperando que el instructor lo escanee…".
+3. **Instructor** (1010101010) → *Recibir ambiente* (en Inicio o
+   Inspecciones) → escanea el QR del portero (o escribe `SENA-INSP:…`).
+4. Al escanear queda guardado automáticamente quién entregó (`portero_id`),
+   quién recibió (`instructor_id`), las horas de inicio, entrega y
+   recepción, el checklist y el estado de los ítems. La pantalla del portero
+   cambia sola a **"Ambiente entregado"**.
+5. Si había daños o novedades, **coordinación** (administrativo 2020202020)
+   recibe la notificación; el inventario ya muestra los ítems dañados.
+6. El administrativo consulta el historial en *Inspecciones* y genera
+   **Reportes** (CSV o impresión) con quién entregó y quién recibió.
 
 Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
 
@@ -92,13 +92,13 @@ Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
   en el login las dos piezas del fondo regresan y la tarjeta sube con un
   micro-rebote (inverso de la animación de ingreso).
 - Ítems según el rol, indicador animado de la sección actual, insignias
-  (inspecciones por recibir o en curso), foco atrapado mientras está abierto
+  (entregas esperando al instructor), foco atrapado mientras está abierto
   y áreas táctiles de 44 px.
 
 | Sección | Instructor | Portero | Administrativo | Aprendiz |
 |---|---|---|---|---|
 | Inicio, Mi perfil, Ambientes, Ajustes | ✓ | ✓ | ✓ (CRUD de ambientes) | ✓ |
-| Inspecciones | Iniciar y hacer la inspección | Recibir y firmar | Historial | — |
+| Inspecciones | Recibir el ambiente (escanear QR) | Revisar, entregar y mostrar el QR | Historial | — |
 | Inventario | Consulta y QR | Consulta y QR | CRUD | — |
 | Reportes | — | — | ✓ | — |
 | Asistencia (datos simulados) | Clases, historial | — | Semáforo, P004, historial | Registrar asistencia |

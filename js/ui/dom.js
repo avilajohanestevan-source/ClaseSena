@@ -61,6 +61,7 @@ const RUTAS_ICONOS = {
   archivo: 'M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6',
   reintentar: 'M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5',
   flecha: 'M5 12h14M13 6l6 6-6 6',
+  abajo: 'M6 9l6 6 6-6',
   // Rediseño móvil v1: roles, inicio y búsqueda (mismo trazo lineal).
   instructor: 'M8 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2.5 20v-1.5A4.5 4.5 0 0 1 7 14h2a4.5 4.5 0 0 1 4.5 4.5V20M13 3.5h8.5v7H13zM15.5 13.5l1.5-3',
   aprendiz: 'M2 9l10-4.5L22 9l-10 4.5L2 9zM6 11v4.5c0 1.5 2.7 3 6 3s6-1.5 6-3V11M22 9v5',

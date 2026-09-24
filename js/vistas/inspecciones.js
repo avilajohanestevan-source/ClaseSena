@@ -1,56 +1,63 @@
-// Inspecciones según el rol:
-//  · Instructor: elige el ambiente y pulsa "Iniciar inspección" (se registra
-//    el inicio en el servidor) + sus inspecciones anteriores.
-//  · Portero: pendientes de recibir (sus ambientes o todos), recibidas hoy y
-//    botón para escanear el QR de una inspección.
+// Inspecciones (entrega de ambientes) según el rol:
+//  · Portero: elige el ambiente y pulsa "Iniciar revisión"; lo revisa con el
+//    instructor, lo entrega y genera el QR. Pestañas: esperando al instructor
+//    (vuelve a mostrar el QR) y entregados hoy.
+//  · Instructor: "Recibir ambiente" escanea el QR del portero; lista de los
+//    ambientes que ha recibido.
 //  · Administrativo: historial con filtros.
 import { h, anexar, icono, vaciar } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
-import { toast, abrirModal } from '../ui/avisos.js';
+import { toast } from '../ui/avisos.js';
 import { cargando, tarjetaError } from '../ui/componentes.js';
-import { crearEscaner } from '../ui/escaner.js';
+import { escanearEntrega } from '../ui/recibir.js';
 import { cabecera, tarjetaInspeccion, chipInspeccion, fecha, esHoy, vacio } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado, escuchar, emitir } from '../estado.js';
-import { leerQrInspeccion, ESTADOS_INSPECCION, fechaIso } from '../reglas.js';
+import { ESTADOS_INSPECCION, fechaIso } from '../reglas.js';
+
+const ABIERTAS = ['en_curso', 'pendiente_recepcion'];
 
 export async function render(raiz, { params, alSalir }) {
   const u = estado.usuario;
-  if (u.rol === 'instructor') return instructor(raiz, params);
-  if (u.rol === 'portero') return portero(raiz, alSalir);
+  if (u.rol === 'portero') return portero(raiz, params, alSalir);
+  if (u.rol === 'instructor') return instructor(raiz, alSalir);
   return administrativo(raiz);
 }
 
-/* ---------------- instructor ---------------- */
+/* ---------------- portero ---------------- */
 
-async function instructor(raiz, params) {
-  const [ambientes, mias] = await Promise.all([apiAmb.ambientes(), apiAmb.inspecciones()]);
-  const enCurso = mias.find((s) => s.estado === 'en_curso');
+async function portero(raiz, params, alSalir) {
+  const u = estado.usuario;
+  const [ambientes, abiertas] = await Promise.all([apiAmb.ambientes(), apiAmb.inspecciones({ estado: 'en_curso' })]);
+  const enCurso = abiertas.find((s) => s.portero.id === u.id);
+  // Primero los ambientes asignados al portero.
+  const activos = ambientes.filter((a) => a.activo).sort((a, b) => (b.porteroId === u.id) - (a.porteroId === u.id));
+  const ocupado = (a) => ABIERTAS.includes(a.ultimaInspeccion?.estado);
   let elegido = Number(params.get('ambiente')) || null;
+  if (!activos.some((a) => a.id === elegido && !ocupado(a))) elegido = null;
 
   const iniciar = h('button', { class: 'btn btn-primary btn-block btn-lg inicio-inspeccion', type: 'button', disabled: !elegido, onclick: () => arrancar() },
-    icono('inspeccion'), h('span', {}, 'Iniciar inspección'));
-  const opciones = h('div', { class: 'amb-selector', role: 'radiogroup', 'aria-label': 'Ambiente a inspeccionar' },
-    ambientes.filter((a) => a.activo).map((a) => {
+    icono('inspeccion'), h('span', {}, 'Iniciar revisión'));
+  const opciones = h('div', { class: 'amb-selector', role: 'radiogroup', 'aria-label': 'Ambiente a entregar' },
+    activos.map((a) => {
       const ult = a.ultimaInspeccion;
       const hoy = ult && esHoy(ult.iniciadaEn);
-      const ocupado = ult?.estado === 'en_curso' && ult.instructorId !== u.id;
-      return h('label', { class: `amb-opcion${ocupado ? ' amb-opcion--ocupado' : ''}` },
-        h('input', { type: 'radio', name: 'ambiente', value: a.id, checked: a.id === elegido, disabled: ocupado, onchange: () => { elegido = a.id; actualizar(); } }),
+      return h('label', { class: `amb-opcion${ocupado(a) ? ' amb-opcion--ocupado' : ''}` },
+        h('input', { type: 'radio', name: 'ambiente', value: a.id, checked: a.id === elegido, disabled: ocupado(a), onchange: () => { elegido = a.id; actualizar(); } }),
         h('span', { class: 'amb-opcion-caja' },
           h('span', { class: 'amb-numero amb-numero--grande' }, a.codigo),
           h('span', { class: 'amb-opcion-datos' },
             h('strong', {}, a.nombre),
-            h('span', { class: 'text-muted' }, `${a.itemsTotal} ítems · ${a.bloque || ''}`),
-            ocupado ? h('span', { class: 'status-chip azul' }, `En inspección · ${ult.instructor}`)
-              : hoy ? chipInspeccion(ult.estado) : h('span', { class: 'status-chip neutro' }, 'Sin inspección hoy')),
+            h('span', { class: 'text-muted' }, `${a.itemsTotal} ítems · ${a.porteroId === u.id ? 'asignado a ti' : (a.portero || 'sin portero')}`),
+            ocupado(a) ? h('span', { class: 'status-chip azul' }, `${ESTADOS_INSPECCION[ult.estado][0]} · ${ult.portero}`)
+              : hoy ? chipInspeccion(ult.estado) : h('span', { class: 'status-chip neutro' }, 'Sin entrega hoy')),
           h('span', { class: 'amb-opcion-marca', 'aria-hidden': 'true' }, icono('check'))));
     }));
 
   function actualizar() {
     iniciar.disabled = !elegido;
     const a = ambientes.find((x) => x.id === elegido);
-    iniciar.lastChild.textContent = a ? `Iniciar inspección · ${a.codigo}` : 'Iniciar inspección';
+    iniciar.lastChild.textContent = a ? `Iniciar revisión · ${a.codigo}` : 'Iniciar revisión';
   }
 
   async function arrancar() {
@@ -59,7 +66,7 @@ async function instructor(raiz, params) {
     try {
       const s = await apiAmb.iniciarInspeccion(elegido);
       emitir('inspecciones');
-      toast('exito', `Inspección iniciada · ambiente ${s.ambiente.codigo}`, `Inicio registrado a las ${fecha.hora(s.iniciadaEn)}`);
+      toast('exito', `Revisión iniciada · ambiente ${s.ambiente.codigo}`, `Inicio registrado a las ${fecha.hora(s.iniciadaEn)}`);
       location.hash = `#/inspeccion?id=${s.id}`;
     } catch (e) {
       toast('error', 'No se pudo iniciar', e.message);
@@ -68,87 +75,82 @@ async function instructor(raiz, params) {
     }
   }
 
-  const anteriores = mias.filter((s) => s.estado !== 'en_curso');
-  anexar(raiz,
-    cabecera({ eyebrow: 'Inspección matutina', titulo: 'Inspecciones', subtitulo: 'Elige el ambiente que vas a recibir y revísalo antes de empezar.' }),
-    enCurso && h('a', { class: 'accion-grande accion-grande--continuar', href: `#/inspeccion?id=${enCurso.id}`, 'data-anim': '' },
-      h('span', { class: 'accion-grande-icono' }, icono('inspeccion')),
-      h('span', {}, h('strong', {}, `Tienes una inspección en curso · ambiente ${enCurso.ambiente.codigo}`),
-        h('span', {}, `Iniciada ${fecha.relativa(enCurso.iniciadaEn)}. Termínala o cancélala antes de iniciar otra.`)),
-      icono('flecha')),
-    !enCurso && h('section', { class: 'card', 'data-anim': '' },
-      h('h3', { class: 'bloque-titulo' }, '1. Elige el ambiente'), opciones,
-      h('div', { class: 'accion-fija' }, iniciar)),
-    h('section', { 'data-anim': '' },
-      h('h3', { class: 'bloque-titulo bloque-titulo--fuera' }, 'Mis inspecciones'),
-      anteriores.length ? h('div', { class: 'insp-lista' }, anteriores.map((s) => tarjetaInspeccion(s)))
-        : vacio('Todavía no has confirmado inspecciones', '', 'inspeccion')));
-  actualizar();
-  anim.entrarVista(raiz);
-}
-
-/* ---------------- portero ---------------- */
-
-async function portero(raiz, alSalir) {
-  let soloMios = true, pestana = 'pendientes';
+  let pestana = 'esperando';
   const cuerpo = h('div', { class: 'insp-lista' }, cargando());
-  const pestanas = h('div', { class: 'pestanas', role: 'tablist', 'aria-label': 'Inspecciones' });
-  const interruptor = h('label', { class: 'interruptor' },
-    h('input', { type: 'checkbox', role: 'switch', checked: true, onchange: (e) => { soloMios = e.target.checked; cargar(); } }),
-    h('span', { class: 'interruptor-pista', 'aria-hidden': 'true' }), 'Solo mis ambientes');
+  const pestanas = h('div', { class: 'pestanas', role: 'tablist', 'aria-label': 'Entregas' });
 
   anexar(raiz,
-    cabecera({ eyebrow: 'Recepción de ambientes', titulo: 'Inspecciones',
-      subtitulo: 'Revisa la planilla de cada ambiente y firma la recepción.',
-      acciones: [h('button', { class: 'btn btn-outline', type: 'button', onclick: escanear }, icono('escanear'), 'Escanear QR de inspección')] }),
-    h('div', { class: 'barra-filtros', 'data-anim': '' }, pestanas, interruptor),
+    cabecera({ eyebrow: 'Entrega de ambientes', titulo: 'Inspecciones',
+      subtitulo: 'Revisa el ambiente con el instructor, entrégalo y muéstrale el QR para que lo reciba.' }),
+    enCurso ? h('a', { class: 'accion-grande accion-grande--continuar', href: `#/inspeccion?id=${enCurso.id}`, 'data-anim': '' },
+      h('span', { class: 'accion-grande-icono' }, icono('inspeccion')),
+      h('span', {}, h('strong', {}, `Tienes una revisión en curso · ambiente ${enCurso.ambiente.codigo}`),
+        h('span', {}, `Iniciada ${fecha.relativa(enCurso.iniciadaEn)}. Termínala para generar el QR.`)),
+      icono('flecha'))
+      : h('section', { class: 'card', 'data-anim': '' },
+        h('h3', { class: 'bloque-titulo' }, 'Elige el ambiente que vas a entregar'), opciones,
+        h('div', { class: 'accion-fija' }, iniciar)),
+    h('div', { class: 'barra-filtros', 'data-anim': '' }, pestanas),
     cuerpo);
 
   async function cargar() {
     vaciar(cuerpo, cargando());
-    let pendientes, recibidas;
+    let esperando, entregados;
     try {
-      [pendientes, recibidas] = await Promise.all([
-        apiAmb.inspecciones({ estado: 'pendiente_recepcion', asignados: soloMios ? 1 : undefined }),
-        apiAmb.inspecciones({ estado: 'recibida', desde: fechaIso(), asignados: soloMios ? 1 : undefined }),
+      [esperando, entregados] = await Promise.all([
+        apiAmb.inspecciones({ estado: 'pendiente_recepcion', asignados: 1 }),
+        apiAmb.inspecciones({ estado: 'recibida', desde: fechaIso(), asignados: 1 }),
       ]);
     } catch (e) { vaciar(cuerpo, tarjetaError(e, cargar)); return; }
     const tab = (clave, texto, n) => h('button', {
       class: 'pestana', type: 'button', role: 'tab', 'aria-selected': String(pestana === clave),
       onclick: () => { pestana = clave; cargar(); },
     }, texto, h('span', { class: 'pestana-cuenta' }, n));
-    vaciar(pestanas, tab('pendientes', 'Por recibir', pendientes.length), tab('recibidas', 'Recibidas hoy', recibidas.length));
-    const lista = pestana === 'pendientes' ? pendientes : recibidas;
-    vaciar(cuerpo, lista.length ? lista.map((s) => tarjetaInspeccion(s, pestana === 'pendientes' ? {
-      accion: h('a', { class: 'btn btn-primary btn-sm insp-tarjeta-ir', href: `#/planilla?id=${s.id}` }, icono('portero'), 'Revisar y firmar'),
-    } : {})) : vacio(pestana === 'pendientes' ? 'No hay planillas por recibir' : 'Aún no has recibido planillas hoy',
-      pestana === 'pendientes' ? 'Te avisaremos cuando un instructor confirme una inspección.' : '', 'portero'));
+    vaciar(pestanas, tab('esperando', 'Esperando al instructor', esperando.length), tab('entregados', 'Entregados hoy', entregados.length));
+    const lista = pestana === 'esperando' ? esperando : entregados;
+    vaciar(cuerpo, lista.length ? lista.map((s) => tarjetaInspeccion(s, pestana === 'esperando' && s.portero.id === u.id ? {
+      accion: h('a', { class: 'btn btn-primary btn-sm insp-tarjeta-ir', href: `#/planilla?id=${s.id}` }, icono('qr'), 'Mostrar QR'),
+    } : {})) : vacio(pestana === 'esperando' ? 'No hay entregas esperando al instructor' : 'Aún no has entregado ambientes hoy',
+      pestana === 'esperando' ? 'Cuando confirmes una entrega, su QR queda aquí hasta que el instructor lo escanee.' : '', 'portero'));
     anim.lista(cuerpo.children);
   }
 
-  function escanear() {
-    let escaner;
-    const { cerrar } = abrirModal({
-      titulo: 'Escanear QR de inspección', subtitulo: 'El instructor lo muestra en su pantalla de inspección.', ancho: 'angosto',
-      contenido: () => {
-        escaner = crearEscaner({
-          tipos: ['qr'], etiqueta: 'Abrir cámara', placeholder: 'SENA-INSP:…',
-          alLeer: async (texto) => {
-            const token = leerQrInspeccion(texto);
-            if (!token) { toast('error', 'Ese QR no es de una inspección', texto.slice(0, 60)); return; }
-            try {
-              const s = await apiAmb.inspeccionPorQr(token);
-              cerrar();
-              location.hash = `#/planilla?id=${s.id}`;
-            } catch (e) { toast('error', 'No se encontró la inspección', e.message); }
-          },
-        });
-        return escaner.el;
-      },
-      alCerrar: () => escaner?.detener(),
-    });
-  }
+  actualizar();
+  alSalir(escuchar('bandeja', cargar));
+  await cargar();
+  anim.entrarVista(raiz);
+}
 
+/* ---------------- instructor ---------------- */
+
+async function instructor(raiz, alSalir) {
+  const cuerpo = h('div', { class: 'insp-instructor' }, cargando());
+  anexar(raiz,
+    cabecera({ eyebrow: 'Recepción de ambientes', titulo: 'Inspecciones',
+      subtitulo: 'Revisa el salón con el portero y escanea el QR que te muestra para recibirlo.' }),
+    h('button', { class: 'accion-grande', type: 'button', onclick: escanearEntrega, 'data-anim': '' },
+      h('span', { class: 'accion-grande-icono' }, icono('escanear')),
+      h('span', {}, h('strong', {}, 'Recibir ambiente'), h('span', {}, 'Escanea el QR del portero')),
+      icono('flecha')),
+    cuerpo);
+
+  async function cargar() {
+    let ambientes, mias;
+    try { [ambientes, mias] = await Promise.all([apiAmb.ambientes(), apiAmb.inspecciones()]); } catch (e) { vaciar(cuerpo, tarjetaError(e, cargar)); return; }
+    const listos = ambientes.filter((a) => a.ultimaInspeccion?.estado === 'pendiente_recepcion');
+    vaciar(cuerpo,
+      listos.length ? h('section', { class: 'card' },
+        h('h3', { class: 'bloque-titulo' }, 'Listos para recibir'),
+        h('ul', { class: 'lista-ambientes' }, listos.map((a) => h('li', { class: 'fila-ambiente' },
+          h('span', { class: 'amb-numero' }, a.codigo),
+          h('div', { class: 'fila-ambiente-datos' }, h('strong', {}, a.nombre), h('span', { class: 'text-muted' }, `Entrega ${a.ultimaInspeccion.portero}`)),
+          h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: escanearEntrega, 'aria-label': `Recibir ambiente ${a.codigo}` }, icono('escanear'), 'Escanear'))))) : null,
+      h('section', {},
+        h('h3', { class: 'bloque-titulo bloque-titulo--fuera' }, 'Ambientes que he recibido'),
+        mias.length ? h('div', { class: 'insp-lista' }, mias.map((s) => tarjetaInspeccion(s)))
+          : vacio('Todavía no has recibido ambientes', 'Cuando escanees el QR de un portero, aparecerá aquí.', 'inspeccion')));
+    anim.lista(cuerpo.children);
+  }
   alSalir(escuchar('bandeja', cargar));
   await cargar();
   anim.entrarVista(raiz);

@@ -83,19 +83,19 @@ export function cabecera({ eyebrow, titulo, subtitulo, acciones = [] }) {
     acciones.length ? h('div', { class: 'vista-acciones' }, acciones) : null);
 }
 
-/** Tarjeta resumen de una inspección (listas del portero, instructor y administrativo). */
+/** Tarjeta resumen de una entrega (listas del portero, instructor y administrativo). */
 export function tarjetaInspeccion(s, { accion } = {}) {
   return h('article', { class: `card insp-tarjeta insp-tarjeta--${s.estado}` },
     h('div', { class: 'insp-tarjeta-cab' },
       h('span', { class: 'amb-numero', 'aria-hidden': 'true' }, s.ambiente.codigo),
       h('div', { class: 'insp-tarjeta-datos' },
         h('strong', {}, `Ambiente ${s.ambiente.codigo} · ${s.ambiente.nombre}`),
-        h('span', { class: 'text-muted' }, `${s.instructor.nombre} · inició ${fecha.corta(s.iniciadaEn)}`)),
+        h('span', { class: 'text-muted' }, `Entrega ${s.portero.nombre}${s.instructor ? ` → ${s.instructor.nombre}` : ''} · ${fecha.corta(s.iniciadaEn)}`)),
       chipInspeccion(s.estado)),
     h('div', { class: 'insp-tarjeta-pie' },
       chipResultado(s.resultado),
       s.danos ? h('span', { class: 'status-chip error' }, `${s.danos} daño${s.danos === 1 ? '' : 's'}${s.danosGraves ? ` (${s.danosGraves} grave)` : ''}`) : null,
-      s.confirmadaEn && h('span', { class: 'text-muted insp-tarjeta-hora' }, `Confirmada ${fecha.relativa(s.confirmadaEn)}`),
-      s.recibidaEn && h('span', { class: 'text-muted insp-tarjeta-hora' }, `Recibida por ${s.portero?.nombre || '—'} ${fecha.relativa(s.recibidaEn)}`),
+      s.recibidaEn ? h('span', { class: 'text-muted insp-tarjeta-hora' }, `Recibido ${fecha.relativa(s.recibidaEn)}`)
+        : s.confirmadaEn && h('span', { class: 'text-muted insp-tarjeta-hora' }, `QR generado ${fecha.relativa(s.confirmadaEn)}`),
       accion || h('a', { class: 'btn btn-outline btn-sm insp-tarjeta-ir', href: `#/planilla?id=${s.id}` }, icono('archivo'), 'Ver planilla')));
 }

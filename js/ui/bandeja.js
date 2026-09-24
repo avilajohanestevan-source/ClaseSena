@@ -10,7 +10,7 @@ import { emitir } from '../estado.js';
 import { CONFIG } from '../config.js';
 import { preferencia } from './preferencias.js';
 
-const ICONO = { inspeccion_confirmada: 'check', inspeccion_recibida: 'archivo', dano_grave: 'alerta' };
+const ICONO = { entrega_recibida: 'check', dano_reportado: 'herramienta', dano_grave: 'alerta' };
 
 export function crearBandeja() {
   let vistos = null, lista = [], sinLeer = 0, sondeo = null;
@@ -32,7 +32,7 @@ export function crearBandeja() {
     vistos = new Set(lista.map((n) => n.id));
     if (nuevas.length) {
       const n = nuevas[0];
-      toast(n.tipo === 'dano_grave' ? 'aviso' : 'info', n.titulo, n.detalle, 7000);
+      toast(n.tipo === 'entrega_recibida' ? 'exito' : 'aviso', n.titulo, n.detalle, 7000);
       // El navegador solo permite vibrar si el usuario ya interactuó con la página.
       if (preferencia('vibrar') && navigator.userActivation?.hasBeenActive) navigator.vibrate?.([80, 60, 80]);
       emitir('bandeja', nuevas);

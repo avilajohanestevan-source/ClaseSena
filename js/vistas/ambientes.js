@@ -1,5 +1,6 @@
-// Ambientes: tarjetas con el estado de la inspección de hoy.
-//  · Instructor: "Inspeccionar". · Portero: filtro "Mis asignados" y planilla pendiente.
+// Ambientes: tarjetas con el estado de la entrega de hoy.
+//  · Portero: "Revisar y entregar", continuar la revisión o mostrar el QR; filtro "Mis asignados".
+//  · Instructor: "Recibir con QR" cuando el portero ya generó la entrega.
 //  · Administrativo: crear, editar, activar/desactivar y borrar (CRUD).
 //  · Aprendiz: solo consulta.
 import { h, anexar, icono, vaciar, errorCampo } from '../ui/dom.js';
@@ -9,6 +10,7 @@ import { cargando, tarjetaError } from '../ui/componentes.js';
 import { cabecera, chipInspeccion, fecha, esHoy, vacio } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado } from '../estado.js';
+import { escanearEntrega } from '../ui/recibir.js';
 
 export async function render(raiz) {
   const u = estado.usuario;
@@ -41,14 +43,19 @@ export async function render(raiz) {
     const ult = a.ultimaInspeccion;
     const hoy = ult && esHoy(ult.iniciadaEn);
     const acciones = [];
-    if (u.rol === 'instructor' && a.activo) {
-      const enCursoAjena = hoy && ult.estado === 'en_curso' && ult.instructorId !== u.id;
-      acciones.push(ult?.estado === 'en_curso' && ult.instructorId === u.id
-        ? h('a', { class: 'btn btn-primary btn-sm', href: `#/inspeccion?id=${ult.id}` }, 'Continuar inspección')
-        : h('a', { class: `btn btn-primary btn-sm${enCursoAjena ? ' is-disabled' : ''}`, href: enCursoAjena ? null : `#/inspecciones?ambiente=${a.id}`, 'aria-disabled': enCursoAjena ? 'true' : false }, icono('inspeccion'), 'Inspeccionar'));
+    const abierta = ult && ['en_curso', 'pendiente_recepcion'].includes(ult.estado);
+    if (u.rol === 'portero' && a.activo) {
+      const propia = abierta && ult.porteroId === u.id;
+      if (propia) {
+        acciones.push(ult.estado === 'en_curso'
+          ? h('a', { class: 'btn btn-primary btn-sm', href: `#/inspeccion?id=${ult.id}` }, icono('inspeccion'), 'Continuar revisión')
+          : h('a', { class: 'btn btn-primary btn-sm', href: `#/planilla?id=${ult.id}` }, icono('qr'), 'Mostrar QR'));
+      } else {
+        acciones.push(h('a', { class: `btn btn-primary btn-sm${abierta ? ' is-disabled' : ''}`, href: abierta ? null : `#/inspecciones?ambiente=${a.id}`, 'aria-disabled': abierta ? 'true' : false }, icono('inspeccion'), 'Revisar y entregar'));
+      }
     }
-    if (hoy && ult.estado === 'pendiente_recepcion' && u.rol === 'portero') {
-      acciones.push(h('a', { class: 'btn btn-primary btn-sm', href: `#/planilla?id=${ult.id}` }, icono('portero'), 'Recibir planilla'));
+    if (u.rol === 'instructor' && ult?.estado === 'pendiente_recepcion') {
+      acciones.push(h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: escanearEntrega }, icono('escanear'), 'Recibir con QR'));
     }
     if (u.rol !== 'aprendiz') acciones.push(h('a', { class: 'btn btn-outline btn-sm', href: `#/inventario?ambiente=${a.id}` }, icono('caja'), 'Inventario'));
     if (admin) {
@@ -64,8 +71,8 @@ export async function render(raiz) {
       h('dl', { class: 'amb-datos' },
         h('div', {}, h('dt', {}, 'Portero'), h('dd', {}, a.portero || 'Sin asignar')),
         h('div', {}, h('dt', {}, 'Inventario'), h('dd', {}, `${a.itemsTotal} ítems`, a.itemsNovedad ? h('span', { class: 'amb-novedad' }, ` · ${a.itemsNovedad} con novedad`) : '')),
-        h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Inspección de hoy'), h('dd', {},
-          hoy ? [chipInspeccion(ult.estado), h('span', { class: 'text-muted' }, ` ${ult.instructor} · ${fecha.hora(ult.iniciadaEn)}`)]
+        h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Entrega de hoy'), h('dd', {},
+          hoy ? [chipInspeccion(ult.estado), h('span', { class: 'text-muted' }, ` ${ult.portero}${ult.instructor ? ` → ${ult.instructor}` : ''} · ${fecha.hora(ult.iniciadaEn)}`)]
             : h('span', { class: 'status-chip neutro' }, ult ? `Última: ${fecha.corta(ult.iniciadaEn)}` : 'Sin inspecciones')))),
       acciones.length ? h('div', { class: 'amb-acciones' }, acciones) : null);
   }

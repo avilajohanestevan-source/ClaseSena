@@ -6,13 +6,14 @@ const SQL_AMBIENTES = "
            (SELECT COUNT(*) FROM inventory_items i WHERE i.environment_id = e.id AND i.estado <> 'baja') AS items_total,
            (SELECT COUNT(*) FROM inventory_items i WHERE i.environment_id = e.id AND i.estado IN ('danado','en_reparacion')) AS items_novedad,
            u.id AS ult_id, u.estado AS ult_estado, u.resultado AS ult_resultado, u.iniciada_en AS ult_iniciada,
-           u.instructor_id AS ult_instructor_id, ui.nombre AS ult_instructor
+           u.instructor_id AS ult_instructor_id, ui.nombre AS ult_instructor, u.portero_id AS ult_portero_id, up.nombre AS ult_portero
     FROM environments e
     LEFT JOIN users p ON p.id = e.portero_id
     LEFT JOIN inspections u ON u.id = (
         SELECT x.id FROM inspections x WHERE x.environment_id = e.id AND x.estado <> 'cancelada'
         ORDER BY x.iniciada_en DESC LIMIT 1)
-    LEFT JOIN users ui ON ui.id = u.instructor_id";
+    LEFT JOIN users ui ON ui.id = u.instructor_id
+    LEFT JOIN users up ON up.id = u.portero_id";
 
 function ambientePublico(array $e): array
 {
@@ -32,7 +33,9 @@ function ambientePublico(array $e): array
             'estado' => $e['ult_estado'],
             'resultado' => $e['ult_resultado'],
             'iniciadaEn' => iso($e['ult_iniciada']),
-            'instructorId' => (int) $e['ult_instructor_id'],
+            'porteroId' => (int) $e['ult_portero_id'],
+            'portero' => $e['ult_portero'],
+            'instructorId' => $e['ult_instructor_id'] !== null ? (int) $e['ult_instructor_id'] : null,
             'instructor' => $e['ult_instructor'],
         ] : null,
     ];

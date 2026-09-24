@@ -47,7 +47,7 @@ $RUTAS = [
     ['POST',   '#^/inspections/(\d+)/items$#',           'rutaReportarDano'],
     ['DELETE', '#^/inspections/(\d+)/items/(\d+)$#',     'rutaQuitarDano'],
     ['POST',   '#^/inspections/(\d+)/confirm$#',         'rutaConfirmarInspeccion'],
-    ['POST',   '#^/inspections/(\d+)/receive$#',         'rutaRecibirInspeccion'],
+    ['POST',   '#^/inspections/by-qr/([A-Z0-9]{16})/receive$#', 'rutaRecibirPorQr'],
     ['POST',   '#^/inspections/(\d+)/cancel$#',          'rutaCancelarInspeccion'],
 
     ['GET',    '#^/inbox$#',                             'rutaBandeja'],
