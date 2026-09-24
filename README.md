@@ -40,9 +40,12 @@ código).
 ```
 index.html              Página única (enrutador por hash)
 API.md                  Contratos de la API
+css/tokens.css          Tokens de diseño (copia de diseno/tokens.css)
 css/sena-base.css       Identidad visual SENA (copia del estilo de sena-php)
 css/ambientes.css       Estilos propios del módulo
-img/                    Logos SENA
+css/movil.css           Rediseño móvil v1 (se carga al final y sobrescribe)
+diseno/                 Prototipo, guía de diseño, tokens.json y assets SVG
+img/                    Logos SENA y piezas del fondo del login (img/fondo/)
 js/config.js            Modo mock, tiempos del QR y umbrales del semáforo
 js/reglas.js            Reglas puras: ventana horaria, QR, semáforo, P004, daños
 js/api/contratos.js     Funciones de la API que usan las vistas
@@ -54,6 +57,27 @@ js/vistas/              Login, instructor, administrativo, P004, aprendiz,
 vendor/                 Librerías (GSAP, ZXing, jsQR, qrcode.js)
 tests/                  Pruebas (npm test)
 ```
+
+## Rediseño móvil v1
+
+La aplicación está pensada primero para el celular:
+
+- **Login** sobre fondo blanco: dos piezas decorativas (verde y azul
+  institucional) ancladas a las esquinas de la tarjeta, selector de rol
+  segmentado y campos con etiqueta flotante. Al validar, la tarjeta hace
+  un micro-rebote y las piezas salen de la pantalla (750 ms, in-out
+  cúbico) antes de entrar al panel.
+- **Navegación inferior** fija en móvil (etiquetas cortas); desde 900 px
+  vuelve a ser una barra de pestañas bajo la cabecera.
+- **Panel administrativo simplificado**: saludo, 4 indicadores con
+  contador, alertas, notificaciones y el semáforo con barra de
+  distribución y filtros plegables.
+- Toasts desde arriba, modales como hoja inferior, campos de 16 px (sin
+  zoom en iOS), áreas táctiles de 44 px y tablas con la primera columna fija.
+
+Todo el estilo nuevo está en `css/movil.css` y solo usa los tokens de
+`css/tokens.css`. La guía (tokens, estados de componentes, tiempos de
+animación, contraste AA) está en `diseno/guia.html`.
 
 ## Librerías
 

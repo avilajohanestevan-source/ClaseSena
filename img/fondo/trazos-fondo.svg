@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800" fill="none">
+  <!-- Trazos finos del fondo (herencia del prototipo original, ahora sobre blanco). -->
+  <rect x="640" y="-120" width="760" height="420" rx="210" transform="rotate(-28 1020 90)" stroke="#39A900" stroke-opacity=".28" stroke-width="1.5"/>
+  <rect x="-260" y="520" width="700" height="360" rx="180" transform="rotate(-28 90 700)" stroke="#00304D" stroke-opacity=".16" stroke-width="1.5"/>
+  <path d="M-40 420C260 360 420 520 700 470s420-200 560-180" stroke="#50E5F9" stroke-opacity=".5" stroke-width="1.5"/>
+</svg>

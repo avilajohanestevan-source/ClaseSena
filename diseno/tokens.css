@@ -1,0 +1,118 @@
+/* Tokens de diseño · Ambientes SENA (propuesta visual v1)
+   Fuente de verdad exportable: tokens.json (mismo contenido, formato W3C).
+   Capa 1 = primitivos (valores crudos). Capa 2 = semánticos (lo que usan
+   los componentes). Los componentes nunca usan primitivos directamente. */
+:root{
+  /* ---------- 1. Primitivos: color ---------- */
+  /* Institucional (Manual de Identidad SENA, Res. 1825 de 2024) */
+  --c-verde-500: #39A900;   /* verde institucional: marca, elementos grandes */
+  --c-verde-700: #007832;   /* verde oscuro: botones y texto sobre blanco */
+  --c-verde-800: #005C27;   /* hover/pressed */
+  --c-verde-200: #C6E8AE;
+  --c-verde-100: #E4F4DA;
+  --c-verde-50:  #F3FAEE;
+  --c-azul-900:  #00304D;   /* azul institucional: títulos, pieza B */
+  --c-azul-700:  #0B4A6F;
+  --c-cian-400:  #50E5F9;   /* azul claro institucional: acento puntual */
+  --c-cian-50:   #E5F8FB;
+  --c-oro-400:   #FDC300;
+  --c-oro-50:    #FFF4CC;
+  --c-oro-800:   #7A5300;
+  --c-violeta-600:#71277A;
+  --c-rojo-700:  #B3261E;
+  --c-rojo-50:   #FBE6E4;
+  /* Neutros cálidos */
+  --c-n-0:   #FFFFFF;
+  --c-n-25:  #FCFBF9;
+  --c-n-50:  #FAF9F7;
+  --c-n-100: #F2F0EC;
+  --c-n-200: #E6E3DD;
+  --c-n-400: #8A857C;
+  --c-n-600: #5E615C;
+  --c-n-800: #33352F;
+  --c-n-900: #1F2421;
+
+  /* ---------- 2. Semánticos: color ---------- */
+  --color-bg:              var(--c-n-0);
+  --color-surface:         var(--c-n-0);
+  --color-surface-raised:  var(--c-n-0);
+  --color-surface-sunken:  var(--c-n-50);
+  --color-surface-muted:   var(--c-n-100);
+  --color-border:          var(--c-n-200);
+  --color-border-strong:   var(--c-n-400);   /* 3.67:1 — límite de input (AA no-texto) */
+  --color-text:            var(--c-n-900);   /* 15.8:1 */
+  --color-text-muted:      var(--c-n-600);   /* 6.3:1 */
+  --color-heading:         var(--c-azul-900);/* 13.7:1 */
+  --color-brand:           var(--c-verde-500);
+  --color-primary:         var(--c-verde-700);/* 5.6:1 con texto blanco */
+  --color-primary-hover:   var(--c-verde-800);
+  --color-primary-soft:    var(--c-verde-50);
+  --color-on-primary:      var(--c-n-0);
+  --color-secondary-1:     var(--c-verde-100); /* complementario suave 1 */
+  --color-secondary-2:     var(--c-cian-50);   /* complementario suave 2 */
+  --color-focus:           var(--c-verde-500);
+  --color-danger:          var(--c-rojo-700);
+  --color-danger-soft:     var(--c-rojo-50);
+  --color-warning-text:    var(--c-oro-800);
+  --color-warning-soft:    var(--c-oro-50);
+  --color-disabled-bg:     var(--c-n-100);
+  --color-disabled-text:   var(--c-n-400);
+
+  /* ---------- Tipografía ---------- */
+  --font-display: "Work Sans", Calibri, Carlito, system-ui, sans-serif; /* institucional */
+  --font-ui:      "Figtree", "Work Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+  --fs-h1: 32px;  --lh-h1: 40px;
+  --fs-h2: 24px;  --lh-h2: 32px;
+  --fs-h3: 18px;  --lh-h3: 26px;
+  --fs-body: 15px; --lh-body: 24px;
+  --fs-sm: 13px;  --lh-sm: 20px;
+  --fs-xs: 12px;  --lh-xs: 16px;   /* mínimo permitido */
+  --fs-kpi: 36px; --lh-kpi: 40px;
+
+  /* ---------- Espaciado (base 4) ---------- */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  --sp-12: 48px; --sp-16: 64px;
+
+  /* ---------- Radios ---------- */
+  --r-sm: 8px;     /* chips cuadrados, tooltips */
+  --r-md: 14px;    /* tarjetas (radio medio) */
+  --r-lg: 20px;    /* paneles, modales */
+  --r-xl: 28px;    /* tarjeta de login */
+  --r-pill: 999px; /* inputs, botones, chips */
+
+  /* ---------- Sombras (tintadas en azul SENA, en capas) ---------- */
+  --sh-1: 0 1px 2px rgba(0,48,77,.06), 0 1px 1px rgba(0,48,77,.04);
+  --sh-2: 0 1px 2px rgba(0,48,77,.05), 0 8px 20px -8px rgba(0,48,77,.16);
+  --sh-3: 0 2px 4px rgba(0,48,77,.05), 0 18px 40px -14px rgba(0,48,77,.24);
+  --sh-4: 0 4px 8px rgba(0,48,77,.05), 0 32px 64px -24px rgba(0,48,77,.32);
+  --sh-primary: 0 1px 2px rgba(0,92,39,.25), 0 8px 18px -8px rgba(0,120,50,.55);
+  --ring-focus: 0 0 0 4px rgba(57,169,0,.28);
+
+  /* ---------- Movimiento ---------- */
+  --dur-micro-1: 120ms;  /* hover, color */
+  --dur-micro-2: 160ms;  /* foco, press */
+  --dur-micro-3: 200ms;  /* elevación de tarjeta */
+  --dur-screen-1: 400ms; /* crossfade */
+  --dur-screen-2: 600ms; /* slide up del contenido */
+  --dur-screen-3: 750ms; /* salida de las píldoras */
+  --delay-sidebar: 120ms;
+  --ease-standard:   cubic-bezier(.2, 0, 0, 1);
+  --ease-out-cubic:  cubic-bezier(.33, 1, .68, 1);
+  --ease-in-out-cubic: cubic-bezier(.65, 0, .35, 1);
+  --ease-bounce:     cubic-bezier(.34, 1.56, .64, 1);
+
+  /* ---------- Tamaños ---------- */
+  --hit-min: 44px;       /* área táctil mínima (WCAG 2.5.5 AAA / 2.5.8 AA = 24px) */
+  --control-h: 52px;     /* inputs y botón principal */
+  --control-h-sm: 40px;
+  --sidebar-w: 256px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  :root{
+    --dur-micro-1: 0ms; --dur-micro-2: 0ms; --dur-micro-3: 0ms;
+    --dur-screen-1: 200ms; --dur-screen-2: 0ms; --dur-screen-3: 0ms; --delay-sidebar: 0ms;
+  }
+}

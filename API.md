@@ -15,11 +15,13 @@ códigos de estado y cuerpos de error.
 
 | Método | Ruta | Cuerpo | Respuesta |
 |---|---|---|---|
-| POST | `/auth/login` | `{ identificacion, password, rol }` | `{ token, usuario }` |
+| POST | `/auth/login` | `{ tipoDocumento?, identificacion, password, rol }` | `{ token, usuario }` |
 | POST | `/auth/logout` | — | `204` |
 
 `usuario`: `{ id, identificacion, nombre, rol, ficha?, ambienteIds? }`.
 `rol` ∈ `instructor | administrativo | aprendiz`.
+`tipoDocumento` (opcional) ∈ `CC | TI | CE | PPT`; lo envía el login desde el
+rediseño móvil v1. El servidor simulado lo ignora.
 
 Errores: `401 CREDENCIALES`, `403 ROL` (el usuario no tiene ese rol),
 `423 BLOQUEADA`.

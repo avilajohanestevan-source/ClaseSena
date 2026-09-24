@@ -55,6 +55,14 @@ const RUTAS_ICONOS = {
   archivo: 'M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6',
   reintentar: 'M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5',
   flecha: 'M5 12h14M13 6l6 6-6 6',
+  // Rediseño móvil v1: roles, inicio y búsqueda (mismo trazo lineal).
+  instructor: 'M8 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2.5 20v-1.5A4.5 4.5 0 0 1 7 14h2a4.5 4.5 0 0 1 4.5 4.5V20M13 3.5h8.5v7H13zM15.5 13.5l1.5-3',
+  aprendiz: 'M2 9l10-4.5L22 9l-10 4.5L2 9zM6 11v4.5c0 1.5 2.7 3 6 3s6-1.5 6-3V11M22 9v5',
+  administrativo: 'M5.5 3.5h13A2.5 2.5 0 0 1 21 6v12a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18V6a2.5 2.5 0 0 1 2.5-2.5zM7 8.5h10M7 12.5h6M7 16.5h4',
+  calendario: 'M5.5 5h13A2.5 2.5 0 0 1 21 7.5v11a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18.5v-11A2.5 2.5 0 0 1 5.5 5zM3 10h18M8 3v4M16 3v4',
+  inicio: 'M5 3h3.5a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM15.5 3H19a2 2 0 0 1 2 2v1.5a2 2 0 0 1-2 2h-3.5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM15.5 11.5H19a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2h-3.5a2 2 0 0 1-2-2v-5.5a2 2 0 0 1 2-2zM5 15h3.5a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2z',
+  buscar: 'M11 17.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM20 20l-4.2-4.2',
+  ambiente: 'M3 21V8l9-5 9 5v13M9 21v-6h6v6M3 21h18',
 };
 
 export function icono(nombre, clase = 'icon') {

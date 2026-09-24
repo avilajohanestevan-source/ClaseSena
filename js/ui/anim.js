@@ -15,6 +15,9 @@ if (gsap) {
 }
 
 const reducido = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const movil = () => window.matchMedia('(max-width: 640px)').matches;
+// Curvas del rediseño (tokens.css): out-cúbico, in-out-cúbico y rebote.
+const CURVA = { salida: 'power3.out', inOut: 'power3.inOut', rebote: 'back.out(1.8)' };
 const listo = () => gsap && !reducido();
 const ease = (nombre, respaldo) => (window.CustomEase ? nombre : respaldo);
 
@@ -35,22 +38,50 @@ export const anim = {
     gsap.fromTo(elementos, desde, { autoAlpha: 1, y: 0, x: 0, scale: 1, duration: 0.4, ease: 'power2.out', stagger: { each: 0.03, from: 'start' }, clearProps: 'all' });
   },
 
+  /** Los toasts entran desde arriba (420 ms, rebote) y salen hacia arriba (240 ms). */
   toastEntra(el) {
     if (!listo()) return;
-    gsap.fromTo(el, { autoAlpha: 0, x: 60, scale: 0.96 }, { autoAlpha: 1, x: 0, scale: 1, duration: 0.45, ease: ease('rebote', 'back.out(1.6)') });
+    gsap.fromTo(el, { autoAlpha: 0, y: -28, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.42, ease: ease('rebote', CURVA.rebote) });
   },
   toastSale(el) {
     if (!listo()) return Promise.resolve();
-    return gsap.to(el, { autoAlpha: 0, x: 40, height: 0, marginTop: 0, paddingTop: 0, paddingBottom: 0, duration: 0.3, ease: 'power2.in' }).then();
+    return gsap.to(el, { autoAlpha: 0, y: -16, scale: 0.96, height: 0, marginTop: 0, paddingTop: 0, paddingBottom: 0, duration: 0.24, ease: CURVA.inOut }).then();
   },
 
+  /** En móvil el modal es una hoja inferior: sube desde el borde. */
   modalEntra(panel) {
     if (!listo()) return;
-    gsap.fromTo(panel, { autoAlpha: 0, y: 24, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.4, ease: ease('sena', 'power3.out') });
+    if (movil()) gsap.fromTo(panel, { yPercent: 100 }, { yPercent: 0, duration: 0.42, ease: CURVA.salida });
+    else gsap.fromTo(panel, { autoAlpha: 0, y: 24, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.4, ease: ease('sena', 'power3.out') });
   },
   modalSale(panel) {
     if (!listo()) return Promise.resolve();
+    if (movil()) return gsap.to(panel, { yPercent: 100, duration: 0.26, ease: 'power2.in' }).then();
     return gsap.to(panel, { autoAlpha: 0, y: 12, scale: 0.98, duration: 0.2, ease: 'power2.in' }).then();
+  },
+
+  /**
+   * Login correcto: micro-rebote de la tarjeta (360 ms) y las dos piezas
+   * del fondo salen de la pantalla (750 ms, in-out cúbico) mientras la
+   * tarjeta se desvanece. Resuelve cuando la pantalla queda limpia.
+   */
+  salidaLogin({ tarjeta, piezaA, piezaB, extras = [] }) {
+    if (!listo()) return Promise.resolve();
+    const tl = gsap.timeline();
+    tl.to(tarjeta, { keyframes: { scale: [1, 1.03, 0.99, 1] }, duration: 0.36, ease: 'none' })
+      .to(piezaA, { x: '75vw', y: '-85vh', duration: 0.75, ease: CURVA.inOut }, 0.36)
+      .to(piezaB, { x: '-75vw', y: '85vh', duration: 0.75, ease: CURVA.inOut }, 0.36)
+      .to(extras, { autoAlpha: 0, duration: 0.3 }, 0.36)
+      .to(tarjeta, { autoAlpha: 0, y: -16, scale: 0.97, duration: 0.4, ease: CURVA.inOut }, 0.44);
+    // No hace falta esperar el final de las piezas: a los 800 ms ya salieron del área visible.
+    return new Promise((ok) => tl.call(ok, null, 0.8));
+  },
+
+  /** Entrada del panel tras el login: barra superior y navegación con 120 ms de retraso. */
+  entrarShell(barra, navegacion) {
+    if (!listo()) return;
+    if (barra) gsap.fromTo(barra, { autoAlpha: 0, y: -12 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: CURVA.salida, clearProps: 'all' });
+    if (navegacion) gsap.fromTo(navegacion, { autoAlpha: 0, y: movil() ? 24 : -8 }, { autoAlpha: 1, y: 0, duration: 0.6, delay: 0.12, ease: CURVA.salida, clearProps: 'all' });
   },
 
   /** Sacudida corta para errores de validación. */

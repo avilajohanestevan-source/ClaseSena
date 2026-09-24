@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FFFFFF">
+  <title>Ambientes SENA · Prototipo</title>
+  <link rel="icon" type="image/png" href="../img/sena-logo-verde.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@500;600;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="componentes.css">
+  <link rel="stylesheet" href="prototipo.css">
+</head>
+<body>
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- ============ LOGIN ============ -->
+  <main class="login" id="login">
+    <div class="login__bg" aria-hidden="true">
+      <img class="login__trazos" src="assets/trazos-fondo.svg" alt="">
+      <div class="pieza pieza--a" id="pieza-a"><div class="pieza__px"><img src="assets/pildora-verde.svg" alt=""></div></div>
+      <div class="pieza pieza--b" id="pieza-b"><div class="pieza__px"><img src="assets/pildora-azul.svg" alt=""></div></div>
+    </div>
+
+    <header class="login__top">
+      <a class="marca" href="#">
+        <img src="../img/sena-logo-verde.png" alt="SENA">
+        <span class="marca__txt"><strong>Ambientes de formación</strong><span>Servicio Nacional de Aprendizaje</span></span>
+      </a>
+      <span class="login__sede"><svg class="i"><use href="assets/iconos.svg#i-ambiente"/></svg>Centro de Gestión de Mercados · Bogotá</span>
+    </header>
+
+    <div class="login__centro">
+      <section class="login-card" id="login-card" aria-labelledby="login-titulo">
+        <div class="login-card__head">
+          <span class="eyebrow">Ingreso a la plataforma</span>
+          <h1 id="login-titulo">Hola de nuevo</h1>
+          <p class="muted">Elige tu rol e ingresa con tu documento.</p>
+        </div>
+
+        <form id="form-login" novalidate>
+          <div class="seg" role="radiogroup" aria-label="Rol">
+            <span class="seg__thumb" id="seg-thumb" aria-hidden="true"></span>
+            <input type="radio" name="rol" id="rol-admin" value="admin" checked>
+            <label for="rol-admin"><svg class="i"><use href="assets/iconos.svg#i-admin"/></svg><span>Administrativo</span></label>
+            <input type="radio" name="rol" id="rol-inst" value="instructor">
+            <label for="rol-inst"><svg class="i"><use href="assets/iconos.svg#i-instructor"/></svg><span>Instructor</span></label>
+            <input type="radio" name="rol" id="rol-apr" value="aprendiz">
+            <label for="rol-apr"><svg class="i"><use href="assets/iconos.svg#i-aprendiz"/></svg><span>Aprendiz</span></label>
+          </div>
+
+          <div class="field field--doc">
+            <label class="sr-only" for="tipo-doc">Tipo de documento</label>
+            <select class="field__prefix" id="tipo-doc">
+              <option>CC</option><option>TI</option><option>CE</option><option>PPT</option>
+            </select>
+            <input class="field__input" id="documento" inputmode="numeric" autocomplete="username" placeholder=" " maxlength="12" aria-describedby="documento-hint">
+            <label class="field__label" for="documento">Número de documento</label>
+            <span class="field__hint" id="documento-hint" hidden></span>
+          </div>
+
+          <div class="field">
+            <input class="field__input" id="password" type="password" autocomplete="current-password" placeholder=" " aria-describedby="password-hint" style="padding-right:52px">
+            <label class="field__label" for="password">Contraseña</label>
+            <button class="field__action" type="button" id="ver-pass" aria-label="Mostrar contraseña" aria-pressed="false"><svg class="i"><use href="assets/iconos.svg#i-ojo"/></svg></button>
+            <span class="field__hint" id="password-hint" hidden></span>
+          </div>
+
+          <div class="login-fila">
+            <label class="check"><input type="checkbox"> Recordarme</label>
+            <a class="link" href="#">Olvidé mi contraseña</a>
+          </div>
+
+          <div class="banner-error" id="login-error" role="alert" hidden><svg class="i"><use href="assets/iconos.svg#i-riesgo"/></svg><span></span></div>
+
+          <button class="btn btn--block" type="submit" id="btn-ingresar"><span class="btn__txt">Ingresar</span><svg class="i"><use href="assets/iconos.svg#i-flecha"/></svg></button>
+        </form>
+
+        <p class="login-demo">Demo: cualquier documento de 6+ dígitos y contraseña <code>Sena2026*</code>. Otra contraseña muestra el estado de error.</p>
+      </section>
+    </div>
+
+    <footer class="login__pie">
+      <span>© 2026 SENA · Ministerio del Trabajo</span>
+      <span>Soporte: mesa de ayuda del centro</span>
+    </footer>
+  </main>
+
+  <!-- ============ DASHBOARD ============ -->
+  <div class="app" id="app" hidden>
+    <aside class="sidebar" id="sidebar" aria-label="Navegación principal">
+      <a class="marca" href="#">
+        <img src="../img/sena-logo-verde.png" alt="SENA">
+        <span class="marca__txt"><strong>Ambientes</strong><span>Panel administrativo</span></span>
+      </a>
+      <nav>
+        <p class="nav__titulo">General</p>
+        <div class="nav">
+          <a class="nav-item" href="#" aria-current="page"><svg class="i"><use href="assets/iconos.svg#i-inicio"/></svg>Resumen</a>
+          <a class="nav-item" href="#"><svg class="i"><use href="assets/iconos.svg#i-ambiente"/></svg>Ambientes</a>
+          <a class="nav-item" href="#"><svg class="i"><use href="assets/iconos.svg#i-asistencia"/></svg>Asistencia</a>
+          <a class="nav-item" href="#"><svg class="i"><use href="assets/iconos.svg#i-aprendiz"/></svg>Aprendices<span class="count" aria-label="7 en riesgo">7</span></a>
+          <a class="nav-item" href="#"><svg class="i"><use href="assets/iconos.svg#i-calendario"/></svg>Calendario</a>
+        </div>
+      </nav>
+      <nav>
+        <p class="nav__titulo">Gestión</p>
+        <div class="nav">
+          <a class="nav-item" href="#"><svg class="i"><use href="assets/iconos.svg#i-inventario"/></svg>Inventario</a>
+          <a class="nav-item" href="#"><svg class="i"><use href="assets/iconos.svg#i-dano"/></svg>Daños<span class="count" aria-label="3 abiertos">3</span></a>
+          <a class="nav-item" href="#"><svg class="i"><use href="assets/iconos.svg#i-archivo"/></svg>Gestión P004</a>
+        </div>
+      </nav>
+      <div class="sidebar__usuario">
+        <span class="avatar avatar--verde">LM</span>
+        <div><strong>Laura Méndez</strong><span>Administrativa</span></div>
+        <button class="btn btn--ghost btn--icon" type="button" id="btn-salir" aria-label="Cerrar sesión"><svg class="i"><use href="assets/iconos.svg#i-salir"/></svg></button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar" id="topbar">
+        <button class="btn btn--ghost btn--icon btn-menu" type="button" id="btn-menu" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar"><svg class="i"><use href="assets/iconos.svg#i-menu"/></svg></button>
+        <div class="topbar__titulo">
+          <h1 tabindex="-1" style="font-size:26px;line-height:32px;outline:none">Resumen de hoy</h1>
+          <p id="fecha-hoy">Jornada diurna</p>
+        </div>
+        <label class="buscar"><span class="sr-only">Buscar</span><svg class="i"><use href="assets/iconos.svg#i-buscar"/></svg><input type="search" placeholder="Buscar ambiente, ficha o aprendiz"></label>
+        <button class="btn btn--ghost btn--icon btn-campana" type="button" id="btn-campana" aria-label="Notificaciones (3 nuevas)"><svg class="i"><use href="assets/iconos.svg#i-campana"/></svg><span class="punto"></span></button>
+        <button class="btn btn--sm" type="button"><svg class="i"><use href="assets/iconos.svg#i-mas"/></svg><span class="btn--primary-txt">Nuevo reporte</span></button>
+      </header>
+
+      <div class="content" id="content">
+        <section class="kpis" aria-label="Indicadores del día">
+          <article class="card card--interactive kpi" tabindex="0">
+            <div class="kpi__top"><span class="kpi__icono"><svg class="i"><use href="assets/iconos.svg#i-asistencia"/></svg></span><span class="kpi__label">Asistencia hoy</span></div>
+            <div class="kpi__valor"><span data-count="87" data-suffix="%">0%</span></div>
+            <div class="kpi__pie"><span><span data-count="1248">0</span> de 1.435 aprendices</span><span class="chip chip--ok">+3,2 %</span></div>
+          </article>
+          <article class="card card--interactive kpi kpi--azul" tabindex="0">
+            <div class="kpi__top"><span class="kpi__icono"><svg class="i"><use href="assets/iconos.svg#i-ambiente"/></svg></span><span class="kpi__label">Ambientes en uso</span></div>
+            <div class="kpi__valor"><span data-count="14">0</span><small> / 18</small></div>
+            <div class="kpi__pie" style="display:block"><div class="bar"><div class="bar__fill" style="--v:78%"></div></div></div>
+          </article>
+          <article class="card card--interactive kpi kpi--rojo" tabindex="0">
+            <div class="kpi__top"><span class="kpi__icono"><svg class="i"><use href="assets/iconos.svg#i-riesgo"/></svg></span><span class="kpi__label">Aprendices en riesgo</span></div>
+            <div class="kpi__valor"><span data-count="7">0</span></div>
+            <div class="kpi__pie"><span>3+ faltas consecutivas</span><span class="chip chip--danger">2 nuevos</span></div>
+          </article>
+          <article class="card card--interactive kpi kpi--oro" tabindex="0">
+            <div class="kpi__top"><span class="kpi__icono"><svg class="i"><use href="assets/iconos.svg#i-dano"/></svg></span><span class="kpi__label">Daños abiertos</span></div>
+            <div class="kpi__valor"><span data-count="3">0</span></div>
+            <div class="kpi__pie"><span>Último: hace 40 min</span><span class="chip chip--warn">1 grave</span></div>
+          </article>
+        </section>
+
+        <div class="grid-main">
+          <section class="card" aria-labelledby="t-ocupacion">
+            <div class="card__head">
+              <div><h2 id="t-ocupacion" style="font-size:18px;line-height:26px">Ocupación de ambientes</h2><p class="small muted">Actualizado hace 1 min</p></div>
+              <div class="filtros" role="group" aria-label="Filtrar ambientes" id="filtros">
+                <button class="filtro" type="button" aria-pressed="true" data-f="">Todos</button>
+                <button class="filtro" type="button" aria-pressed="false" data-f="clase">En clase</button>
+                <button class="filtro" type="button" aria-pressed="false" data-f="libre">Libres</button>
+                <button class="filtro" type="button" aria-pressed="false" data-f="mant">Mantenimiento</button>
+              </div>
+            </div>
+            <div class="ambientes" id="ambientes"></div>
+          </section>
+
+          <div class="col">
+            <section class="card" aria-labelledby="t-agenda">
+              <div class="card__head"><h2 id="t-agenda" style="font-size:18px;line-height:26px">Agenda de hoy</h2><svg class="i muted"><use href="assets/iconos.svg#i-calendario"/></svg></div>
+              <ol class="agenda">
+                <li><time>07:00</time><span class="agenda__linea"><span class="agenda__punto"></span></span><div class="agenda__item"><strong>Apertura de ambientes</strong><span>Bloque A y B · Vigilancia</span></div></li>
+                <li class="is-ahora"><time>09:30</time><span class="agenda__linea"><span class="agenda__punto"></span></span><div class="agenda__item"><strong>Revisión de inventario · Amb. 204</strong><span>En curso · Carlos Rojas</span></div></li>
+                <li><time>12:00</time><span class="agenda__linea"><span class="agenda__punto"></span></span><div class="agenda__item"><strong>Comité de seguimiento P004</strong><span>Sala de coordinación</span></div></li>
+                <li><time>14:00</time><span class="agenda__linea"><span class="agenda__punto"></span></span><div class="agenda__item"><strong>Mantenimiento Taller 1</strong><span>Proveedor externo</span></div></li>
+              </ol>
+            </section>
+
+            <section class="card" aria-labelledby="t-avisos">
+              <div class="card__head"><h2 id="t-avisos" style="font-size:18px;line-height:26px">Avisos</h2><span class="chip chip--info chip--plain">3 nuevos</span></div>
+              <ul class="avisos">
+                <li class="aviso aviso--riesgo"><span class="aviso__icono"><svg class="i"><use href="assets/iconos.svg#i-aprendiz"/></svg></span><div><strong>Andrés Pérez completó 3 faltas</strong><span>Ficha 2758412 · requiere contacto</span></div></li>
+                <li class="aviso aviso--instructor"><span class="aviso__icono"><svg class="i"><use href="assets/iconos.svg#i-instructor"/></svg></span><div><strong>Instr. Diana Ruiz canceló su clase</strong><span>Amb. 108 · 14:00 · incapacidad</span></div></li>
+                <li class="aviso aviso--aviso"><span class="aviso__icono"><svg class="i"><use href="assets/iconos.svg#i-aviso"/></svg></span><div><strong>Corte de energía programado</strong><span>Bloque C · viernes 7:00–9:00</span></div></li>
+              </ul>
+            </section>
+          </div>
+        </div>
+
+        <div class="grid-bottom">
+          <section class="card" aria-labelledby="t-fichas">
+            <div class="card__head"><h2 id="t-fichas" style="font-size:18px;line-height:26px">Asistencia por ficha · semana</h2><a class="link small" href="#">Ver todas</a></div>
+            <ul class="fichas" id="fichas"></ul>
+          </section>
+          <section class="card" aria-labelledby="t-solicitudes">
+            <div class="card__head"><h2 id="t-solicitudes" style="font-size:18px;line-height:26px">Solicitudes de préstamo</h2></div>
+            <div class="vacio">
+              <img src="assets/vacio-danos.svg" alt="">
+              <strong style="color:var(--color-heading)">Todo en orden</strong>
+              <p>No hay solicitudes de préstamo de ambientes pendientes por aprobar.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="proto-bar" aria-label="Controles del prototipo">
+    <button type="button" id="proto-reset">Reiniciar flujo</button>
+    <a href="guia.html">Guía de diseño →</a>
+  </nav>
+
+  <script src="prototipo.js"></script>
+</body>
+</html>
