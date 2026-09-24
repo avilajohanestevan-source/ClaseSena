@@ -236,12 +236,22 @@ export const ESTADOS_ITEM = {
 export const PREFIJO_QR_ITEM = 'SENA-INV:';
 export const PREFIJO_QR_INSPECCION = 'SENA-INSP:';
 
-/** Código de ítem a partir del QR de la etiqueta ("SENA-INV:AMB107-003") o del código escrito. */
+/**
+ * Código de ítem a partir del QR de la etiqueta ("SENA-INV:AMB107-003"), del
+ * código de barras (el código solo, p. ej. "SILLA-107-04" o un EAN
+ * "7701234500017") o del código escrito. Igual que normalizarCodigo() del backend.
+ */
 export function leerQrItem(texto) {
-  const t = String(texto ?? '').trim().toUpperCase();
-  const m = t.match(/^SENA-INV:([A-Z0-9-]{3,30})$/) || t.match(/^(AMB[A-Z0-9]+-\d{3,})$/);
-  return m ? m[1] : null;
+  const t = String(texto ?? '').trim().toUpperCase().replace(/^SENA-INV:/, '');
+  return /^[A-Z0-9][A-Z0-9-]{2,39}$/.test(t) ? t : null;
 }
+
+/** Daños del salón que no son ítems del inventario (mismas claves que el backend). */
+export const UBICACIONES = [
+  { clave: 'pared', etiqueta: 'Pared' }, { clave: 'techo', etiqueta: 'Techo' }, { clave: 'piso', etiqueta: 'Piso' },
+  { clave: 'puerta', etiqueta: 'Puerta' }, { clave: 'ventana', etiqueta: 'Ventana' },
+  { clave: 'electrica', etiqueta: 'Instalación eléctrica' }, { clave: 'estructura', etiqueta: 'Estructura' }, { clave: 'otro', etiqueta: 'Otro' },
+];
 
 /** Token de la inspección a partir de su QR ("SENA-INSP:<16 caracteres>"). */
 export function leerQrInspeccion(texto) {
@@ -250,9 +260,10 @@ export function leerQrInspeccion(texto) {
 }
 
 /** Mismas reglas que el backend (api/modulos/inspecciones.php → rutaReportarDano). */
-export function validarReporteDano({ itemId, tipoDano, severidad, comentario, foto }) {
+export function validarReporteDano({ itemId, ubicacion, tipoDano, severidad, comentario, foto }) {
   const errores = {};
-  if (!itemId) errores.itemId = 'Escanea o elige el ítem dañado.';
+  // Un daño es de un ítem del inventario o del salón (pared, techo…).
+  if (!itemId && !UBICACIONES.some((u) => u.clave === ubicacion)) errores.itemId = 'Escanea el ítem dañado o elige dónde está el daño.';
   if (!TIPOS_DANO.some((t) => t.clave === tipoDano)) errores.tipoDano = 'Elige el tipo de daño.';
   if (!PRIORIDADES.some((p) => p.clave === severidad)) errores.severidad = 'Elige la severidad.';
   const texto = String(comentario ?? '').trim();

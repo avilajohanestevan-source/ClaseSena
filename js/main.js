@@ -4,7 +4,7 @@
 // detener al cambiar de vista (cámaras, intervalos).
 import { h, vaciar } from './ui/dom.js';
 import { anim } from './ui/anim.js';
-import { toast } from './ui/avisos.js';
+import { toast, cerrarModales } from './ui/avisos.js';
 import { tarjetaError, cargando } from './ui/componentes.js';
 import { crearShell } from './ui/drawer.js';
 import { crearBandeja } from './ui/bandeja.js';
@@ -28,7 +28,7 @@ const RUTAS = {
   inspeccion: { vista: () => import('./vistas/inspeccion.js'), roles: ['instructor'], titulo: 'Revisión del ambiente', activa: 'inspecciones' },
   planilla: { vista: () => import('./vistas/planilla.js'), roles: PERSONAL, titulo: 'Planilla de entrega', activa: 'inspecciones' },
   inventario: { vista: () => import('./vistas/inventario.js'), roles: PERSONAL, titulo: 'Inventario', icono: 'caja', grupo: 'ambientes' },
-  etiquetas: { vista: () => import('./vistas/etiquetas.js'), roles: PERSONAL, titulo: 'Etiquetas QR', activa: 'inventario' },
+  etiquetas: { vista: () => import('./vistas/etiquetas.js'), roles: PERSONAL, titulo: 'Pegatinas', activa: 'inventario' },
   reportes: { vista: () => import('./vistas/reportes.js'), roles: ['administrativo'], titulo: 'Reportes', icono: 'reporte', grupo: 'ambientes' },
   // Asistencia a clases (datos simulados, js/api/mock).
   clases: { vista: () => import('./vistas/instructor.js'), roles: ['instructor'], titulo: 'Asistencia a clases', icono: 'qr', grupo: 'asistencia' },
@@ -108,6 +108,7 @@ async function navegar() {
   const id = ++navegacion;
   limpiezas.forEach((fn) => { try { fn(); } catch { /* nada que limpiar */ } });
   limpiezas = [];
+  cerrarModales();
 
   const [ruta, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const u = estado.usuario;

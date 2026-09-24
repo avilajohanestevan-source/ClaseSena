@@ -306,8 +306,11 @@
 .planilla-firma-vacia{ display:grid; place-items:center; height:90px; color:var(--color-text-muted); font-style:italic; }
 .planilla-firma strong{ color:var(--color-heading); font-size:14.5px; }
 
-/* ================= Etiquetas QR ================= */
-.etiquetas{ display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:12px; }
+/* ================= Pegatinas: QR + código de barras ================= */
+.etiquetas{ display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:12px; margin-top:12px; }
+.etiqueta-codigos{ display:grid; justify-items:center; gap:6px; width:100%; }
+.barras-caja{ display:block; width:100%; max-width:220px; }
+.barras-caja svg{ display:block; width:100%; height:auto; }
 .etiqueta{ margin:0; display:grid; justify-items:center; gap:8px; padding:12px; border:1.5px dashed var(--color-border-strong); border-radius:12px; background:#fff; text-align:center; }
 .etiqueta .qr-caja{ border:0; padding:0; }
 .etiqueta figcaption{ display:grid; gap:2px; font-size:12px; color:var(--color-text-muted); }
@@ -410,3 +413,71 @@ button.accion-grande{ width:100%; border:0; font:inherit; text-align:left; curso
 .planilla-firma--ok .icon{ width:28px; height:28px; }
 .entrega-qr .planilla-chips{ justify-content:center; }
 .entrega-qr .btn-block{ max-width:360px; }
+
+/* ================= Inventario: herramientas, detalle, registro y carga ================= */
+.inv-herramientas{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px; }
+.inv-detalle-codigos{ display:grid; justify-items:center; gap:10px; width:100%; }
+.inv-detalle .bloque-titulo{ justify-self:start; margin:8px 0 0; }
+.historial{ list-style:none; margin:0; padding:0; width:100%; display:grid; gap:0; }
+.historial-fila{ position:relative; display:grid; grid-template-columns:32px minmax(0,1fr); gap:10px; padding:0 0 14px; }
+.historial-fila::before{ content:""; position:absolute; left:15px; top:32px; bottom:0; width:2px; background:var(--color-border); }
+.historial-fila:last-child::before{ display:none; }
+.historial-fila > div{ display:grid; gap:2px; font-size:13.5px; line-height:1.35; }
+.historial-fila strong{ color:var(--color-heading); font-size:14px; }
+.historial-icono{ width:32px; height:32px; display:grid; place-items:center; border-radius:50%; background:var(--c-verde-50); color:var(--c-verde-700); }
+.historial-icono .icon{ width:16px; height:16px; }
+.historial-fila--dano .historial-icono{ background:var(--c-rojo-50); color:var(--color-danger); }
+.historial-fila--etiqueta .historial-icono{ background:var(--color-surface-muted); color:var(--color-heading); }
+
+.registro-escaner{ display:grid; gap:14px; }
+.registro-lista{ list-style:none; margin:0; padding:0; display:grid; gap:8px; max-height:40vh; overflow-y:auto; }
+.registro-fila{ display:grid; grid-template-columns:32px minmax(0,1fr) auto; gap:10px; align-items:center; padding:10px 12px; border-radius:var(--r-md); border:1px solid var(--color-border); background:var(--color-surface); }
+.registro-fila > div{ display:grid; gap:2px; font-size:13px; min-width:0; }
+.registro-fila strong{ font-size:14px; color:var(--color-heading); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.registro-icono{ width:32px; height:32px; display:grid; place-items:center; border-radius:50%; background:var(--c-verde-50); color:var(--c-verde-700); }
+.registro-icono .icon{ width:18px; height:18px; }
+.registro-fila--existe .registro-icono, .registro-fila--otro .registro-icono{ background:var(--c-oro-100, #FFF4CC); color:#7A5B00; }
+
+.carga{ display:grid; gap:14px; }
+.carga-pasos{ margin:0; padding-left:20px; display:grid; gap:6px; font-size:14px; }
+.carga-pasos code{ font-size:12.5px; }
+.carga-resultado{ display:grid; gap:12px; }
+.carga-resultado:empty{ display:none; }
+.carga-cifras{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; }
+.carga-cifra{ display:grid; justify-items:center; gap:2px; padding:10px 6px; border-radius:var(--r-md); background:var(--color-surface-muted); text-align:center; font-size:12.5px; }
+.carga-cifra strong{ font:700 22px var(--font-display); color:var(--color-heading); }
+.carga-cifra--nuevo strong{ color:var(--c-verde-700); }
+.carga-cifra--error strong{ color:var(--color-danger); }
+.carga-errores{ display:block; }
+.carga-errores ul{ margin:6px 0 0; padding-left:18px; max-height:160px; overflow-y:auto; }
+.carga-resultado .table-wrap{ max-height:260px; overflow:auto; }
+
+/* ================= Revisión: todo bien, novedades e inventario plegable ================= */
+.todo-bien{
+  display:flex; align-items:center; gap:14px; width:100%; margin:16px 0 0; padding:16px 18px; min-height:80px;
+  border:2px solid var(--c-verde-200); border-radius:var(--r-lg); background:var(--c-verde-50);
+  font:inherit; text-align:left; color:var(--c-verde-800); cursor:pointer;
+  transition:transform var(--dur-micro-2) var(--ease-standard), border-color var(--dur-micro-2) var(--ease-standard);
+}
+.todo-bien:hover{ border-color:var(--color-brand); transform:translateY(-1px); }
+.todo-bien:active{ transform:scale(.99); }
+.todo-bien[hidden]{ display:none; }
+.todo-bien > span:nth-child(2){ flex:1; display:grid; gap:2px; }
+.todo-bien strong{ font:700 18px var(--font-display); color:var(--c-verde-800); }
+.todo-bien > span:nth-child(2) > span{ font-size:13.5px; }
+.todo-bien-icono{ width:48px; height:48px; flex-shrink:0; display:grid; place-items:center; border-radius:50%; background:var(--color-brand); color:#fff; }
+.todo-bien-icono .icon{ width:26px; height:26px; }
+.insp-escanear-titulo{ margin:0 0 8px !important; text-align:left !important; font-weight:700; font-size:14.5px !important; color:var(--color-heading); }
+.insp-escanear-botones{ display:grid; grid-template-columns:minmax(0,1fr); gap:8px; }
+@media (min-width:480px){ .insp-escanear-botones{ grid-template-columns:3fr 2fr; } }
+.insp-inventario > summary{ display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:4px 12px; cursor:pointer; list-style:none; }
+.insp-inventario > summary::-webkit-details-marker{ display:none; }
+.insp-inventario > summary .bloque-titulo{ margin:0; }
+.insp-inventario[open] > summary{ margin-bottom:12px; }
+.insp-inventario .adm-buscar{ margin-bottom:10px; }
+.insp-inventario .inv-lista{ max-height:60vh; overflow-y:auto; }
+
+@media print{
+  .etiquetas{ grid-template-columns:repeat(3, 1fr); gap:8px; }
+  .etiqueta{ break-inside:avoid; border-style:solid; }
+}

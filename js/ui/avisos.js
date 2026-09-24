@@ -43,6 +43,10 @@ export function toast(tipo, titulo, detalle = '', duracion = 4500) {
 
 /* ---------------- modales ---------------- */
 
+// Modales abiertos: se cierran al cambiar de ruta (p. ej. un enlace dentro del modal).
+const abiertos = new Set();
+export function cerrarModales() { abiertos.forEach((cerrar) => cerrar()); }
+
 /**
  * Abre un <dialog> modal. `contenido` puede ser un nodo o una función que
  * recibe { cerrar } y devuelve el nodo. Devuelve { cerrar, dialogo }.
@@ -52,6 +56,7 @@ export function abrirModal({ titulo, subtitulo, contenido, acciones = [], ancho 
   const cerrar = async (valor) => {
     if (cerrado) return;
     cerrado = true;
+    abiertos.delete(cerrar);
     await anim.modalSale(panel);
     dialogo.close();
     dialogo.remove();
@@ -71,6 +76,7 @@ export function abrirModal({ titulo, subtitulo, contenido, acciones = [], ancho 
   dialogo.addEventListener('click', (e) => { if (e.target === dialogo) cerrar(); });
   document.body.append(dialogo);
   dialogo.showModal();
+  abiertos.add(cerrar);
   // Un toast que ya estaba visible debe quedar por encima del modal nuevo.
   if (pila?.matches(':popover-open')) { pila.hidePopover(); pila.showPopover(); }
   anim.modalEntra(panel);

@@ -1,7 +1,7 @@
 // Contratos del backend real de entrega y revisión de ambientes
 // (api/index.php, PHP + MySQL). Detalle en API.md, sección
 // "Entrega y revisión de ambientes". Las vistas solo usan estas funciones.
-import { pedirAmbientes as p } from './cliente.js';
+import { pedirAmbientes as p, descargarAmbientes } from './cliente.js';
 
 /**
  * @typedef {'instructor'|'administrativo'|'portero'|'aprendiz'} Rol
@@ -14,7 +14,7 @@ import { pedirAmbientes as p } from './cliente.js';
  *   categoria:string, serial:?string, estado:'operativo'|'danado'|'en_reparacion'|'baja'}} Item
  * @typedef {{clave:string, etiqueta:string, ok:?boolean}} PuntoChecklist
  * @typedef {{nombre:string, fecha:string}} Firma
- * @typedef {{id:number, itemId:number, codigo:string, nombre:string, categoria:string, tipoDano:string,
+ * @typedef {{id:number, itemId:?number, ubicacion:?string, codigo:?string, nombre:string, categoria:string, tipoDano:string,
  *   severidad:'leve'|'moderada'|'grave', comentario:string, foto:?string, reportadoEn:string}} ReporteDano
  * @typedef {{id:number, estado:'en_curso'|'pendiente_recepcion'|'recibida'|'cancelada', resultado:?('ok'|'con_danos'),
  *   qr:?string, qrGeneradoEn:?string, ambiente:{id:number, codigo:string, nombre:string, bloque:?string, porteroId:?number, portero:?string},
@@ -43,7 +43,12 @@ export const apiAmb = {
   // Inventario
   items: (ambienteId) => p('GET', `/environments/${ambienteId}/items`), // → Item[]
   itemPorCodigo: (codigo) => p('GET', `/items/by-code/${encodeURIComponent(codigo)}`),
-  crearItem: (datos) => p('POST', '/items', datos),
+  crearItem: (datos) => p('POST', '/items', datos),                   // {ambienteId, codigo?, nombre, categoria, serial?, estado?}
+  registrarPorEscaneo: (datos) => p('POST', '/items/scan', datos),    // {codigo, ambienteId, nombre, categoria} → {item, creado, otroAmbiente}
+  cargaMasiva: (datos) => p('POST', '/items/import', datos),          // {nombre, archivo (data URL), simular} → {total, nuevos, actualizados, sinCambios, errores, filas}
+  exportarInventario: (ambienteId) => descargarAmbientes('/items/export', { ambienteId }, 'inventario.xlsx'),
+  etiquetasImpresas: (ids, motivo) => p('POST', '/items/labels', { ids, motivo }),
+  historialItem: (id) => p('GET', `/items/${id}/history`),
   editarItem: (id, datos) => p('PATCH', `/items/${id}`, datos),
   borrarItem: (id) => p('DELETE', `/items/${id}`),
 
@@ -53,9 +58,9 @@ export const apiAmb = {
   inspeccionPorQr: (token) => p('GET', `/inspections/by-qr/${token}`),      // portero y administrativo
   iniciarInspeccion: (ambienteId) => p('POST', '/inspections', { ambienteId }),
   guardarChecklist: (id, checklist, observaciones) => p('PATCH', `/inspections/${id}/checklist`, { checklist, observaciones }),
-  reportarDano: (id, datos) => p('POST', `/inspections/${id}/items`, datos), // {itemId|codigo, tipoDano, severidad, comentario, foto?}
+  reportarDano: (id, datos) => p('POST', `/inspections/${id}/items`, datos), // {itemId|codigo|ubicacion, tipoDano, severidad, comentario, foto}
   quitarDano: (id, reporteId) => p('DELETE', `/inspections/${id}/items/${reporteId}`),
-  confirmarInspeccion: (id, datos) => p('POST', `/inspections/${id}/confirm`, datos), // instructor termina: {checklist, observaciones}
+  confirmarInspeccion: (id, datos) => p('POST', `/inspections/${id}/confirm`, datos), // instructor termina: {checklist, observaciones} | {todoBien:true}
   generarQr: (id) => p('POST', `/inspections/${id}/qr`),                     // portero: QR de entrega
   recibirPorQr: (token) => p('POST', `/inspections/by-qr/${token}/receive`), // instructor: escanea el QR del portero
   cancelarInspeccion: (id) => p('POST', `/inspections/${id}/cancel`),

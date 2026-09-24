@@ -44,7 +44,7 @@ function rutaReporte(): never
         "SELECT d.*, it.codigo, it.nombre AS item, it.estado AS estado_actual, e.codigo AS ambiente, u.nombre AS instructor, p.nombre AS portero, s.id AS inspeccion
          FROM inspection_items d
          JOIN inspections s ON s.id = d.inspection_id
-         JOIN inventory_items it ON it.id = d.inventory_item_id
+         LEFT JOIN inventory_items it ON it.id = d.inventory_item_id
          JOIN environments e ON e.id = s.environment_id
          JOIN users u ON u.id = s.instructor_id
          LEFT JOIN users p ON p.id = s.portero_id
@@ -72,7 +72,9 @@ function rutaReporte(): never
             'inspeccionId' => (int) $d['inspeccion'],
             'ambiente' => $d['ambiente'],
             'codigo' => $d['codigo'],
-            'item' => $d['item'],
+            // Daño del salón (sin ítem): se muestra la ubicación.
+            'item' => $d['item'] ?? ('Salón · ' . UBICACIONES[$d['ubicacion']]),
+            'ubicacion' => $d['ubicacion'],
             'estadoActual' => $d['estado_actual'],
             'tipoDano' => $d['tipo_dano'],
             'severidad' => $d['severidad'],

@@ -52,10 +52,13 @@ async function decodificarCanvas(canvas, tipos, nativo) {
 
 /**
  * @param {{tipos:('qr'|'barras')[], alLeer:(texto:string)=>void, etiqueta?:string,
- *   manual?:boolean, placeholder?:string, bloqueado?:string|null}} opciones
- * @returns {{el:HTMLElement, detener:()=>void, bloquear:(motivo:string|null)=>void}}
+ *   manual?:boolean, placeholder?:string, bloqueado?:string|null, continuo?:boolean}} opciones
+ * continuo: después de cada lectura la cámara vuelve a escanear sola y el campo
+ * manual queda enfocado, para registrar etiquetas una tras otra (también con
+ * lectores USB, que escriben el código y pulsan Enter).
+ * @returns {{el:HTMLElement, detener:()=>void, bloquear:(motivo:string|null)=>void, enfocar:()=>void}}
  */
-export function crearEscaner({ tipos, alLeer, etiqueta = 'Escanear', manual = true, placeholder = 'Escribe el código', bloqueado = null }) {
+export function crearEscaner({ tipos, alLeer, etiqueta = 'Escanear', manual = true, placeholder = 'Escribe el código', bloqueado = null, continuo = false }) {
   let flujo = null, raf = null, ultimo = 0, ocupado = false, nativo = null, motivoBloqueo = bloqueado;
   const esBarras = tipos.includes('barras') && !tipos.includes('qr');
 
@@ -79,9 +82,13 @@ export function crearEscaner({ tipos, alLeer, etiqueta = 'Escanear', manual = tr
 
   function entregar(texto) {
     if (motivoBloqueo) { avisar(motivoBloqueo, 'error'); return; }
+    const conCamara = !!flujo;
     detener();
     if (formManual) entrada.value = '';
     alLeer(texto);
+    if (!continuo) return;
+    if (formManual) entrada.focus({ preventScroll: true });
+    if (conCamara) setTimeout(() => { if (!flujo && el.isConnected) iniciar(); }, 1200);
   }
 
   async function iniciar() {
@@ -158,5 +165,5 @@ export function crearEscaner({ tipos, alLeer, etiqueta = 'Escanear', manual = tr
   }
   bloquear(motivoBloqueo);
 
-  return { el, detener, bloquear };
+  return { el, detener, bloquear, enfocar: () => formManual && entrada.focus({ preventScroll: true }) };
 }

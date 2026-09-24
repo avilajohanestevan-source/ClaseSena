@@ -3,3 +3,6 @@
 
 # Fotos de daños subidas desde la app (se crean al usar la inspección).
 /uploads/
+
+# Dependencias PHP (PhpSpreadsheet): se instalan con `composer install`.
+/api/vendor/

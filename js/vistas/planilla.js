@@ -74,7 +74,7 @@ export async function render(raiz, { params, alSalir }) {
         d.reportes.length ? h('div', { class: 'planilla-danos' }, d.reportes.map((r) => h('figure', { class: 'planilla-dano' },
           r.foto ? h('img', { src: r.foto, alt: `Foto del daño en ${r.nombre}`, loading: 'lazy' }) : h('span', { class: 'reporte-foto--vacia', 'aria-hidden': 'true' }, icono('camara')),
           h('figcaption', {},
-            h('strong', {}, `${r.nombre} · ${r.codigo}`),
+            h('strong', {}, r.itemId ? `${r.nombre} · ${r.codigo}` : `Salón · ${r.nombre}`),
             h('span', { class: 'reporte-chips' }, h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(r.tipoDano)), chipSeveridad(r.severidad)),
             h('span', {}, r.comentario),
             h('span', { class: 'text-muted' }, `Reportado ${fecha.corta(r.reportadoEn)}`)))))

@@ -65,9 +65,9 @@ export async function render(raiz) {
           h('thead', {}, h('tr', {}, ['Fecha', 'Ambiente', 'Ítem', 'Tipo', 'Severidad', 'Comentario', 'Estado actual', 'Reportó', 'Entregó', ''].map((t) => h('th', {}, t)))),
           h('tbody', {}, rep.danos.map((x) => h('tr', {},
             h('td', { class: 'celda-fecha' }, fecha.corta(x.reportadoEn)), h('td', {}, x.ambiente),
-            h('td', {}, h('strong', {}, x.item), h('div', { class: 'celda-detalle mono' }, x.codigo)),
+            h('td', {}, h('strong', {}, x.item), x.codigo && h('div', { class: 'celda-detalle mono' }, x.codigo)),
             h('td', {}, etiquetaTipoDano(x.tipoDano)), h('td', {}, chipSeveridad(x.severidad)),
-            h('td', { class: 'celda-larga' }, x.comentario), h('td', {}, chipItem(x.estadoActual)), h('td', {}, x.instructor), h('td', {}, x.portero || '—'),
+            h('td', { class: 'celda-larga' }, x.comentario), h('td', {}, x.estadoActual ? chipItem(x.estadoActual) : 'Salón'), h('td', {}, x.instructor), h('td', {}, x.portero || '—'),
             h('td', {}, h('a', { class: 'table-link', href: `#/planilla?id=${x.inspeccionId}` }, 'Planilla')))))))
           : vacio('Sin daños en el periodo', '', 'check')),
       h('section', { class: 'card' },
@@ -87,7 +87,7 @@ export async function render(raiz) {
 
   function exportar(tipo) {
     const filas = tipo === 'danos'
-      ? rep?.danos.map((x) => [x.reportadoEn, x.ambiente, x.codigo, x.item, etiquetaTipoDano(x.tipoDano), x.severidad, x.comentario, x.estadoActual, x.instructor, x.portero || '', x.inspeccionId])
+      ? rep?.danos.map((x) => [x.reportadoEn, x.ambiente, x.codigo || '', x.item, etiquetaTipoDano(x.tipoDano), x.severidad, x.comentario, x.estadoActual || 'salón', x.instructor, x.portero || '', x.inspeccionId])
       : inspecciones.map((s) => [s.id, s.ambiente.codigo, s.instructor.nombre, s.portero?.nombre || '', ESTADOS_INSPECCION[s.estado]?.[0], s.resultado || '', s.danos, s.iniciadaEn, s.confirmadaEn || '', s.recibidaEn || '']);
     if (!filas?.length) { toast('aviso', 'Nada para exportar', 'Ajusta los filtros.'); return; }
     const cabeza = tipo === 'danos'

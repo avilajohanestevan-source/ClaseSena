@@ -58,6 +58,32 @@ export async function pedirAmbientes(metodo, ruta, datos) {
   }
 }
 
+/**
+ * Descarga un archivo del backend real (p. ej. el inventario en Excel) con el
+ * token de la sesión y lo guarda con el nombre que manda el servidor.
+ */
+export async function descargarAmbientes(ruta, datos, nombrePorDefecto = 'archivo') {
+  const q = new URLSearchParams(Object.entries(datos || {}).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+  let resp;
+  try {
+    resp = await fetch(CONFIG.apiAmbientes + ruta + ([...q].length ? `?${q}` : ''), { headers: { Authorization: `Bearer ${tokenAmbientes}` } });
+  } catch {
+    throw new ErrorApi(0, 'No hay conexión con el servidor. Revisa tu red e inténtalo de nuevo.', 'SIN_CONEXION');
+  }
+  if (!resp.ok) {
+    const cuerpo = await resp.json().catch(() => null);
+    throw new ErrorApi(resp.status, cuerpo?.mensaje || `Error ${resp.status}`, cuerpo?.codigo);
+  }
+  const nombre = /filename="([^"]+)"/.exec(resp.headers.get('Content-Disposition') || '')?.[1] || nombrePorDefecto;
+  const url = URL.createObjectURL(await resp.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: nombre });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return nombre;
+}
+
 export async function pedir(metodo, ruta, datos) {
   const conQuery = metodo === 'GET' && datos;
   if (CONFIG.usarMock) {

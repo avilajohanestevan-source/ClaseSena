@@ -2,6 +2,7 @@
 // ambientes: chips de estado, QR, tiempo relativo y estados vacíos.
 import { h, icono } from './dom.js';
 import { ESTADOS_INSPECCION, ESTADOS_ITEM, TIPOS_DANO, PRIORIDADES } from '../reglas.js';
+import { svgCode128 } from './codigo128.js';
 
 export function chipInspeccion(estado) {
   const [texto, clase] = ESTADOS_INSPECCION[estado] || [estado, 'neutro'];
@@ -99,4 +100,22 @@ export function tarjetaInspeccion(s, { accion } = {}) {
         : s.qrGeneradoEn ? h('span', { class: 'text-muted insp-tarjeta-hora' }, `QR generado ${fecha.relativa(s.qrGeneradoEn)}`)
           : s.confirmadaEn && h('span', { class: 'text-muted insp-tarjeta-hora' }, `Revisión terminada ${fecha.relativa(s.confirmadaEn)}`),
       accion || h('a', { class: 'btn btn-outline btn-sm insp-tarjeta-ir', href: `#/planilla?id=${s.id}` }, icono('archivo'), 'Ver planilla')));
+}
+
+/** Código de barras Code 128 del código del ítem (lo leen los lectores USB y la cámara). */
+export function codigoBarras(codigo, etiqueta = 'Código de barras') {
+  const caja = h('span', { class: 'barras-caja', role: 'img', 'aria-label': `${etiqueta}: ${codigo}` });
+  caja.innerHTML = svgCode128(codigo, { modulo: 1.4, alto: 44 }); // svgCode128 escapa el texto
+  caja.firstElementChild?.removeAttribute('role');
+  caja.firstElementChild?.setAttribute('aria-hidden', 'true');
+  return caja;
+}
+
+/** Pegatina de un ítem: QR (SENA-INV:<código>) + código de barras + nombre. */
+export function pegatina(it) {
+  return h('figure', { class: 'etiqueta' },
+    h('div', { class: 'etiqueta-codigos' }, qr(it.qr, 96, `QR de ${it.nombre}`), codigoBarras(it.codigo, `Código de barras de ${it.nombre}`)),
+    h('figcaption', {},
+      h('strong', {}, it.nombre),
+      h('span', {}, `SENA · Ambiente ${it.ambiente} · ${it.categoria}`)));
 }

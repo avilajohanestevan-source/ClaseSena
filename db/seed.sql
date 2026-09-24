@@ -75,3 +75,9 @@ INSERT INTO inspection_items (inspection_id, inventory_item_id, tipo_dano, sever
   SELECT 2, id, 'no_funciona', 'moderada', 'La punta no calienta aunque la estación enciende. Se retira de uso.', NULL,
          TIMESTAMP(CURDATE() - INTERVAL 1 DAY, '07:02:00')
   FROM inventory_items WHERE codigo = 'AMB109-005';
+
+-- Trazabilidad inicial: registro de los ítems base y el daño histórico del 109.
+INSERT INTO item_history (inventory_item_id, user_id, accion, detalle, created_at)
+  SELECT id, 6, 'registro', 'Registrado en el inventario inicial', TIMESTAMP(CURDATE() - INTERVAL 30 DAY, '08:00:00') FROM inventory_items;
+INSERT INTO item_history (inventory_item_id, user_id, accion, detalle, inspection_id, created_at)
+  SELECT inventory_item_id, 3, 'dano', 'Daño reportado en revisión: no funciona (moderada)', 2, reportado_en FROM inspection_items WHERE inspection_id = 2;

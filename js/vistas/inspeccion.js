@@ -1,11 +1,13 @@
 // Revisión del ambiente (instructor), en una sola columna pensada para el celular.
 // El instructor la hace al entrar al salón, antes de recibirlo:
 //  1. Cabecera con el ambiente y la hora de inicio.
-//  2. Botón grande "Escanear QR de ítem" (mouse, teclado, silla, computador…)
-//     → formulario de daño con foto de evidencia, tipo, severidad y comentario.
-//  3. Checklist visible (Bien / Novedad) que se guarda solo, y observaciones.
-//  4. Inventario del ambiente con "Reportar daño" por ítem y la lista de daños reportados.
-//  5. Barra fija: "Terminar revisión". Se avisa al portero, que genera el QR
+//  2. "Todo está bien": marca el ambiente completo y termina sin revisar ítem por ítem.
+//  3. Si hay una novedad: "Escanear ítem" (QR o código de barras de mouse,
+//     teclado, silla, computador…) o "Daño del salón" (pared, techo, piso…,
+//     sin ítem) → formulario con foto de evidencia, tipo, severidad y comentario.
+//  4. Checklist (Bien / Novedad) que se guarda solo, y observaciones.
+//  5. Daños reportados e inventario del ambiente (plegable, con búsqueda).
+//  6. Barra fija: "Terminar revisión". Se avisa al portero, que genera el QR
 //     de entrega; el instructor lo escanea desde la planilla para recibir.
 // Si la revisión ya no está en curso, se muestra su planilla.
 import { h, anexar, icono, vaciar, errorCampo, vibrar } from '../ui/dom.js';
@@ -16,7 +18,7 @@ import { crearCapturaFoto } from '../ui/camara.js';
 import { chipItem, chipSeveridad, etiquetaTipoDano, fecha } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado, emitir } from '../estado.js';
-import { leerQrItem, validarReporteDano, progresoChecklist, resultadoInspeccion, TIPOS_DANO, PRIORIDADES } from '../reglas.js';
+import { leerQrItem, validarReporteDano, progresoChecklist, resultadoInspeccion, TIPOS_DANO, PRIORIDADES, UBICACIONES } from '../reglas.js';
 
 const AYUDA_SEVERIDAD = { leve: 'Se puede seguir usando.', moderada: 'Funciona con limitaciones.', grave: 'No se puede usar o es un riesgo.' };
 
@@ -43,11 +45,18 @@ export async function render(raiz, { params, alSalir }) {
         h('h2', { class: 'vista-titulo' }, d.ambiente.nombre),
         h('p', { class: 'section-sub' }, transcurrido))),
     h('p', { class: 'insp-cabecera-ayuda' }, icono('qr'),
-      h('span', {}, 'Revisa cada elemento. Si algo está dañado, escanea su etiqueta y toma una foto. Al terminar, el portero genera el QR que escaneas para recibir el salón.')));
+      h('span', {}, 'Si todo está en orden, usa "Todo está bien". Si algo está dañado, escanea su pegatina y toma una foto. Al terminar, el portero genera el QR que escaneas para recibir el salón.')));
 
   /* --- escanear ítem --- */
-  const escanearBtn = h('button', { class: 'btn btn-primary btn-block btn-lg', type: 'button', onclick: () => escanearItem() },
-    icono('escanear'), 'Escanear QR de ítem');
+  const escanearBtn = h('button', { class: 'btn btn-primary btn-lg', type: 'button', onclick: () => escanearItem() },
+    icono('escanear'), 'Escanear ítem dañado');
+  const salonBtn = h('button', { class: 'btn btn-outline btn-lg', type: 'button', onclick: () => formularioDano(null) },
+    icono('ambiente'), 'Daño del salón');
+  // Atajo: el ambiente está bien, sin revisar punto por punto ni ítem por ítem.
+  const todoBienBtn = h('button', { class: 'todo-bien', type: 'button', onclick: () => todoBien() },
+    h('span', { class: 'todo-bien-icono', 'aria-hidden': 'true' }, icono('check')),
+    h('span', {}, h('strong', {}, 'Todo está bien'), h('span', {}, 'Marca el ambiente completo y termina la revisión')),
+    icono('flecha'));
 
   /* --- checklist --- */
   const progreso = h('div', { class: 'progreso', role: 'progressbar', 'aria-valuemin': 0 },
@@ -92,8 +101,13 @@ export async function render(raiz, { params, alSalir }) {
   const listaReportes = h('div', { class: 'reportes' });
   const tituloReportes = h('h3', { class: 'bloque-titulo' });
 
+  let filtroInv = '';
+  const buscarInv = h('input', { type: 'search', placeholder: 'Buscar por nombre o código', 'aria-label': 'Buscar en el inventario',
+    oninput: () => { filtroInv = buscarInv.value.trim().toLowerCase(); pintarInventario(); } });
+
   function pintarInventario() {
-    vaciar(listaInventario, d.inventario.map((it) => h('li', { class: `inv-fila${it.reportado ? ' inv-fila--reportado' : ''}` },
+    const visibles = d.inventario.filter((it) => !filtroInv || `${it.nombre} ${it.codigo}`.toLowerCase().includes(filtroInv));
+    vaciar(listaInventario, visibles.map((it) => h('li', { class: `inv-fila${it.reportado ? ' inv-fila--reportado' : ''}` },
       h('div', { class: 'inv-fila-datos' }, h('strong', {}, it.nombre), h('span', { class: 'mono text-muted' }, it.codigo)),
       it.reportado ? h('span', { class: 'status-chip error' }, icono('alerta'), 'Reportado') : chipItem(it.estado),
       !it.reportado && h('button', { class: 'btn btn-outline btn-sm', type: 'button', 'aria-label': `Reportar daño en ${it.nombre}`, onclick: () => formularioDano(it) }, icono('herramienta'), 'Daño'))));
@@ -101,37 +115,43 @@ export async function render(raiz, { params, alSalir }) {
     vaciar(listaReportes, d.reportes.length ? d.reportes.map((r) => h('article', { class: 'reporte' },
       r.foto ? h('img', { class: 'reporte-foto', src: r.foto, alt: `Foto del daño en ${r.nombre}`, loading: 'lazy' }) : h('span', { class: 'reporte-foto reporte-foto--vacia', 'aria-hidden': 'true' }, icono('camara')),
       h('div', { class: 'reporte-datos' },
-        h('strong', {}, r.nombre), h('span', { class: 'mono text-muted' }, r.codigo),
+        h('strong', {}, r.itemId ? r.nombre : `Salón · ${r.nombre}`), h('span', { class: 'mono text-muted' }, r.codigo || `Ambiente ${d.ambiente.codigo}`),
         h('div', { class: 'reporte-chips' }, h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(r.tipoDano)), chipSeveridad(r.severidad)),
         h('p', {}, r.comentario)),
       h('button', { class: 'btn btn-outline btn-sm btn-icono', type: 'button', 'aria-label': `Quitar el reporte de ${r.nombre}`, onclick: () => quitar(r) }, icono('basura'))))
-      : h('p', { class: 'text-muted reportes-vacio' }, 'Ningún daño reportado. Si todo está bien, marca el checklist y termina la revisión.'));
+      : h('p', { class: 'text-muted reportes-vacio' }, 'Ningún daño reportado. Si todo está bien, usa "Todo está bien".'));
+    todoBienBtn.hidden = d.reportes.length > 0;
   }
 
   async function quitar(r) {
-    if (!await confirmar({ titulo: `¿Quitar el reporte de ${r.nombre}?`, mensaje: 'El ítem vuelve al estado que tenía antes del reporte.', textoAceptar: 'Quitar', peligro: true })) return;
+    if (!await confirmar({ titulo: `¿Quitar el reporte de ${r.nombre}?`, mensaje: r.itemId ? 'El ítem vuelve al estado que tenía antes del reporte.' : 'Se borra el reporte y su foto.', textoAceptar: 'Quitar', peligro: true })) return;
     try { d = await apiAmb.quitarDano(id, r.id); pintarTodo(); toast('exito', 'Reporte quitado'); } catch (e) { toast('error', 'No se quitó', e.message); }
   }
 
   function escanearItem() {
     let escaner;
     const { cerrar } = abrirModal({
-      titulo: 'Escanear QR del ítem', subtitulo: `Ambiente ${d.ambiente.codigo} · apunta a la etiqueta del equipo o mueble.`, ancho: 'angosto',
+      titulo: 'Escanear ítem dañado', subtitulo: `Ambiente ${d.ambiente.codigo} · QR o código de barras de la pegatina.`, ancho: 'angosto',
       contenido: () => {
         escaner = crearEscaner({
-          tipos: ['qr'], etiqueta: 'Abrir cámara', placeholder: 'Código de la etiqueta (AMB107-003)',
+          tipos: ['qr', 'barras'], etiqueta: 'Abrir cámara', placeholder: 'Código de la pegatina (AMB107-003)',
           alLeer: async (texto) => {
             const codigo = leerQrItem(texto);
-            if (!codigo) { toast('error', 'Ese QR no es de un ítem del inventario', texto.slice(0, 60)); return; }
+            if (!codigo) { toast('error', 'Ese código no es de una pegatina del inventario', texto.slice(0, 60)); return; }
             const it = d.inventario.find((x) => x.codigo === codigo);
             if (!it) {
-              let detalle = `${codigo} no está en el inventario.`;
-              try { const otro = await apiAmb.itemPorCodigo(codigo); detalle = `${otro.nombre} (${codigo}) es del ambiente ${otro.ambiente}, no del ${d.ambiente.codigo}.`; } catch { /* no existe */ }
-              toast('error', 'Ítem de otro ambiente', detalle);
+              let otro = null;
+              try { otro = await apiAmb.itemPorCodigo(codigo); } catch { /* no existe */ }
+              if (otro) { toast('error', 'Ítem de otro ambiente', `${otro.nombre} (${codigo}) es del ambiente ${otro.ambiente}, no del ${d.ambiente.codigo}.`); return; }
+              cerrar();
+              // Sin pegatina registrada: se puede reportar igual como daño del salón.
+              if (await confirmar({ titulo: `${codigo} no está en el inventario`, mensaje: 'Puedes reportarlo como daño del salón (con foto) y coordinación lo revisará.', textoAceptar: 'Reportar como daño del salón' })) {
+                formularioDano(null, `Elemento con código ${codigo} (sin registrar en el inventario): `);
+              }
               return;
             }
             cerrar();
-            if (it.reportado) { toast('aviso', 'Ya reportado', `${it.nombre} ya tiene un daño en esta inspección.`); return; }
+            if (it.reportado) { toast('aviso', 'Ya reportado', `${it.nombre} ya tiene un daño en esta revisión.`); return; }
             vibrar(40);
             formularioDano(it);
           },
@@ -142,8 +162,13 @@ export async function render(raiz, { params, alSalir }) {
     });
   }
 
-  function formularioDano(it) {
-    let tipoDano = '', severidad = '', foto = null, enviando = false;
+  /** Daño de un ítem (it) o, con it = null, daño del salón con su ubicación. */
+  function formularioDano(it, comentarioInicial = '') {
+    let tipoDano = '', severidad = '', foto = null, enviando = false, ubicacion = '';
+    const ubicaciones = !it && h('div', { class: 'opciones-chip', role: 'radiogroup', 'aria-labelledby': 'dano-ubic' },
+      UBICACIONES.map((u) => h('label', { class: 'opcion-chip' },
+        h('input', { type: 'radio', name: 'ubicacion', value: u.clave, onchange: () => { ubicacion = u.clave; errorCampo(ubicaciones, null); } }),
+        h('span', {}, u.etiqueta))));
     const tipos = h('div', { class: 'opciones-chip', role: 'radiogroup', 'aria-labelledby': 'dano-tipo' },
       TIPOS_DANO.map((t) => h('label', { class: 'opcion-chip' },
         h('input', { type: 'radio', name: 'tipo-dano', value: t.clave, onchange: () => { tipoDano = t.clave; errorCampo(tipos, null); } }),
@@ -152,7 +177,8 @@ export async function render(raiz, { params, alSalir }) {
       PRIORIDADES.map((p) => h('label', { class: `prioridad prioridad--${p.clave}` },
         h('input', { type: 'radio', name: 'severidad', value: p.clave, onchange: () => { severidad = p.clave; errorCampo(severidades, null); } }),
         h('strong', {}, p.etiqueta), h('span', {}, AYUDA_SEVERIDAD[p.clave]))));
-    const comentario = h('textarea', { id: 'dano-comentario', rows: 3, maxlength: 500, placeholder: '¿Qué le pasa? ¿Desde cuándo?' });
+    const comentario = h('textarea', { id: 'dano-comentario', rows: 3, maxlength: 500, placeholder: it ? '¿Qué le pasa? ¿Desde cuándo?' : 'Ej.: grieta en la pared del fondo, junto a la ventana.' });
+    comentario.value = comentarioInicial;
     const contador = h('span', { class: 'contador-caracteres' }, '0/500');
     comentario.addEventListener('input', () => { contador.textContent = `${comentario.value.length}/500`; errorCampo(comentario, null); });
     const captura = crearCapturaFoto({ alCambiar: (f) => { foto = f; if (f) errorCampo(captura.el, null); } });
@@ -160,8 +186,9 @@ export async function render(raiz, { params, alSalir }) {
     const enviar = h('button', { class: 'btn btn-peligro', type: 'button', onclick: () => guardar() }, icono('herramienta'), 'Reportar daño');
 
     const { cerrar } = abrirModal({
-      titulo: 'Reportar daño', subtitulo: `${it.nombre} · ${it.codigo}`, ancho: 'normal',
+      titulo: it ? 'Reportar daño' : 'Daño del salón', subtitulo: it ? `${it.nombre} · ${it.codigo}` : `Ambiente ${d.ambiente.codigo} · no es un ítem del inventario`, ancho: 'normal',
       contenido: h('div', { class: 'form-dano-insp' },
+        !it && h('div', { class: 'campo' }, h('label', { id: 'dano-ubic' }, '¿Dónde está el daño?'), ubicaciones),
         h('div', { class: 'campo' }, h('label', { id: 'dano-tipo' }, 'Tipo de daño'), tipos),
         h('div', { class: 'campo' }, h('label', { id: 'dano-sev' }, 'Severidad'), severidades),
         h('div', { class: 'campo' }, h('label', { for: 'dano-comentario' }, 'Comentario'), comentario, contador),
@@ -172,8 +199,10 @@ export async function render(raiz, { params, alSalir }) {
 
     async function guardar() {
       if (enviando) return;
-      const datos = { itemId: it.id, tipoDano, severidad, comentario: comentario.value.trim(), foto };
+      const datos = it ? { itemId: it.id, tipoDano, severidad, comentario: comentario.value.trim(), foto }
+        : { ubicacion, tipoDano, severidad, comentario: comentario.value.trim(), foto };
       const errores = validarReporteDano(datos);
+      if (!it) errorCampo(ubicaciones, ubicacion ? null : 'Elige dónde está el daño.');
       errorCampo(tipos, errores.tipoDano);
       errorCampo(severidades, errores.severidad);
       errorCampo(comentario, errores.comentario);
@@ -185,7 +214,7 @@ export async function render(raiz, { params, alSalir }) {
         d = await apiAmb.reportarDano(id, datos);
         cerrar();
         pintarTodo();
-        toast('exito', 'Daño reportado', `${it.nombre} quedó marcado como dañado.`);
+        toast('exito', 'Daño reportado', it ? `${it.nombre} quedó marcado como dañado en el inventario.` : 'Quedó asociado al ambiente con su foto.');
       } catch (e) {
         toast('error', 'No se reportó', e.message);
         enviando = false;
@@ -205,10 +234,11 @@ export async function render(raiz, { params, alSalir }) {
     confirmarBtn.disabled = !p.completo;
     confirmarBtn.className = `btn btn-block btn-lg ${resultado === 'ok' ? 'btn-primary' : 'btn-out'}`;
     vaciar(confirmarBtn, icono(resultado === 'ok' ? 'check' : 'alerta'),
-      resultado === 'ok' ? 'Todo en orden · terminar revisión' : 'Terminar revisión con novedades');
+      resultado === 'ok' ? 'Terminar revisión' : 'Terminar revisión con novedades');
     ayudaPie.textContent = p.completo
       ? (resultado === 'ok' ? 'Al terminar, el portero genera el QR de entrega.' : `${d.reportes.length} daño(s) y ${p.novedades} novedad(es): coordinación recibirá el aviso cuando escanees el QR.`)
-      : `Falta revisar ${p.total - p.revisados} punto(s) del checklist.`;
+      : d.reportes.length ? `Falta revisar ${p.total - p.revisados} punto(s) del checklist.`
+        : `Falta revisar ${p.total - p.revisados} punto(s) del checklist, o usa "Todo está bien".`;
   }
 
   async function confirmarInspeccion() {
@@ -242,6 +272,24 @@ export async function render(raiz, { params, alSalir }) {
     }
   }
 
+  async function todoBien() {
+    if (!await confirmar({
+      titulo: `¿Todo está bien en el ${d.ambiente.codigo}?`,
+      mensaje: `Se marca el ambiente completo en buen estado y se avisa a ${d.ambiente.portero || 'portería'} para que genere el QR de entrega.`,
+      textoAceptar: 'Sí, todo está bien',
+    })) return;
+    todoBienBtn.disabled = true;
+    try {
+      d = await apiAmb.confirmarInspeccion(id, { todoBien: true, observaciones: observaciones.value.trim() });
+      clearTimeout(temporizador); temporizador = null;
+      emitir('inspecciones');
+      location.hash = `#/planilla?id=${id}`;
+    } catch (e) {
+      toast('error', 'No se terminó la revisión', e.message);
+      todoBienBtn.disabled = false;
+    }
+  }
+
   async function cancelar() {
     if (!await confirmar({ titulo: '¿Cancelar la revisión?', mensaje: 'Se borran los daños reportados y el ambiente queda libre para otra revisión.', textoAceptar: 'Cancelar revisión', peligro: true })) return;
     try {
@@ -257,15 +305,19 @@ export async function render(raiz, { params, alSalir }) {
 
   anexar(raiz,
     cab,
-    h('div', { class: 'insp-escanear', 'data-anim': '' }, escanearBtn,
-      h('p', { class: 'text-muted' }, 'Escanea la etiqueta de un equipo o mueble para reportar su daño.')),
+    h('div', { 'data-anim': '' }, todoBienBtn),
+    h('section', { class: 'insp-escanear', 'data-anim': '', 'aria-label': 'Reportar una novedad' },
+      h('p', { class: 'insp-escanear-titulo' }, '¿Encontraste una novedad?'),
+      h('div', { class: 'insp-escanear-botones' }, escanearBtn, salonBtn),
+      h('p', { class: 'text-muted' }, 'Escanea la pegatina del elemento dañado, o reporta un daño de pared, techo, piso… Siempre con foto.')),
     h('section', { class: 'card', 'data-anim': '', 'aria-labelledby': 'insp-t-check' },
       h('div', { class: 'adm-bloque-cabecera' }, h('h3', { class: 'bloque-titulo', id: 'insp-t-check' }, 'Checklist del ambiente'), progresoTexto),
       progreso, listaChecklist,
       h('div', { class: 'campo' }, h('label', { for: 'insp-obs' }, 'Observaciones ', h('span', { class: 'opt' }, '(obligatorias si hay novedades)')), observaciones)),
     h('section', { class: 'card', 'data-anim': '' }, tituloReportes, listaReportes),
-    h('section', { class: 'card', 'data-anim': '' },
-      h('h3', { class: 'bloque-titulo' }, `Inventario del ambiente (${d.inventario.length})`),
+    h('details', { class: 'card insp-inventario', 'data-anim': '' },
+      h('summary', {}, h('span', { class: 'bloque-titulo' }, `Inventario del ambiente (${d.inventario.length})`), h('span', { class: 'text-muted' }, 'Ver y reportar sin escanear')),
+      h('div', { class: 'adm-buscar' }, icono('buscar'), buscarInv),
       listaInventario),
     h('div', { class: 'insp-pie' }, ayudaPie, confirmarBtn, cancelarBtn));
   pintarTodo();

@@ -1,0 +1,13 @@
+{
+    "name": "sena/ambientes-api",
+    "description": "API PHP de entrega y revisión de ambientes SENA. PhpSpreadsheet se usa para la carga masiva del inventario (Excel/CSV).",
+    "type": "project",
+    "require": {
+        "php": ">=8.1",
+        "phpoffice/phpspreadsheet": "^2.3"
+    },
+    "config": {
+        "vendor-dir": "api/vendor",
+        "optimize-autoloader": true
+    }
+}

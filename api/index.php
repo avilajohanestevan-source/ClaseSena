@@ -11,6 +11,7 @@ require __DIR__ . '/lib/base.php';
 require __DIR__ . '/modulos/auth.php';
 require __DIR__ . '/modulos/ambientes.php';
 require __DIR__ . '/modulos/inventario.php';
+require __DIR__ . '/modulos/carga.php';
 require __DIR__ . '/modulos/inspecciones.php';
 require __DIR__ . '/modulos/notificaciones.php';
 require __DIR__ . '/modulos/reportes.php';
@@ -34,8 +35,13 @@ $RUTAS = [
     ['DELETE', '#^/environments/(\d+)$#',                'rutaBorrarAmbiente'],
     ['GET',    '#^/environments/(\d+)/items$#',          'rutaItemsAmbiente'],
 
-    ['GET',    '#^/items/by-code/([A-Za-z0-9\-]+)$#',    'rutaItemPorCodigo'],
+    ['GET',    '#^/items/by-code/([A-Za-z0-9\-:%]+)$#',  'rutaItemPorCodigo'],
     ['POST',   '#^/items$#',                             'rutaCrearItem'],
+    ['POST',   '#^/items/scan$#',                        'rutaRegistrarPorEscaneo'],
+    ['POST',   '#^/items/import$#',                      'rutaCargaMasiva'],
+    ['GET',    '#^/items/export$#',                      'rutaExportarInventario'],
+    ['POST',   '#^/items/labels$#',                      'rutaEtiquetasImpresas'],
+    ['GET',    '#^/items/(\d+)/history$#',               'rutaHistorialItem'],
     ['PATCH',  '#^/items/(\d+)$#',                       'rutaEditarItem'],
     ['DELETE', '#^/items/(\d+)$#',                       'rutaBorrarItem'],
 

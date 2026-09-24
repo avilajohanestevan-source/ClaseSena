@@ -14,14 +14,25 @@ de formación, más el módulo de **asistencia a clases** que ya existía.
 ## Instalar y abrir
 
 1. En el panel de XAMPP enciende **Apache** y **MySQL**.
-2. Crea la base de prueba (borra y recrea `sena_ambientes`):
+2. Instala PhpSpreadsheet (carga masiva del inventario desde Excel) con
+   [Composer](https://getcomposer.org). Queda en `api/vendor/`, que no va en git:
+
+   ```
+   composer install
+   ```
+
+3. Crea la base de prueba (borra y recrea `sena_ambientes`). Además de los
+   datos de `seed.sql`, carga `db/inventario-prueba.xlsx` con la misma carga
+   masiva de la app: 174 elementos con su código (computadores, monitores,
+   teclados, mouse, sillas, mesas…).
 
    ```
    C:\xampp\php\php.exe db\instalar.php
    ```
 
-   Sin consola: en phpMyAdmin importa `db/schema.sql` y luego `db/seed.sql`.
-3. Abre `http://localhost/sena-ambientes/index.html`.
+   Sin consola: en phpMyAdmin importa `db/schema.sql` y luego `db/seed.sql`, y
+   sube `db/inventario-prueba.xlsx` en *Inventario → Carga masiva*.
+4. Abre `http://localhost/sena-ambientes/index.html`.
 
 Si después de actualizar aparece un error como *"does not provide an export named…"*,
 el navegador guardó una versión vieja de algún archivo: recarga con
@@ -57,15 +68,17 @@ anteriores para que los reportes tengan datos.
 ## Flujo de la demostración
 
 1. **Instructor** (1010101010) → *Inspecciones* → elige el ambiente 107 →
-   **Iniciar revisión** (se registra la hora). Al entrar al salón revisa
-   cada elemento:
-   - marca el checklist (Bien / Novedad);
+   **Iniciar revisión** (se registra la hora). Al entrar al salón:
+   - si todo está en orden, **Todo está bien** marca el ambiente completo y
+     termina, sin revisar ítem por ítem;
    - si algo está dañado (mouse, teclado, silla, mesa, computador…),
-     **Escanear QR de ítem** (etiquetas en *Inventario → Etiquetas QR*, o
-     escribe el código, p. ej. `AMB107-005`), toma la **foto de evidencia**
+     **Escanear ítem dañado** (QR o código de barras de la pegatina, o
+     escribe el código, p. ej. `SILLA-107-04`), toma la **foto de evidencia**
      y llena tipo, severidad y comentario. El ítem queda *Dañado* en el
-     inventario.
-2. **Terminar revisión**: se avisa al portero del ambiente.
+     inventario y en su trazabilidad;
+   - si el daño no es de un ítem (pared, techo, piso, puerta…), **Daño del
+     salón**: se elige dónde está, con foto, y queda asociado al ambiente.
+2. **Terminar revisión** (con el checklist completo): se avisa al portero.
 3. **Portero** (4040404040) → *Inspecciones → Por entregar* → **Generar QR
    de entrega**. Aparece un QR grande con "Esperando que el instructor lo
    escanee…".
@@ -75,12 +88,41 @@ anteriores para que los reportes tengan datos.
    quién entregó (`portero_id`), las horas de cada paso, el checklist y los
    daños con foto. La pantalla del portero cambia sola a **"Ambiente
    entregado"**.
-6. Si había daños o novedades, **coordinación** (administrativo 2020202020)
-   recibe la notificación; el inventario ya muestra los ítems dañados.
+6. Si había daños o novedades, **coordinación e inventario** (administrativo
+   2020202020) reciben la notificación con los códigos que pasaron a
+   *Dañado* y los daños del salón; el inventario ya muestra los ítems dañados.
 7. El administrativo consulta el historial en *Inspecciones* y genera
    **Reportes** (CSV o impresión).
 
 Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
+
+## Inventario, pegatinas y carga masiva
+
+Cada elemento del aula tiene una **pegatina** con su código en QR
+(`SENA-INV:<código>`) y en código de barras Code 128 (el código solo). Sirve
+con la cámara del celular y con lectores USB (escriben el código y pulsan
+Enter). El código puede ser el consecutivo (`AMB107-012`), uno propio
+(`SILLA-107-04`) o el código de barras del fabricante (`7701234500017`).
+
+- **Carga masiva** (*Inventario → Carga masiva*, administrativo): Excel
+  (.xlsx, .xls, .ods) o CSV leídos con PhpSpreadsheet. Columnas `ambiente,
+  codigo, nombre, categoria, serial, estado`. Muestra una vista previa
+  (nuevos, actualizados, sin cambios y filas con error) antes de guardar.
+  Si el código ya existe se actualiza; sin código se reconoce el ítem por
+  serial o ambiente + nombre, así que subir el mismo archivo dos veces no
+  duplica nada. *Exportar Excel* descarga el inventario con el mismo formato
+  (sirve de plantilla).
+- **Registrar con escáner** (administrativo): se eligen ambiente, nombre base
+  y categoría; cada pegatina leída se registra al instante (*Silla #31,
+  #32…*). Si ya existía, lo avisa.
+- **Escanear** (todo el personal): abre el ítem con su pegatina, estado y
+  **trazabilidad** (registro, carga, ediciones, pegatinas impresas, daños con
+  enlace a la planilla).
+- **Reimprimir pegatina** desde el detalle del ítem, o la hoja completa del
+  ambiente (*Pegatinas*, con filtro por categoría). Cada impresión queda en
+  la trazabilidad.
+- `db/inventario-prueba.xlsx` se genera con
+  `php scripts/generar-inventario-prueba.php`.
 
 ## Menú lateral
 
@@ -113,8 +155,11 @@ Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
 ```
 index.html              Página única (enrutador por hash)
 API.md                  Contratos: asistencia (simulada) y entrega de ambientes (real)
-api/                    Backend PHP: index.php (rutas), config.php, lib/, modulos/
-db/                     schema.sql, seed.sql e instalar.php (datos de prueba)
+api/                    Backend PHP: index.php (rutas), config.php, lib/, modulos/ (carga.php: PhpSpreadsheet)
+api/vendor/             PhpSpreadsheet (composer install; no va en git)
+composer.json           Dependencias PHP
+db/                     schema.sql, seed.sql, inventario-prueba.xlsx e instalar.php (datos de prueba)
+scripts/                vendor.mjs (librerías JS) y generar-inventario-prueba.php
 uploads/danos/          Fotos de daños subidas (no va en git)
 css/tokens.css          Tokens de diseño (copia de diseno/tokens.css)
 css/sena-base.css       Identidad visual SENA (copia del estilo de sena-php)
@@ -139,7 +184,7 @@ tests/                  Pruebas (npm test y npm run test:api)
 
 ```
 npm test           # reglas, servidor simulado y códigos de barras
-npm run test:api   # flujo completo contra la API real (Apache y MySQL encendidos)
+npm run test:api   # flujo de entrega, carga masiva, escáner, pegatinas y daños del salón contra la API real
 ```
 
 `test:api` deja datos nuevos en la base; vuelve a correr `db\instalar.php`

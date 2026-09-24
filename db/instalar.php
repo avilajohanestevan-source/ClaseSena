@@ -6,7 +6,9 @@
  *
  * Borra y vuelve a crear las tablas de `sena_ambientes`, así que solo se
  * permite desde la línea de comandos (no desde el navegador). Alternativa
- * sin consola: importar schema.sql y luego seed.sql en phpMyAdmin.
+ * sin consola: importar schema.sql y luego seed.sql en phpMyAdmin (sin el
+ * inventario completo de inventario-prueba.xlsx, que se sube después desde
+ * Inventario → Carga masiva).
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -30,6 +32,24 @@ try {
             if ($r = $conn->store_result()) $r->free();
         } while ($conn->more_results() && $conn->next_result());
         echo "✓ $archivo\n";
+    }
+
+    // Carga masiva del inventario de prueba (Excel) con PhpSpreadsheet, como la haría un administrativo.
+    $excel = __DIR__ . '/inventario-prueba.xlsx';
+    if (is_file(__DIR__ . '/../api/vendor/autoload.php')) {
+        require __DIR__ . '/../api/lib/base.php';
+        require __DIR__ . '/../api/modulos/ambientes.php';
+        require __DIR__ . '/../api/modulos/inventario.php';
+        require __DIR__ . '/../api/modulos/carga.php';
+        $r = importarInventario(leerHojaInventario($excel, basename($excel)), null, false, basename($excel));
+        printf("✓ inventario-prueba.xlsx: %d nuevos, %d actualizados, %d sin cambios, %d con error
+",
+            $r['nuevos'], $r['actualizados'], $r['sinCambios'], count($r['errores']));
+        foreach ($r['errores'] as $e) echo "  fila {$e['fila']}: {$e['mensaje']}
+";
+    } else {
+        echo "· Sin PhpSpreadsheet (composer install): se omite inventario-prueba.xlsx; quedan los ítems base de seed.sql.
+";
     }
 
     $carpeta = __DIR__ . '/../' . CARPETA_FOTOS;

@@ -155,9 +155,10 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 | `users` | documento, tipo, nombre, contacto, `rol` (instructor, administrativo, portero, aprendiz), ficha, `password_hash` |
 | `api_tokens` | sesiones |
 | `environments` | `codigo` (107…), nombre, bloque, capacidad, `portero_id` asignado, activo |
-| `inventory_items` | ítems por ambiente; `codigo` (AMB107-003) es lo que lleva el QR `SENA-INV:<codigo>`; estado |
+| `inventory_items` | ítems por ambiente; `codigo` único (AMB107-003, SILLA-107-04, un EAN…) va en el QR `SENA-INV:<codigo>` y en el código de barras; estado |
+| `item_history` | trazabilidad de cada ítem: `registro`, `carga_masiva`, `escaneo`, `edicion`, `etiqueta`, `dano`, `dano_retirado`, con usuario, detalle y revisión |
 | `inspections` | `environment_id`, `instructor_id` (revisa y recibe), `portero_id` (entrega), estado, resultado, `qr_token`, checklist (JSON), observaciones, `iniciada_en`, `confirmada_en`, `qr_generado_en`, `recibida_en`, nombres de quien entregó y recibió |
-| `inspection_items` | daño reportado: `inspection_id` → `inventory_item_id`, tipo, severidad, comentario, foto |
+| `inspection_items` | daño reportado: `inspection_id` → `inventory_item_id` o, si es del salón, `ubicacion` (pared, techo…) sin ítem; tipo, severidad, comentario, foto |
 | `notifications` | `revision_lista` (al portero: genera el QR), `entrega_recibida` (al portero), `dano_reportado` / `dano_grave` (a coordinación cuando se recibe un ambiente con daños) |
 
 ## Sesión y perfil
@@ -179,9 +180,14 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 | GET/PATCH/DELETE | `/environments/{id}` | GET todos; resto administrativo | DELETE → `409 EN_USO` si tiene inventario o inspecciones |
 | POST | `/environments` | administrativo | `{codigo, nombre, bloque?, capacidad?, porteroId?, activo?}` |
 | GET | `/environments/{id}/items` | personal | Ítems del ambiente |
-| GET | `/items/by-code/{codigo}` | personal | Para el escáner |
-| POST | `/items` | administrativo | `{ambienteId, nombre, categoria, serial?, estado?}`; el código se genera |
-| PATCH/DELETE | `/items/{id}` | administrativo | DELETE → `409 EN_USO` si tiene daños reportados |
+| GET | `/items/by-code/{codigo}` | personal | Para el escáner; acepta el código solo o `SENA-INV:<codigo>` |
+| POST | `/items` | administrativo | `{ambienteId, codigo?, nombre, categoria, serial?, estado?}`; sin código se genera el consecutivo |
+| POST | `/items/scan` | administrativo | Registro con lector: `{codigo, ambienteId, nombre, categoria}` → `{item, creado, otroAmbiente}`. Si el código existe no lo duplica |
+| POST | `/items/import` | administrativo | Carga masiva: `{nombre: "x.xlsx", archivo: data URL, simular}` → `{total, nuevos, actualizados, sinCambios, errores:[{fila, mensaje}], filas}`. Excel/ODS/CSV con PhpSpreadsheet (sin él, solo CSV). Con `simular` no guarda |
+| GET | `/items/export?ambienteId` | administrativo | Inventario en .xlsx con las columnas de la carga |
+| POST | `/items/labels` | personal | `{ids, motivo?}` registra la impresión o reimpresión de pegatinas en la trazabilidad |
+| GET | `/items/{id}/history` | personal | Trazabilidad del ítem |
+| PATCH/DELETE | `/items/{id}` | administrativo | PATCH deja la edición en la trazabilidad. DELETE → `409 EN_USO` si tiene daños reportados |
 
 ## Inspecciones (entrega del ambiente)
 
@@ -207,9 +213,9 @@ tiene que escanearlo en el celular del portero.
 | GET | `/inspections/{id}` | personal | Detalle: checklist, inventario (con `reportado`), `reportes`, `entrega` y `recibe` (`{nombre, fecha}`) |
 | GET | `/inspections/by-qr/{token}` | portero, administrativo | Consulta por el QR `SENA-INSP:<token>` |
 | PATCH | `/inspections/{id}/checklist` | instructor dueño | `{checklist:[{clave, ok}], observaciones}` (guardado automático) |
-| POST | `/inspections/{id}/items` | instructor dueño | `{itemId \| codigo, tipoDano, severidad, comentario, foto}` crea `inspection_items` y deja el ítem `danado` en el inventario. La foto (data URL JPG/PNG/WebP, ≤ 3 MB) es la evidencia y siempre es obligatoria |
+| POST | `/inspections/{id}/items` | instructor dueño | `{itemId \| codigo, tipoDano, severidad, comentario, foto}` crea `inspection_items` y deja el ítem `danado` en el inventario (y en su trazabilidad). Daño del salón: `{ubicacion: pared\|techo\|piso\|puerta\|ventana\|electrica\|estructura\|otro, …}` sin ítem. La foto (data URL JPG/PNG/WebP, ≤ 3 MB) es la evidencia y siempre es obligatoria |
 | DELETE | `/inspections/{id}/items/{reporteId}` | instructor dueño | Quita el reporte y restaura el estado del ítem |
-| POST | `/inspections/{id}/confirm` | instructor dueño | `{checklist, observaciones?}` termina la revisión. Checklist completo; observaciones obligatorias si hay novedad. Notifica al portero del ambiente (o a todos si no tiene) |
+| POST | `/inspections/{id}/confirm` | instructor dueño | `{checklist, observaciones?}` termina la revisión; `{todoBien: true}` marca todo el ambiente bien sin checklist (solo si no hay daños). Checklist completo; observaciones obligatorias si hay novedad. Notifica al portero del ambiente (o a todos si no tiene) |
 | POST | `/inspections/{id}/qr` | portero | Genera (o renueva) el QR de entrega; guarda `portero_id`. Antes de que el instructor termine → `409` |
 | POST | `/inspections/by-qr/{token}/receive` | instructor | Sin cuerpo. → `recibida` con la hora; notifica al portero y, si hay daños o novedades, a los administrativos (coordinación). QR de otro instructor → `403`; QR viejo o inexistente → `404` |
 | POST | `/inspections/{id}/cancel` | instructor dueño | Mientras no haya recibido el ambiente. Deshace los reportes |

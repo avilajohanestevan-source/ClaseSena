@@ -1,0 +1,8 @@
+# Solo index.php es público: config.php, lib/, modulos/ y vendor/ (PhpSpreadsheet)
+# no se sirven desde el navegador.
+<FilesMatch ".*">
+  Require all denied
+</FilesMatch>
+<Files "index.php">
+  Require all granted
+</Files>

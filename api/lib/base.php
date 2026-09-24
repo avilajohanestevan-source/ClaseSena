@@ -203,6 +203,6 @@ function notificar(int $userId, string $tipo, string $titulo, string $detalle, ?
 {
     insertar(
         'INSERT INTO notifications (user_id, tipo, titulo, detalle, inspection_id, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-        [$userId, $tipo, $titulo, $detalle, $inspeccionId]
+        [$userId, $tipo, mb_substr($titulo, 0, 160), mb_substr($detalle, 0, 300), $inspeccionId]
     );
 }

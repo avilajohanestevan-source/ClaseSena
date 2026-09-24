@@ -27,6 +27,11 @@ const CHECKLIST = [
 ];
 const TIPOS_DANO = ['rotura', 'no_funciona', 'faltante', 'suciedad', 'otro'];
 const SEVERIDADES = ['leve', 'moderada', 'grave'];
+/** Daños del salón que no son ítems del inventario. */
+const UBICACIONES = [
+    'pared' => 'Pared', 'techo' => 'Techo', 'piso' => 'Piso', 'puerta' => 'Puerta', 'ventana' => 'Ventana',
+    'electrica' => 'Instalación eléctrica', 'estructura' => 'Estructura', 'otro' => 'Otro (salón)',
+];
 
 const SQL_INSPECCIONES = "
     SELECT s.*, e.codigo AS amb_codigo, e.nombre AS amb_nombre, e.bloque AS amb_bloque, e.portero_id AS amb_portero_id,
@@ -98,7 +103,7 @@ function detalleInspeccion(array $s): array
     $id = (int) $s['id'];
     $danos = filas(
         'SELECT d.*, it.codigo, it.nombre, it.categoria FROM inspection_items d
-         JOIN inventory_items it ON it.id = d.inventory_item_id WHERE d.inspection_id = ? ORDER BY d.reportado_en',
+         LEFT JOIN inventory_items it ON it.id = d.inventory_item_id WHERE d.inspection_id = ? ORDER BY d.reportado_en',
         [$id]
     );
     $reportados = array_column($danos, 'inventory_item_id');
@@ -111,10 +116,12 @@ function detalleInspeccion(array $s): array
         'recibe' => $s['recibida_en'] ? ['nombre' => $s['firma_instructor_nombre'], 'fecha' => iso($s['recibida_en'])] : null,
         'reportes' => array_map(fn($d) => [
             'id' => (int) $d['id'],
-            'itemId' => (int) $d['inventory_item_id'],
+            'itemId' => $d['inventory_item_id'] !== null ? (int) $d['inventory_item_id'] : null,
+            'ubicacion' => $d['ubicacion'],
             'codigo' => $d['codigo'],
-            'nombre' => $d['nombre'],
-            'categoria' => $d['categoria'],
+            // Sin ítem: el nombre es la ubicación en el salón.
+            'nombre' => $d['nombre'] ?? UBICACIONES[$d['ubicacion']] ?? 'Salón',
+            'categoria' => $d['categoria'] ?? 'Salón',
             'tipoDano' => $d['tipo_dano'],
             'severidad' => $d['severidad'],
             'comentario' => $d['comentario'],
@@ -229,16 +236,26 @@ function rutaGuardarChecklist(int $id): never
 function rutaReportarDano(int $id): never
 {
     $s = inspeccionEditable($id);
+    $u = usuario();
     $d = cuerpo();
     $item = null;
+    $ubicacion = null;
     if (!empty($d['itemId'])) $item = fila(SQL_ITEMS . ' WHERE i.id = ?', [(int) $d['itemId']]);
-    elseif (!empty($d['codigo'])) $item = fila(SQL_ITEMS . ' WHERE i.codigo = ?', [strtoupper(preg_replace('/^SENA-INV:/i', '', (string) $d['codigo']))]);
-    if (!$item) fallar(404, 'El ítem no existe en el inventario.', 'NO_ENCONTRADO');
-    if ((int) $item['environment_id'] !== (int) $s['environment_id']) {
-        fallar(422, "El ítem {$item['codigo']} pertenece al ambiente {$item['ambiente_codigo']}, no al {$s['amb_codigo']}.", 'OTRO_AMBIENTE');
+    elseif (!empty($d['codigo'])) {
+        $codigo = normalizarCodigo((string) $d['codigo']);
+        $item = $codigo ? fila(SQL_ITEMS . ' WHERE i.codigo = ?', [$codigo]) : null;
+    } else {
+        // Daño del salón que no es un ítem del inventario (pared, techo, piso…): va asociado al ambiente.
+        $ubicacion = opcion($d, 'ubicacion', array_keys(UBICACIONES), true, 'dónde está el daño');
     }
-    if (fila('SELECT id FROM inspection_items WHERE inspection_id = ? AND inventory_item_id = ?', [$id, (int) $item['id']])) {
-        fallar(409, "Ya reportaste un daño para {$item['codigo']} en esta inspección.", 'DUPLICADO');
+    if (!$ubicacion) {
+        if (!$item) fallar(404, 'El ítem no existe en el inventario.', 'NO_ENCONTRADO');
+        if ((int) $item['environment_id'] !== (int) $s['environment_id']) {
+            fallar(422, "El ítem {$item['codigo']} pertenece al ambiente {$item['ambiente_codigo']}, no al {$s['amb_codigo']}.", 'OTRO_AMBIENTE');
+        }
+        if (fila('SELECT id FROM inspection_items WHERE inspection_id = ? AND inventory_item_id = ?', [$id, (int) $item['id']])) {
+            fallar(409, "Ya reportaste un daño para {$item['codigo']} en esta revisión.", 'DUPLICADO');
+        }
     }
     $tipo = opcion($d, 'tipoDano', TIPOS_DANO, true, 'el tipo de daño');
     $severidad = opcion($d, 'severidad', SEVERIDADES, true, 'la severidad');
@@ -250,18 +267,24 @@ function rutaReportarDano(int $id): never
 
     db()->begin_transaction();
     insertar(
-        'INSERT INTO inspection_items (inspection_id, inventory_item_id, tipo_dano, severidad, comentario, foto, estado_item_anterior, reportado_en)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())',
-        [$id, (int) $item['id'], $tipo, $severidad, $comentario, $foto, $item['estado']]
+        'INSERT INTO inspection_items (inspection_id, inventory_item_id, ubicacion, tipo_dano, severidad, comentario, foto, estado_item_anterior, reportado_en)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+        [$id, $item ? (int) $item['id'] : null, $ubicacion, $tipo, $severidad, $comentario, $foto, $item['estado'] ?? 'operativo']
     );
-    consulta("UPDATE inventory_items SET estado = 'danado' WHERE id = ? AND estado <> 'baja'", [(int) $item['id']]);
+    if ($item) {
+        consulta("UPDATE inventory_items SET estado = 'danado' WHERE id = ? AND estado <> 'baja'", [(int) $item['id']]);
+        historial((int) $item['id'], 'dano', "Daño reportado en la revisión del ambiente {$s['amb_codigo']}: " . str_replace('_', ' ', $tipo) . " ($severidad). Pasa a Dañado.", (int) $u['id'], $id);
+    }
     db()->commit();
     responder(detalleInspeccion(buscarInspeccion($id)), 201);
 }
 
-function deshacerReporte(array $r): void
+function deshacerReporte(array $r, ?int $usuarioId): void
 {
-    consulta('UPDATE inventory_items SET estado = ? WHERE id = ?', [$r['estado_item_anterior'], (int) $r['inventory_item_id']]);
+    if ($r['inventory_item_id']) {
+        consulta('UPDATE inventory_items SET estado = ? WHERE id = ?', [$r['estado_item_anterior'], (int) $r['inventory_item_id']]);
+        historial((int) $r['inventory_item_id'], 'dano_retirado', 'Se retiró el reporte de daño; vuelve a ' . ETIQUETA_ESTADO[$r['estado_item_anterior']], $usuarioId, (int) $r['inspection_id']);
+    }
     if ($r['foto'] && is_file(__DIR__ . '/../../' . $r['foto'])) @unlink(__DIR__ . '/../../' . $r['foto']);
     consulta('DELETE FROM inspection_items WHERE id = ?', [(int) $r['id']]);
 }
@@ -272,21 +295,26 @@ function rutaQuitarDano(int $id, int $reporteId): never
     $r = fila('SELECT * FROM inspection_items WHERE id = ? AND inspection_id = ?', [$reporteId, $id]);
     if (!$r) fallar(404, 'El reporte no existe.', 'NO_ENCONTRADO');
     db()->begin_transaction();
-    deshacerReporte($r);
+    deshacerReporte($r, (int) usuario()['id']);
     db()->commit();
     responder(detalleInspeccion(buscarInspeccion($id)));
 }
 
 
 /**
- * POST /inspections/{id}/confirm {checklist, observaciones}
+ * POST /inspections/{id}/confirm {checklist, observaciones} | {todoBien: true}
  * El instructor termina la revisión: queda esperando el QR del portero, a
  * quien se avisa (el asignado al ambiente o, si no hay, todos los porteros).
+ * "Todo está bien" marca el ambiente completo sin revisar punto por punto.
  */
 function rutaConfirmarInspeccion(int $id): never
 {
     $s = inspeccionEditable($id);
     $d = cuerpo();
+    if (!empty($d['todoBien'])) {
+        if ((int) $s['danos']) fallar(422, 'Reportaste daños en esta revisión: no se puede marcar "todo está bien".', 'VALIDACION');
+        $d['checklist'] = array_map(fn($c) => ['clave' => $c[0], 'ok' => true], CHECKLIST);
+    }
     $checklist = checklistRecibido($d['checklist'] ?? null, true);
     $observaciones = texto($d, 'observaciones', 500, false, 'las observaciones');
     $conNovedad = in_array(false, array_column($checklist, 'ok'), true);
@@ -352,9 +380,17 @@ function rutaRecibirPorQr(string $token): never
     notificar((int) $s['portero_id'], 'entrega_recibida', "{$u['nombre']} recibió el ambiente {$s['amb_codigo']}",
         'Escaneó el QR de entrega' . ((int) $s['danos'] ? " · {$s['danos']} daño(s) registrado(s)" : ' · sin novedades'), $id);
     if ($s['resultado'] === 'con_danos') {
-        $detalle = "Revisó y recibió {$u['nombre']} · entregó {$s['portero_nombre']} · "
-            . ((int) $s['danos'] ? "{$s['danos']} ítem(s) marcados como dañados en el inventario" : 'novedades en el checklist')
-            . ((int) $s['danos_graves'] ? " ({$s['danos_graves']} grave)" : '');
+        // Para coordinación e inventario: qué ítems pasaron a "Dañado" y qué daños son del salón.
+        $reportes = filas('SELECT d.ubicacion, it.codigo FROM inspection_items d LEFT JOIN inventory_items it ON it.id = d.inventory_item_id WHERE d.inspection_id = ?', [$id]);
+        $codigos = array_filter(array_column($reportes, 'codigo'));
+        $salon = array_map(fn($r) => mb_strtolower(UBICACIONES[$r['ubicacion']]), array_filter($reportes, fn($r) => !$r['codigo']));
+        $partes = array_filter([
+            $codigos ? 'Inventario: ' . implode(', ', $codigos) . (count($codigos) === 1 ? ' pasa' : ' pasan') . ' a Dañado' : null,
+            $salon ? count($salon) . ' daño(s) del salón (' . implode(', ', array_unique($salon)) . ')' : null,
+            !$reportes ? 'Novedades en el checklist' : null,
+            (int) $s['danos_graves'] ? "{$s['danos_graves']} grave(s)" : null,
+        ]);
+        $detalle = "Recibió {$u['nombre']} · entregó {$s['portero_nombre']} · " . implode(' · ', $partes);
         foreach (filas("SELECT id FROM users WHERE rol = 'administrativo' AND activo = 1") as $a) {
             notificar((int) $a['id'], (int) $s['danos_graves'] ? 'dano_grave' : 'dano_reportado',
                 "Novedades en el ambiente {$s['amb_codigo']}", $detalle, $id);
@@ -372,7 +408,7 @@ function rutaCancelarInspeccion(int $id): never
     if ((int) $s['instructor_id'] !== (int) $u['id']) fallar(403, 'Solo el instructor que inició la revisión puede cancelarla.', 'PERMISO');
     if (!in_array($s['estado'], ['en_curso', 'pendiente_recepcion'], true)) fallar(409, 'El ambiente ya fue recibido; no se puede cancelar.', 'ESTADO');
     db()->begin_transaction();
-    foreach (filas('SELECT * FROM inspection_items WHERE inspection_id = ?', [$id]) as $r) deshacerReporte($r);
+    foreach (filas('SELECT * FROM inspection_items WHERE inspection_id = ?', [$id]) as $r) deshacerReporte($r, (int) $u['id']);
     consulta("UPDATE inspections SET estado = 'cancelada' WHERE id = ?", [$id]);
     db()->commit();
     responder(null, 204);
