@@ -4,6 +4,7 @@ import { CONFIG, UMBRALES_SEMAFORO } from './config.js';
 
 export const ROLES = [
   { clave: 'instructor', etiqueta: 'Instructor' },
+  { clave: 'portero', etiqueta: 'Portero' },
   { clave: 'administrativo', etiqueta: 'Administrativo' },
   { clave: 'aprendiz', etiqueta: 'Aprendiz' },
 ];
@@ -189,17 +190,6 @@ export const PRIORIDADES = [
   { clave: 'grave', etiqueta: 'Grave' },
 ];
 
-export function validarDano({ activoId, prioridad, descripcion, foto }) {
-  const errores = {};
-  if (!activoId) errores.activoId = 'Escanea o selecciona el activo dañado.';
-  if (!PRIORIDADES.some((p) => p.clave === prioridad)) errores.prioridad = 'Elige la prioridad del daño.';
-  const texto = String(descripcion ?? '').trim();
-  if (texto.length < 10) errores.descripcion = 'Describe el daño con al menos 10 caracteres.';
-  else if (texto.length > 500) errores.descripcion = 'La descripción admite máximo 500 caracteres.';
-  if (prioridad === 'grave' && !foto) errores.foto = 'La foto es obligatoria cuando la prioridad es grave.';
-  return errores;
-}
-
 /* ---------------- utilidades de fechas ---------------- */
 
 export function mismoDia(a, b) {
@@ -217,3 +207,72 @@ export function enRango(fecha, desde, hasta) {
   const dia = fechaIso(fecha);
   return (!desde || dia >= desde) && (!hasta || dia <= hasta);
 }
+
+/* ---------------- inspección de ambientes ---------------- */
+
+export const TIPOS_DANO = [
+  { clave: 'rotura', etiqueta: 'Rotura o golpe' },
+  { clave: 'no_funciona', etiqueta: 'No funciona' },
+  { clave: 'faltante', etiqueta: 'Faltante' },
+  { clave: 'suciedad', etiqueta: 'Suciedad o desgaste' },
+  { clave: 'otro', etiqueta: 'Otro' },
+];
+
+/** [etiqueta, clase de .status-chip] por estado de la inspección. */
+export const ESTADOS_INSPECCION = {
+  en_curso: ['En curso', 'azul'],
+  pendiente_recepcion: ['Pendiente de recepción', 'out'],
+  recibida: ['Recibida', 'in'],
+  cancelada: ['Cancelada', 'neutro'],
+};
+
+export const ESTADOS_ITEM = {
+  operativo: ['Operativo', 'in'],
+  danado: ['Dañado', 'error'],
+  en_reparacion: ['En reparación', 'out'],
+  baja: ['De baja', 'neutro'],
+};
+
+export const PREFIJO_QR_ITEM = 'SENA-INV:';
+export const PREFIJO_QR_INSPECCION = 'SENA-INSP:';
+
+/** Código de ítem a partir del QR de la etiqueta ("SENA-INV:AMB107-003") o del código escrito. */
+export function leerQrItem(texto) {
+  const t = String(texto ?? '').trim().toUpperCase();
+  const m = t.match(/^SENA-INV:([A-Z0-9-]{3,30})$/) || t.match(/^(AMB[A-Z0-9]+-\d{3,})$/);
+  return m ? m[1] : null;
+}
+
+/** Token de la inspección a partir de su QR ("SENA-INSP:<16 caracteres>"). */
+export function leerQrInspeccion(texto) {
+  const m = String(texto ?? '').trim().toUpperCase().match(/^SENA-INSP:([A-Z0-9]{16})$/);
+  return m ? m[1] : null;
+}
+
+/** Mismas reglas que el backend (api/modulos/inspecciones.php → rutaReportarDano). */
+export function validarReporteDano({ itemId, tipoDano, severidad, comentario, foto }) {
+  const errores = {};
+  if (!itemId) errores.itemId = 'Escanea o elige el ítem dañado.';
+  if (!TIPOS_DANO.some((t) => t.clave === tipoDano)) errores.tipoDano = 'Elige el tipo de daño.';
+  if (!PRIORIDADES.some((p) => p.clave === severidad)) errores.severidad = 'Elige la severidad.';
+  const texto = String(comentario ?? '').trim();
+  if (texto.length < 10) errores.comentario = 'Describe el daño con al menos 10 caracteres.';
+  else if (texto.length > 500) errores.comentario = 'El comentario admite máximo 500 caracteres.';
+  if (severidad === 'grave' && !foto) errores.foto = 'La foto es obligatoria cuando el daño es grave.';
+  return errores;
+}
+
+/** Avance del checklist: cuántos puntos se revisaron y cuántos tienen novedad. */
+export function progresoChecklist(checklist = []) {
+  const revisados = checklist.filter((c) => c.ok !== null && c.ok !== undefined).length;
+  const novedades = checklist.filter((c) => c.ok === false).length;
+  return { revisados, total: checklist.length, completo: checklist.length > 0 && revisados === checklist.length, novedades };
+}
+
+/** 'ok' solo si el checklist está todo bien y no hay daños reportados. */
+export function resultadoInspeccion({ checklist = [], reportes = [] }) {
+  return reportes.length || progresoChecklist(checklist).novedades ? 'con_danos' : 'ok';
+}
+
+/** { instructor: 'Instructor', portero: 'Portero', … } */
+export const ETIQUETA_ROL = Object.fromEntries(ROLES.map((r) => [r.clave, r.etiqueta]));

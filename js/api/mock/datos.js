@@ -54,14 +54,6 @@ function aleatorio(semilla) {
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
 }
 
-function placeholderFoto(texto, color) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320">
-<rect width="480" height="320" fill="${color}"/><rect x="24" y="24" width="432" height="272" rx="16" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="3" stroke-dasharray="10 8"/>
-<circle cx="240" cy="140" r="38" fill="none" stroke="#fff" stroke-width="5"/><rect x="186" y="104" width="108" height="76" rx="12" fill="none" stroke="#fff" stroke-width="5"/>
-<text x="240" y="238" font-family="Work Sans, Arial" font-size="22" font-weight="600" fill="#fff" text-anchor="middle">${texto}</text></svg>`;
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-}
-
 function horaDelDia(base, dias, horas, minutos) {
   const d = new Date(base);
   d.setDate(d.getDate() + dias);
@@ -165,39 +157,6 @@ export function crearBaseDatos(ahora = Date.now()) {
     });
   });
 
-  // Inventario por ambiente.
-  const colores = ['#00304D', '#007832', '#71277A', '#4D4D4D'];
-  const catalogo = {
-    'AMB-201': [['Computador de escritorio', 'Cómputo', 6], ['Video beam Epson', 'Audiovisual', 1], ['Switch 24 puertos', 'Redes', 1], ['Aire acondicionado', 'Infraestructura', 1], ['Silla ergonómica', 'Mobiliario', 2]],
-    'AMB-105': [['Osciloscopio digital', 'Medición', 2], ['Fuente de poder DC', 'Medición', 2], ['Multímetro Fluke', 'Medición', 3], ['Estación de soldadura', 'Herramienta', 2]],
-    'AMB-T3': [['Torno paralelo', 'Maquinaria', 1], ['Taladro de banco', 'Maquinaria', 2], ['Compresor de aire', 'Maquinaria', 1]],
-  };
-  const activos = [];
-  Object.entries(catalogo).forEach(([ambId, items]) => {
-    let n = 0;
-    items.forEach(([nombre, tipo, cant]) => {
-      for (let i = 0; i < cant; i++) {
-        n++;
-        const codigo = `SENA-${ambId.replace('AMB-', '')}-${String(n).padStart(4, '0')}`;
-        const r = rnd();
-        const estado = r < 0.12 ? 'danado' : r < 0.2 ? 'en-reparacion' : 'operativo';
-        const alta = horaDelDia(ahora, -300 - Math.floor(rnd() * 200), 9, 0).toISOString();
-        const historial = [{ fecha: alta, evento: 'Alta en inventario', usuario: 'Almacén' }];
-        const fotos = [];
-        if (estado !== 'operativo') {
-          const fecha = horaDelDia(ahora, -2 - Math.floor(rnd() * 20), 10, 30).toISOString();
-          historial.push({ fecha, evento: 'Reporte de daño (moderada)', usuario: 'Laura Gómez Patiño' });
-          fotos.push({ url: placeholderFoto(`${nombre} · daño`, colores[n % colores.length]), fecha, descripcion: 'Falla reportada en inspección' });
-          if (estado === 'en-reparacion') historial.push({ fecha, evento: 'Enviado a mantenimiento', usuario: 'Carlos Méndez Ruiz' });
-        }
-        activos.push({
-          id: `ACT-${codigo}`, codigo, nombre: cant > 1 ? `${nombre} #${i + 1}` : nombre, tipo, ambienteId: ambId,
-          estado, serial: 'SN' + Math.floor(rnd() * 1e9).toString(36).toUpperCase(), historial, fotos,
-        });
-      }
-    });
-  });
-
   // P004 con el estado académico de cada aprendiz.
   const p004 = aprendices.map((a, i) => ({
     documento: a.documento, nombre: a.nombre, ficha: a.ficha, programa: a.programa,
@@ -212,6 +171,6 @@ export function crearBaseDatos(ahora = Date.now()) {
 
   return {
     usuarios: USUARIOS_PRUEBA, ambientes: AMBIENTES, competencias: COMPETENCIAS, fichas: FICHAS,
-    aprendices, sesiones, asistencias, activos, p004, notificaciones, danos: [], qrEmitidos: {},
+    aprendices, sesiones, asistencias, p004, notificaciones, qrEmitidos: {},
   };
 }

@@ -49,11 +49,3 @@ test('semáforo: hay aprendices en todos los colores', async () => {
   for (const c of ['verde', 'amarillo', 'naranja', 'rojo-claro', 'rojo']) assert.ok(colores.has(c), `falta ${c}`);
 });
 
-test('daños: grave sin foto se rechaza y el activo queda dañado', () => {
-  const t = login('1010101010', 'instructor').cuerpo.token;
-  const activo = responder({ metodo: 'GET', ruta: '/assets/by-code/SENA-201-0001', token: t }).cuerpo;
-  const base = { activoId: activo.id, descripcion: 'Pantalla con líneas verticales' };
-  assert.equal(responder({ metodo: 'POST', ruta: '/damages', cuerpo: { ...base, prioridad: 'grave' }, token: t }).status, 422);
-  assert.equal(responder({ metodo: 'POST', ruta: '/damages', cuerpo: { ...base, prioridad: 'grave', foto: 'data:image/png;base64,x' }, token: t }).status, 201);
-  assert.equal(responder({ metodo: 'GET', ruta: `/assets/${activo.id}`, token: t }).cuerpo.estado, 'danado');
-});

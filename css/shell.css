@@ -1,0 +1,178 @@
+/* Shell de la aplicación · menú lateral izquierdo (drawer) y barra superior.
+   Comportamiento (js/ui/drawer.js), igual al prototipo diseno/prototipo.html:
+   · ≥ 900 px: menú persistente de 256 px; la hamburguesa lo pliega a un riel de 76 px.
+   · < 900 px: menú fuera de pantalla, min(280px, 86vw), 320 ms out-cúbico, con velo.
+   data-modo en .shell: fijo | riel | abierto | cerrado. */
+
+:root{ --menu-ancho:256px; --menu-riel:76px; --barra-alto:60px; }
+
+/* Preferencias de Ajustes */
+html[data-texto="grande"]{ zoom:1.1; }
+html[data-texto="muy-grande"]{ zoom:1.22; }
+html[data-movimiento="reducido"] *, html[data-movimiento="reducido"] *::before, html[data-movimiento="reducido"] *::after{
+  animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important;
+}
+html.sin-scroll, html.sin-scroll body{ overflow:hidden; }
+
+/* En el login no hay menú ni barra. */
+body[data-vista="login"] .drawer,
+body[data-vista="login"] .drawer-velo,
+body[data-vista="login"] .barra{ display:none; }
+body[data-vista="login"] .shell{ display:block; }
+
+.shell{ min-height:100vh; min-height:100dvh; }
+.shell-principal{ min-width:0; display:flex; flex-direction:column; min-height:100vh; min-height:100dvh; }
+.shell-principal > .content{ flex:1 0 auto; }
+
+/* ================= Menú lateral ================= */
+.drawer{
+  display:flex; flex-direction:column; background:var(--color-surface);
+  border-right:1px solid var(--color-border); overflow:hidden;
+}
+.drawer-cabecera{
+  display:flex; align-items:center; gap:10px; padding:16px 14px 12px 16px;
+  padding-top:max(16px, env(safe-area-inset-top));
+}
+.drawer-logo{ width:40px; height:40px; object-fit:contain; flex-shrink:0; }
+.drawer-marca{ display:grid; line-height:1.2; min-width:0; flex:1; }
+.drawer-marca strong{ font-family:var(--font-display); font-size:16px; color:var(--color-heading); }
+.drawer-marca span{ font-size:var(--fs-xs); color:var(--color-text-muted); white-space:nowrap; }
+.drawer-cerrar{
+  width:var(--hit-min); height:var(--hit-min); display:grid; place-items:center; border:0; border-radius:var(--r-pill);
+  background:none; color:var(--color-text-muted); cursor:pointer;
+}
+.drawer-cerrar:hover{ background:var(--color-surface-muted); color:var(--color-heading); }
+.drawer-cerrar .icon{ width:20px; height:20px; }
+
+.drawer-perfil{
+  display:flex; align-items:center; gap:12px; margin:0 12px 8px; padding:10px 12px; min-height:var(--hit-min);
+  border-radius:var(--r-md); background:var(--color-surface-sunken); border:1px solid var(--color-border);
+  text-decoration:none; color:inherit; transition:border-color var(--dur-micro-1) var(--ease-standard);
+}
+.drawer-perfil:hover{ border-color:var(--c-verde-200); }
+.drawer-perfil-datos{ display:grid; min-width:0; line-height:1.25; }
+.drawer-perfil-datos strong{ font-size:14px; color:var(--color-heading); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drawer-perfil-datos span{ font-size:var(--fs-xs); color:var(--color-text-muted); }
+.avatar-iniciales{
+  width:40px; height:40px; border-radius:50%; flex-shrink:0; display:grid; place-items:center;
+  background:var(--c-verde-100); color:var(--c-verde-800); font:700 14px var(--font-ui);
+}
+.avatar-iniciales--grande{ width:72px; height:72px; font-size:26px; }
+
+.drawer-scroll{ flex:1; overflow-y:auto; overscroll-behavior:contain; padding:4px 12px 12px; }
+.drawer-nav{ position:relative; }
+.drawer-grupo{
+  margin:14px 12px 6px; font-size:var(--fs-xs); font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--color-text-muted);
+}
+.drawer-lista{ list-style:none; margin:0; padding:0; display:grid; gap:2px; }
+.drawer-item{
+  position:relative; z-index:1; display:flex; align-items:center; gap:12px; width:100%;
+  min-height:var(--hit-min); padding:0 12px; border:0; border-radius:12px; background:none;
+  font:600 14.5px var(--font-ui); color:var(--color-text-muted); text-decoration:none; text-align:left; cursor:pointer;
+  transition:color var(--dur-micro-1) var(--ease-standard), background-color var(--dur-micro-1) var(--ease-standard);
+}
+.drawer-item:hover{ color:var(--color-heading); background:var(--color-surface-muted); }
+.drawer-item[aria-current="page"]{ color:var(--color-primary); background:transparent; }
+.drawer-icono{ display:grid; place-items:center; width:24px; flex-shrink:0; }
+.drawer-icono .icon{ width:22px; height:22px; }
+.drawer-texto{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drawer-insignia{
+  min-width:22px; height:22px; padding:0 6px; border-radius:var(--r-pill); display:grid; place-items:center;
+  background:var(--c-oro-400); color:#3A2C00; font-size:12px; font-weight:800;
+}
+/* Indicador de la sección activa: se desliza hasta el ítem actual. */
+.drawer-indicador{
+  position:absolute; z-index:0; left:0; right:0; top:0; height:0; border-radius:12px; opacity:0;
+  background:var(--c-verde-50); pointer-events:none;
+  transition:transform 300ms var(--ease-bounce), height 200ms var(--ease-standard), opacity 200ms var(--ease-standard);
+}
+.drawer-indicador::before{
+  content:""; position:absolute; left:0; top:10px; bottom:10px; width:4px; border-radius:0 4px 4px 0; background:var(--color-brand);
+}
+.drawer-pie{ padding:8px 12px; padding-bottom:max(12px, env(safe-area-inset-bottom)); border-top:1px solid var(--color-border); }
+.drawer-salir:hover{ color:var(--color-danger); background:var(--c-rojo-50); }
+
+.drawer-velo{
+  position:fixed; inset:0; z-index:55; background:rgba(0,48,77,.45);
+  opacity:0; pointer-events:none; transition:opacity 320ms var(--ease-out-cubic);
+}
+
+/* ================= Barra superior ================= */
+.barra{
+  position:sticky; top:0; z-index:40; display:flex; align-items:center; gap:8px;
+  min-height:var(--barra-alto); padding:8px 12px; padding-top:max(8px, env(safe-area-inset-top));
+  background:rgba(255,255,255,.92); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--color-border);
+}
+.barra-titulo{
+  flex:1; min-width:0; margin:0; font-size:17px; line-height:1.2; color:var(--color-heading);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; outline:none;
+}
+.barra-acciones{ display:flex; align-items:center; gap:4px; }
+.barra-menu, .barra-boton{
+  position:relative; width:var(--hit-min); height:var(--hit-min); flex-shrink:0; display:grid; place-items:center;
+  border:0; border-radius:var(--r-pill); background:none; color:var(--color-heading); cursor:pointer;
+  transition:background-color var(--dur-micro-1) var(--ease-standard);
+}
+.barra-menu:hover, .barra-boton:hover{ background:var(--color-surface-muted); }
+.barra-boton .icon{ width:22px; height:22px; }
+.barra-boton .insignia{ top:4px; right:2px; border:2px solid #fff; height:20px; min-width:20px; border-radius:10px; }
+/* Ícono hamburguesa que se transforma en X al abrir (móvil). */
+.hamburguesa{ position:relative; width:20px; height:14px; display:block; }
+.hamburguesa span{
+  position:absolute; left:0; right:0; height:2px; border-radius:2px; background:currentColor;
+  transition:transform 280ms var(--ease-out-cubic), opacity 180ms var(--ease-standard), top 280ms var(--ease-out-cubic);
+}
+.hamburguesa span:nth-child(1){ top:0; }
+.hamburguesa span:nth-child(2){ top:6px; }
+.hamburguesa span:nth-child(3){ top:12px; }
+.shell[data-modo="abierto"] .hamburguesa span:nth-child(1){ top:6px; transform:rotate(45deg); }
+.shell[data-modo="abierto"] .hamburguesa span:nth-child(2){ opacity:0; }
+.shell[data-modo="abierto"] .hamburguesa span:nth-child(3){ top:6px; transform:rotate(-45deg); }
+
+/* ================= Móvil (< 900 px): menú fuera de pantalla ================= */
+@media (max-width:899.98px){
+  .drawer{
+    position:fixed; z-index:60; left:0; top:0; bottom:0; width:min(280px, 86vw);
+    transform:translateX(-105%); box-shadow:var(--sh-4);
+    transition:transform 320ms var(--ease-out-cubic), visibility 0s linear 320ms; visibility:hidden;
+  }
+  .shell[data-modo="abierto"] .drawer{ transform:none; visibility:visible; transition:transform 320ms var(--ease-out-cubic); }
+  .shell[data-modo="abierto"] .drawer-velo{ opacity:1; pointer-events:auto; }
+  /* Mientras se arrastra con el dedo, el menú sigue al dedo sin transición. */
+  .shell.arrastrando .drawer{ transition:none; visibility:visible; }
+  .shell.arrastrando .drawer-velo{ transition:none; }
+}
+
+/* ================= Escritorio (≥ 900 px): menú persistente ================= */
+@media (min-width:900px){
+  .shell{ display:grid; grid-template-columns:var(--menu-ancho) minmax(0,1fr); transition:grid-template-columns 320ms var(--ease-out-cubic); }
+  .shell[data-modo="riel"]{ grid-template-columns:var(--menu-riel) minmax(0,1fr); }
+  .drawer{ position:sticky; top:0; height:100vh; height:100dvh; }
+  .drawer-cerrar, .drawer-velo{ display:none; }
+  .barra{ padding:10px 24px 10px 16px; }
+  .barra-titulo{ font-size:18px; }
+
+  /* Riel: solo íconos; el nombre va en title/aria-label. */
+  .shell[data-modo="riel"] .drawer-marca,
+  .shell[data-modo="riel"] .drawer-texto,
+  .shell[data-modo="riel"] .drawer-perfil-datos{ display:none; }
+  .shell[data-modo="riel"] .drawer-cabecera{ justify-content:center; padding-left:14px; padding-right:14px; }
+  .shell[data-modo="riel"] .drawer-perfil{ justify-content:center; padding:8px; margin:0 12px 8px; background:none; border-color:transparent; }
+  .shell[data-modo="riel"] .drawer-scroll{ padding-left:10px; padding-right:10px; }
+  .shell[data-modo="riel"] .drawer-grupo{ height:1px; margin:10px 8px; background:var(--color-border); font-size:0; }
+  .shell[data-modo="riel"] .drawer-item{ justify-content:center; padding:0; }
+  .shell[data-modo="riel"] .drawer-insignia{ position:absolute; top:2px; right:4px; min-width:18px; height:18px; font-size:10.5px; padding:0 4px; }
+  .shell[data-modo="riel"] .drawer-pie{ padding-left:10px; padding-right:10px; }
+}
+
+/* ================= Impresión: solo el documento ================= */
+@media print{
+  .drawer, .drawer-velo, .barra, .toasts, .no-imprimir, .ripple{ display:none !important; }
+  .shell{ display:block !important; }
+  body{ background:#fff !important; }
+  body::before{ display:none !important; }
+  .content{ padding:0 !important; }
+  .card{ box-shadow:none !important; }
+}

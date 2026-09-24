@@ -58,11 +58,4 @@ export const api = {
   importarP004: (registros) => pedir('POST', '/p004/import', { registros }), // → {importados:number, total:number}
   cambiarEstadoP004: (documento, estado) => pedir('PATCH', `/p004/${documento}`, { estado }), // → RegistroP004
 
-  // Inventario
-  activos: (ambienteId) => pedir('GET', `/environments/${ambienteId}/assets`), // → Activo[]
-  activoPorCodigo: (codigo) => pedir('GET', `/assets/by-code/${encodeURIComponent(codigo)}`), // → Activo
-  activo: (id) => pedir('GET', `/assets/${id}`),                      // → Activo
-
-  // Daños
-  reportarDano: (datos) => pedir('POST', '/damages', datos),         // → Dano  datos: {activoId, prioridad, descripcion, foto}
 };

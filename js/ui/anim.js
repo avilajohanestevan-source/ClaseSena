@@ -3,6 +3,8 @@
 // "reducir movimiento" del sistema operativo. Los plugins adicionales
 // (ScrollTrigger, SplitText, MorphSVG, MotionPath...) están en
 // vendor/gsap listos para cargarse cuando se necesiten.
+import { movimientoReducido } from './preferencias.js';
+
 const gsap = window.gsap;
 
 if (gsap) {
@@ -14,11 +16,15 @@ if (gsap) {
   }
 }
 
-const reducido = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Respeta el sistema operativo y la opción 'Reducir animaciones' de Ajustes.
+const reducido = () => movimientoReducido();
 const movil = () => window.matchMedia('(max-width: 640px)').matches;
 // Curvas del rediseño (tokens.css): out-cúbico, in-out-cúbico y rebote.
 const CURVA = { salida: 'power3.out', inOut: 'power3.inOut', rebote: 'back.out(1.8)' };
 const listo = () => gsap && !reducido();
+// Las salidas se esperan con un tope: si el navegador pausa los fotogramas
+// (pestaña en segundo plano), el modal o el aviso igual se cierran.
+const conTope = (tween, ms) => Promise.race([tween.then(), new Promise((ok) => setTimeout(ok, ms))]);
 const ease = (nombre, respaldo) => (window.CustomEase ? nombre : respaldo);
 
 export const anim = {
@@ -45,7 +51,7 @@ export const anim = {
   },
   toastSale(el) {
     if (!listo()) return Promise.resolve();
-    return gsap.to(el, { autoAlpha: 0, y: -16, scale: 0.96, height: 0, marginTop: 0, paddingTop: 0, paddingBottom: 0, duration: 0.24, ease: CURVA.inOut }).then();
+    return conTope(gsap.to(el, { autoAlpha: 0, y: -16, scale: 0.96, height: 0, marginTop: 0, paddingTop: 0, paddingBottom: 0, duration: 0.24, ease: CURVA.inOut }), 400);
   },
 
   /** En móvil el modal es una hoja inferior: sube desde el borde. */
@@ -56,8 +62,8 @@ export const anim = {
   },
   modalSale(panel) {
     if (!listo()) return Promise.resolve();
-    if (movil()) return gsap.to(panel, { yPercent: 100, duration: 0.26, ease: 'power2.in' }).then();
-    return gsap.to(panel, { autoAlpha: 0, y: 12, scale: 0.98, duration: 0.2, ease: 'power2.in' }).then();
+    if (movil()) return conTope(gsap.to(panel, { yPercent: 100, duration: 0.26, ease: 'power2.in' }), 400);
+    return conTope(gsap.to(panel, { autoAlpha: 0, y: 12, scale: 0.98, duration: 0.2, ease: 'power2.in' }), 350);
   },
 
   /**
@@ -74,14 +80,23 @@ export const anim = {
       .to(extras, { autoAlpha: 0, duration: 0.3 }, 0.36)
       .to(tarjeta, { autoAlpha: 0, y: -16, scale: 0.97, duration: 0.4, ease: CURVA.inOut }, 0.44);
     // No hace falta esperar el final de las piezas: a los 800 ms ya salieron del área visible.
-    return new Promise((ok) => tl.call(ok, null, 0.8));
+    // Respaldo por tiempo: si el navegador pausa los fotogramas (pestaña en segundo plano),
+    // la línea de tiempo no avanza y el ingreso no debe quedarse esperando.
+    return Promise.race([
+      new Promise((ok) => tl.call(ok, null, 0.8)),
+      new Promise((ok) => setTimeout(ok, 1000)),
+    ]);
   },
 
   /** Entrada del panel tras el login: barra superior y navegación con 120 ms de retraso. */
-  entrarShell(barra, navegacion) {
+  // El menú lateral solo se anima donde está a la vista (escritorio): en
+  // móvil vive fuera de la pantalla y un transform lo dejaría visible.
+  entrarShell(barra, menu) {
     if (!listo()) return;
-    if (barra) gsap.fromTo(barra, { autoAlpha: 0, y: -12 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: CURVA.salida, clearProps: 'all' });
-    if (navegacion) gsap.fromTo(navegacion, { autoAlpha: 0, y: movil() ? 24 : -8 }, { autoAlpha: 1, y: 0, duration: 0.6, delay: 0.12, ease: CURVA.salida, clearProps: 'all' });
+    if (barra) gsap.fromTo(barra, { autoAlpha: 0, y: -12 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: CURVA.salida, clearProps: 'opacity,visibility,transform' });
+    if (menu && window.matchMedia('(min-width: 900px)').matches) {
+      gsap.fromTo(menu, { autoAlpha: 0, x: -16 }, { autoAlpha: 1, x: 0, duration: 0.6, delay: 0.12, ease: CURVA.salida, clearProps: 'opacity,visibility,transform' });
+    }
   },
 
   /** Sacudida corta para errores de validación. */

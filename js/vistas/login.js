@@ -8,9 +8,23 @@ import { h, icono, errorCampo } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { ROLES, validarLogin } from '../reglas.js';
 import { api } from '../api/contratos.js';
+import { apiAmb } from '../api/ambientes.js';
 import { iniciarSesion } from '../estado.js';
 import { CONFIG } from '../config.js';
-import { USUARIOS_PRUEBA, PASSWORD_PRUEBA } from '../api/mock/datos.js';
+import { PASSWORD_PRUEBA } from '../api/mock/datos.js';
+
+// Usuarios de db/seed.sql (contraseña Sena2026*), para la demostración.
+const USUARIOS_DEMO = [
+  { identificacion: '1010101010', nombre: 'Laura Gómez Patiño', rol: 'instructor' },
+  { identificacion: '1010101011', nombre: 'Andrés Felipe Castro', rol: 'instructor' },
+  { identificacion: '4040404040', nombre: 'Jorge Enrique Salazar', rol: 'portero' },
+  { identificacion: '4040404041', nombre: 'Martha Lucía Peña', rol: 'portero' },
+  { identificacion: '2020202020', nombre: 'Carlos Méndez Ruiz', rol: 'administrativo' },
+  { identificacion: '1122334455', nombre: 'Camila Rojas Herrera', rol: 'aprendiz', tipo: 'TI' },
+];
+// Los módulos de asistencia siguen con datos simulados: tras el login real
+// se abre también una sesión simulada con el usuario demo del mismo rol.
+const DEMO_ASISTENCIA = { instructor: '1010101010', administrativo: '2020202020', aprendiz: '1122334455' };
 
 const TIPOS_DOCUMENTO = [['CC', 'Cédula de ciudadanía'], ['TI', 'Tarjeta de identidad'], ['CE', 'Cédula de extranjería'], ['PPT', 'Permiso por protección temporal']];
 
@@ -39,7 +53,8 @@ export function render(raiz) {
     ROLES.map((r, i) => h('label', { class: 'segmento-opcion' },
       h('input', { type: 'radio', name: 'rol', value: r.clave, checked: r.clave === rol, onchange: () => {
         rol = r.clave;
-        indicador.style.setProperty('--i', i);
+        indicador.style.setProperty('--x', i % 2);
+        indicador.style.setProperty('--y', Math.floor(i / 2));
         errorCampo(opcionesRol, null);
       } }),
       h('span', {}, icono(r.clave), r.etiqueta))));
@@ -72,7 +87,7 @@ export function render(raiz) {
     h('h2', { class: 'login-titulo', id: 'login-titulo' }, 'Hola de nuevo'),
     h('p', { class: 'login-sub' }, 'Elige tu rol e ingresa con tu documento.'),
     form,
-    CONFIG.usarMock && demo());
+    CONFIG.mostrarUsuariosDemo && demo());
   const piezaA = pieza('a', 'img/fondo/pildora-verde.svg');
   const piezaB = pieza('b', 'img/fondo/pildora-azul.svg');
   const linea = h('span', { class: 'login-pieza login-pieza--linea', 'aria-hidden': 'true' });
@@ -113,7 +128,7 @@ export function render(raiz) {
     textoEnviar.textContent = 'Validando…';
     let respuesta;
     try {
-      respuesta = await api.login(datos);
+      respuesta = await apiAmb.login(datos);
     } catch (err) {
       errorGeneral.textContent = err.message;
       errorGeneral.className = 'banner error login-error';
@@ -129,20 +144,24 @@ export function render(raiz) {
     enviar.classList.add('login-enviar--ok');
     enviar.replaceChildren(icono('check'), h('span', {}, `¡Hola, ${respuesta.usuario.nombre.split(' ')[0]}!`));
     await anim.salidaLogin({ tarjeta, piezaA, piezaB, extras: [linea, aro] });
-    iniciarSesion(respuesta);
+    let tokenMock = null;
+    if (DEMO_ASISTENCIA[rol]) {
+      try { tokenMock = (await api.login({ identificacion: DEMO_ASISTENCIA[rol], password: PASSWORD_PRUEBA, rol })).token; } catch { /* asistencia no disponible */ }
+    }
+    iniciarSesion({ token: respuesta.token, usuario: respuesta.usuario, tokenMock });
   }
 
   function demo() {
     return h('details', { class: 'login-demo' },
       h('summary', {}, 'Usuarios de prueba (modo demostración)'),
-      h('p', { class: 'text-muted' }, 'Contraseña para todos: ', h('code', {}, PASSWORD_PRUEBA)),
-      h('ul', {}, USUARIOS_PRUEBA.map((u) => h('li', {},
+      h('p', { class: 'text-muted' }, 'Contraseña para todos: ', h('code', {}, 'Sena2026*')),
+      h('ul', {}, USUARIOS_DEMO.map((u) => h('li', {},
         h('button', { class: 'chip-boton', type: 'button', onclick: () => {
-          identificacion.value = u.identificacion; password.value = PASSWORD_PRUEBA;
+          identificacion.value = u.identificacion; password.value = 'Sena2026*'; tipoDocumento.value = u.tipo || 'CC';
           form.querySelector(`input[value="${u.rol}"]`).click();
           errorCampo(identificacion, null); errorCampo(password, null);
         } }, u.identificacion),
-        h('span', {}, `${u.nombre} · ${u.rol}${u.bloqueado ? ' (bloqueada)' : ''}`)))));
+        h('span', {}, `${u.nombre} · ${u.rol}`)))));
   }
 }
 

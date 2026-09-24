@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validarLogin, estadoVentana, formatearDuracion, codificarQr, leerQr, prevalidarEscaneo,
-  calcularSemaforo, parsearCsv, validarRegistrosP004, validarDano,
+  calcularSemaforo, parsearCsv, validarRegistrosP004,
 } from '../js/reglas.js';
 
 test('login: valida identificación, contraseña y rol', () => {
@@ -74,10 +74,3 @@ test('P004: valida campos, estados y duplicados', () => {
   assert.match(errores[0].mensaje, /repetido/);
 });
 
-test('daño: foto obligatoria solo si es grave', () => {
-  const base = { activoId: 'A1', descripcion: 'Pantalla rota en la esquina' };
-  assert.deepEqual(validarDano({ ...base, prioridad: 'leve' }), {});
-  assert.ok(validarDano({ ...base, prioridad: 'grave' }).foto);
-  assert.deepEqual(validarDano({ ...base, prioridad: 'grave', foto: 'data:image/jpeg;base64,x' }), {});
-  assert.ok(validarDano({ prioridad: 'leve', descripcion: 'corto' }).activoId);
-});

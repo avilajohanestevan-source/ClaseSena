@@ -147,7 +147,7 @@ export async function render(raiz) {
 
   raiz.append(
     encabezado('Gestión P004', 'Importa el reporte de novedades y mantén al día el estado académico de cada aprendiz.',
-      h('a', { class: 'btn btn-outline btn-volver', href: '#/admin' }, 'Volver al panel')),
+      h('a', { class: 'btn btn-outline btn-volver', href: '#/semaforo' }, 'Volver al semáforo')),
     h('section', { class: 'card', 'data-anim': '' },
       h('h3', { class: 'bloque-titulo' }, 'Importar'),
       zona, archivo,

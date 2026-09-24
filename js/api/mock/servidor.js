@@ -2,7 +2,7 @@
 // datos en memoria de datos.js. Responde { status, cuerpo } como lo haría
 // el backend, incluidos los errores, para probar el front sin servidor.
 import { crearBaseDatos, PASSWORD_PRUEBA } from './datos.js';
-import { estadoVentana, codificarQr, fechaIso, enRango, ESTADOS_P004, PRIORIDADES } from '../../reglas.js';
+import { estadoVentana, codificarQr, fechaIso, enRango, ESTADOS_P004 } from '../../reglas.js';
 import { CONFIG } from '../../config.js';
 
 let db = crearBaseDatos();
@@ -181,35 +181,6 @@ const rutas = [
     return ok(r);
   }],
 
-  ['GET', /^\/environments\/([^/]+)\/assets$/, ({ params: [aid] }) => ok(db.activos.filter((a) => a.ambienteId === aid))],
-
-  ['GET', /^\/assets\/by-code\/([^/]+)$/, ({ params: [codigo] }) => {
-    const a = db.activos.find((x) => x.codigo.toUpperCase() === decodeURIComponent(codigo).trim().toUpperCase());
-    return a ? ok(a) : error(404, `No hay ningún activo con el código ${decodeURIComponent(codigo)}.`, 'NO_EXISTE');
-  }],
-
-  ['GET', /^\/assets\/([^/]+)$/, ({ params: [aid] }) => {
-    const a = db.activos.find((x) => x.id === aid);
-    return a ? ok(a) : error(404, 'El activo no existe.', 'NO_EXISTE');
-  }],
-
-  ['POST', /^\/damages$/, ({ cuerpo, usuario }) => {
-    const a = db.activos.find((x) => x.id === cuerpo?.activoId);
-    if (!a) return error(422, 'El activo vinculado no existe.', 'VALIDACION');
-    if (!PRIORIDADES.some((p) => p.clave === cuerpo.prioridad)) return error(422, 'Prioridad no válida.', 'VALIDACION');
-    if (cuerpo.prioridad === 'grave' && !cuerpo.foto) return error(422, 'La foto es obligatoria para daños graves.', 'FOTO_OBLIGATORIA');
-    const fecha = new Date().toISOString();
-    const dano = { id: id('D'), activoId: a.id, prioridad: cuerpo.prioridad, descripcion: cuerpo.descripcion, foto: cuerpo.foto || null, reportadoPor: usuario.nombre, fecha };
-    db.danos.push(dano);
-    a.estado = 'danado';
-    a.historial.push({ fecha, evento: `Reporte de daño (${cuerpo.prioridad})`, usuario: usuario.nombre });
-    if (cuerpo.foto) a.fotos.unshift({ url: cuerpo.foto, fecha, descripcion: cuerpo.descripcion });
-    if (cuerpo.prioridad === 'grave') {
-      const amb = db.ambientes.find((x) => x.id === a.ambienteId);
-      notificar('dano-grave', 'Daño grave reportado', `${a.nombre} · ${amb?.nombre ?? ''} (${usuario.nombre})`);
-    }
-    return ok(dano, 201);
-  }],
 ];
 
 export function responder({ metodo, ruta, query = {}, cuerpo = null, token = null }) {

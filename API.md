@@ -1,9 +1,17 @@
 # Contratos de API — Asistencia y ambientes
 
-Front-end sin backend: estos son los endpoints que el servidor real debe
-implementar. Mientras `CONFIG.usarMock` (en `js/config.js`) sea `true`, los
-responde el servidor simulado de `js/api/mock/servidor.js` con los mismos
-códigos de estado y cuerpos de error.
+Hay dos APIs:
+
+1. **Asistencia a clases** (esta primera parte): todavía sin backend. Son
+   los endpoints que el servidor real debe implementar. Mientras
+   `CONFIG.usarMock` (en `js/config.js`) sea `true`, los responde el
+   servidor simulado de `js/api/mock/servidor.js` con los mismos códigos de
+   estado y cuerpos de error.
+2. **Entrega y revisión de ambientes** (sección al final): ya implementada
+   en PHP + MySQL en `api/`. El inventario y los daños de ambientes viven
+   ahí; la versión simulada anterior se retiró.
+
+Asistencia a clases:
 
 - Base: `/api/v1` (`CONFIG.apiBase`).
 - Formato: JSON. Fechas en ISO 8601 (UTC).
@@ -124,31 +132,84 @@ actualizadoPor?, actualizadoEn? }`. Estados: `EN FORMACION`,
 estado conocido, sin documentos repetidos) y solo manda las filas válidas.
 El servidor registra quién hizo el cambio a partir del token.
 
-## Inventario
+---
 
-| Método | Ruta | Respuesta |
-|---|---|---|
-| GET | `/environments/{ambienteId}/assets` | `Activo[]` |
-| GET | `/assets/by-code/{codigo}` | `Activo` (`404 NO_EXISTE` si no hay) |
-| GET | `/assets/{id}` | `Activo` |
+# Entrega y revisión de ambientes (API real)
 
-`Activo`: `{ id, codigo, nombre, tipo, ambienteId, estado, serial,
-historial: [{fecha, evento, usuario}], fotos: [{url, fecha, descripcion}] }`,
-`estado` ∈ `operativo | danado | en-reparacion | baja`. Las etiquetas usan
-Code 128 con el `codigo` del activo.
+Implementada en `api/` (PHP 8 + MySQL/MariaDB de XAMPP, `mysqli` con
+sentencias preparadas). Base de datos `sena_ambientes`: `db/schema.sql`,
+datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 
-## Daños
+- Base: `api/index.php` relativa a `index.html` (`CONFIG.apiAmbientes`);
+  la ruta va en PATH_INFO, p. ej. `api/index.php/inspections/3`.
+- Fechas: ISO 8601 con zona (`2026-09-24T07:05:00-05:00`, America/Bogota).
+- Autenticación: `Authorization: Bearer <token>` (64 hex, dura 12 h).
+- Errores: `{ mensaje, codigo }` — `401 SIN_SESION`, `403 PERMISO`,
+  `404 NO_ENCONTRADO`, `409 ESTADO|EN_CURSO|DUPLICADO|EN_USO`,
+  `422 VALIDACION|CHECKLIST_INCOMPLETO|OTRO_AMBIENTE`, `503 SIN_BASE_DATOS`.
 
-`POST /damages` → `201 Dano`
+## Tablas
 
-```json
-{ "activoId": "…", "prioridad": "leve | moderada | grave",
-  "descripcion": "10 a 500 caracteres", "foto": "data:image/jpeg;base64,… | null" }
+| Tabla | Contenido |
+|---|---|
+| `users` | documento, tipo, nombre, contacto, `rol` (instructor, administrativo, portero, aprendiz), ficha, `password_hash` |
+| `api_tokens` | sesiones |
+| `environments` | `codigo` (107…), nombre, bloque, capacidad, `portero_id` asignado, activo |
+| `inventory_items` | ítems por ambiente; `codigo` (AMB107-003) es lo que lleva el QR `SENA-INV:<codigo>`; estado |
+| `inspections` | `environment_id`, `instructor_id`, `portero_id`, estado, resultado, `qr_token`, checklist (JSON), observaciones, `iniciada_en`, `confirmada_en`, `recibida_en`, firmas (PNG) con nombre |
+| `inspection_items` | daño reportado: `inspection_id` → `inventory_item_id`, tipo, severidad, comentario, foto |
+| `notifications` | para el portero (inspección confirmada), el instructor (recibida) y administración (daño grave) |
+
+## Sesión y perfil
+
+| Método | Ruta | Rol | Cuerpo → respuesta |
+|---|---|---|---|
+| POST | `/auth/login` | — | `{tipoDocumento?, identificacion, password, rol}` → `{token, usuario}` |
+| POST | `/auth/logout` | todos | → `204` |
+| GET | `/me` | todos | → `usuario` |
+| PATCH | `/me` | todos | `{nombre, email?, telefono?}` → `usuario` |
+| POST | `/me/password` | todos | `{actual, nueva}` → `204` (cierra las otras sesiones) |
+| GET | `/users?rol=` | administrativo | → `usuario[]` |
+
+## Ambientes e inventario
+
+| Método | Ruta | Rol | Notas |
+|---|---|---|---|
+| GET | `/environments?asignados=1` | todos | Con portero, conteo de ítems y última inspección. `asignados` filtra los del portero |
+| GET/PATCH/DELETE | `/environments/{id}` | GET todos; resto administrativo | DELETE → `409 EN_USO` si tiene inventario o inspecciones |
+| POST | `/environments` | administrativo | `{codigo, nombre, bloque?, capacidad?, porteroId?, activo?}` |
+| GET | `/environments/{id}/items` | personal | Ítems del ambiente |
+| GET | `/items/by-code/{codigo}` | personal | Para el escáner |
+| POST | `/items` | administrativo | `{ambienteId, nombre, categoria, serial?, estado?}`; el código se genera |
+| PATCH/DELETE | `/items/{id}` | administrativo | DELETE → `409 EN_USO` si tiene daños reportados |
+
+## Inspecciones
+
+```
+en_curso ──confirm (firma del instructor)──▶ pendiente_recepcion ──receive (firma del portero)──▶ recibida
+   └──cancel──▶ cancelada
 ```
 
-Reglas: la foto es obligatoria si `prioridad = grave`
-(`422 FOTO_OBLIGATORIA`). El activo queda en estado `danado`, se agrega al
-historial y la foto a sus fotos previas. Un daño grave genera una
-notificación `dano-grave`. El front reduce la foto a JPEG de máximo 1280 px
-antes de enviarla; en producción conviene cambiar el data URL por una
-subida `multipart/form-data`.
+| Método | Ruta | Rol | Notas |
+|---|---|---|---|
+| GET | `/inspections` | personal | Filtros: `estado, resultado, ambienteId, instructorId, desde, hasta, asignados`. El instructor solo ve las suyas |
+| POST | `/inspections` | instructor | `{ambienteId}` registra el inicio. Si ya tiene una en curso en ese ambiente la retoma; si es de otro → `409 EN_CURSO` |
+| GET | `/inspections/{id}` | personal | Detalle: checklist, inventario (con `reportado`), `reportes`, firmas |
+| GET | `/inspections/by-qr/{token}` | personal | Para el QR `SENA-INSP:<token>` |
+| PATCH | `/inspections/{id}/checklist` | instructor dueño | `{checklist:[{clave, ok}], observaciones}` (guardado automático) |
+| POST | `/inspections/{id}/items` | instructor dueño | `{itemId \| codigo, tipoDano, severidad, comentario, foto?}` crea `inspection_items` y deja el ítem `danado`. Foto (data URL JPG/PNG/WebP, ≤ 3 MB) obligatoria si es `grave` |
+| DELETE | `/inspections/{id}/items/{reporteId}` | instructor dueño | Quita el reporte y restaura el estado del ítem |
+| POST | `/inspections/{id}/confirm` | instructor dueño | `{checklist, observaciones?, firma, nombreFirma}`. Checklist completo; observaciones obligatorias si hay novedad. Notifica al portero del ambiente (o a todos si no tiene) |
+| POST | `/inspections/{id}/receive` | portero | `{firma, nombreFirma}` → `recibida`, guarda `portero_id` y notifica al instructor |
+| POST | `/inspections/{id}/cancel` | instructor dueño | Deshace los reportes |
+
+`tipoDano` ∈ `rotura | no_funciona | faltante | suciedad | otro`;
+`severidad` ∈ `leve | moderada | grave`; firma: data URL PNG ≤ 400 KB.
+
+## Notificaciones y reportes
+
+| Método | Ruta | Rol | Notas |
+|---|---|---|---|
+| GET | `/inbox` | todos | `{sinLeer, notificaciones:[{id, tipo, titulo, detalle, inspeccionId, ambiente, leida, fecha}]}` |
+| POST | `/inbox/{id}/read`, `/inbox/read-all` | todos | → `204` |
+| GET | `/reports?desde&hasta&ambienteId&instructorId` | administrativo | `{resumen, porAmbiente, danos}` |

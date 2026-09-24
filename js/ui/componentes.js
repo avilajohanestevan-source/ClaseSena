@@ -27,14 +27,6 @@ export function chipAsistencia(estado) {
   return h('span', { class: `status-chip ${clase}` }, texto);
 }
 
-const ESTADOS_ACTIVO = {
-  operativo: ['Operativo', 'in'], danado: ['Dañado', 'error'], 'en-reparacion': ['En reparación', 'out'], baja: ['De baja', 'neutro'],
-};
-export function chipActivo(estado) {
-  const [texto, clase] = ESTADOS_ACTIVO[estado] || [estado, 'neutro'];
-  return h('span', { class: `status-chip ${clase}` }, texto);
-}
-
 /* ---------------- filtro de fechas ---------------- */
 
 /** FiltroFechas: rango desde/hasta con atajos. Llama alCambiar({desde, hasta}). */

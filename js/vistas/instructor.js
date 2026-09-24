@@ -4,7 +4,7 @@
 import { h, icono, vaciar, formato } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { toast, abrirModal } from '../ui/avisos.js';
-import { chipAsistencia, chipActivo, cargando, tarjetaError, encabezado } from '../ui/componentes.js';
+import { chipAsistencia, cargando, tarjetaError, encabezado } from '../ui/componentes.js';
 import { estadoVentana, formatearDuracion, fechaIso } from '../reglas.js';
 import { api } from '../api/contratos.js';
 import { estado } from '../estado.js';
@@ -20,7 +20,7 @@ export async function render(raiz, { alSalir }) {
   const resumen = h('div', { class: 'stat-grid', 'data-anim': '' });
   raiz.append(
     encabezado(`Hola, ${usuario.nombre.split(' ')[0]}`, 'Tus clases de hoy. Genera el QR mientras la ventana de registro esté abierta.',
-      h('a', { class: 'btn btn-outline', href: '#/danos' }, icono('herramienta'), 'Reportar daño')),
+      h('a', { class: 'btn btn-outline', href: '#/inspecciones' }, icono('inspeccion'), 'Inspección del ambiente')),
     resumen,
     h('h3', { class: 'bloque-titulo', 'data-anim': '' }, 'Clases activas hoy'),
     lista);
@@ -82,7 +82,7 @@ export async function render(raiz, { alSalir }) {
       h('div', { class: 'clase-acciones' },
         botonQr,
         h('button', { class: 'btn btn-outline', type: 'button', onclick: () => historialSesion(s) }, icono('historial'), 'Historial de la sesión'),
-        h('button', { class: 'btn btn-outline', type: 'button', onclick: () => inspeccionAmbiente(s) }, icono('caja'), 'Inspeccionar ambiente'),
+        h('a', { class: 'btn btn-outline', href: '#/inspecciones' }, icono('inspeccion'), 'Inspeccionar ambiente'),
         botonCancelar));
 
     let ultimoEstado = null;
@@ -258,25 +258,5 @@ function historialSesion(sesion) {
         h('tbody', {}, lista.map((r) => h('tr', {}, h('td', {}, r.aprendiz), h('td', { class: 'mono' }, r.documento), h('td', {}, formato.hora(r.hora)), h('td', {}, chipAsistencia(r.estado)))))))
         : h('div', { class: 'empty-state' }, 'Aún no hay registros en esta sesión.'));
     anim.lista(cuerpo.querySelectorAll('tbody tr'));
-  }).catch((e) => vaciar(cuerpo, tarjetaError(e)));
-}
-
-/* ---------------- inspección del ambiente ---------------- */
-
-function inspeccionAmbiente(sesion) {
-  const cuerpo = h('div', {}, cargando());
-  const { cerrar } = abrirModal({
-    titulo: 'Inspección del ambiente', subtitulo: sesion.ambiente, ancho: 'ancho', contenido: cuerpo,
-    acciones: [h('a', { class: 'btn btn-outline', href: `#/inventario?ambiente=${sesion.ambienteId}`, onclick: () => cerrar() }, 'Ver inventario completo')],
-  });
-  api.activos(sesion.ambienteId).then((activos) => {
-    const conDano = activos.filter((a) => a.estado !== 'operativo').length;
-    vaciar(cuerpo,
-      h('p', { class: 'section-sub' }, `${activos.length} activos · ${conDano} con novedad`),
-      h('ul', { class: 'inspeccion' }, activos.map((a) => h('li', { class: 'inspeccion-item' },
-        h('div', {}, h('strong', {}, a.nombre), h('span', { class: 'mono text-muted' }, a.codigo)),
-        chipActivo(a.estado),
-        h('a', { class: 'btn btn-outline btn-sm', href: `#/danos?activo=${a.id}`, onclick: () => cerrar() }, icono('herramienta'), 'Registrar daño')))));
-    anim.lista(cuerpo.querySelectorAll('.inspeccion-item'));
   }).catch((e) => vaciar(cuerpo, tarjetaError(e)));
 }
