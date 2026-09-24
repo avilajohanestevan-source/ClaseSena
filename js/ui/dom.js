@@ -115,3 +115,8 @@ export function errorCampo(control, mensaje) {
   control.toggleAttribute('aria-invalid', !!mensaje);
   if (mensaje) contenedor.append(h('div', { class: 'field-error', role: 'alert' }, mensaje));
 }
+
+/** Vibra solo si el navegador lo permite (el usuario ya tocó la página); si no, no hace nada. */
+export function vibrar(patron) {
+  if (navigator.userActivation?.hasBeenActive ?? true) navigator.vibrate?.(patron);
+}

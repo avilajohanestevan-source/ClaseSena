@@ -2,6 +2,7 @@
 // Al leerlo, el servidor guarda quién entregó, quién recibió, la hora y el
 // estado de los ítems (y avisa a coordinación si hay daños). Luego se abre la
 // planilla con el aviso de "ambiente recibido".
+import { vibrar } from './dom.js';
 import { toast, abrirModal } from './avisos.js';
 import { crearEscaner } from './escaner.js';
 import { apiAmb } from '../api/ambientes.js';
@@ -24,7 +25,7 @@ export function escanearEntrega() {
           ocupado = true;
           try {
             const s = await apiAmb.recibirPorQr(token);
-            navigator.vibrate?.(60);
+            vibrar(60);
             cerrar();
             emitir('inspecciones');
             location.hash = `#/planilla?id=${s.id}&recibida=1`;

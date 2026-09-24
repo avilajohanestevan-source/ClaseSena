@@ -18,6 +18,5 @@ define('HORAS_SESION', 12);
 // Fotos de daños: carpeta (relativa a la raíz del proyecto) y tamaño máximo.
 define('CARPETA_FOTOS', 'uploads/danos');
 define('MAX_FOTO_BYTES', 3 * 1024 * 1024);
-define('MAX_FIRMA_BYTES', 400 * 1024);
 
 date_default_timezone_set('America/Bogota');

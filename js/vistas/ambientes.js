@@ -1,6 +1,6 @@
 // Ambientes: tarjetas con el estado de la entrega de hoy.
-//  · Portero: "Revisar y entregar", continuar la revisión o mostrar el QR; filtro "Mis asignados".
-//  · Instructor: "Recibir con QR" cuando el portero ya generó la entrega.
+//  · Instructor: "Revisar", continuar su revisión o escanear el QR del portero.
+//  · Portero: generar o mostrar el QR cuando la revisión está terminada; filtro "Mis asignados".
 //  · Administrativo: crear, editar, activar/desactivar y borrar (CRUD).
 //  · Aprendiz: solo consulta.
 import { h, anexar, icono, vaciar, errorCampo } from '../ui/dom.js';
@@ -44,18 +44,18 @@ export async function render(raiz) {
     const hoy = ult && esHoy(ult.iniciadaEn);
     const acciones = [];
     const abierta = ult && ['en_curso', 'pendiente_recepcion'].includes(ult.estado);
-    if (u.rol === 'portero' && a.activo) {
-      const propia = abierta && ult.porteroId === u.id;
+    if (u.rol === 'instructor' && a.activo) {
+      const propia = abierta && ult.instructorId === u.id;
       if (propia) {
         acciones.push(ult.estado === 'en_curso'
           ? h('a', { class: 'btn btn-primary btn-sm', href: `#/inspeccion?id=${ult.id}` }, icono('inspeccion'), 'Continuar revisión')
-          : h('a', { class: 'btn btn-primary btn-sm', href: `#/planilla?id=${ult.id}` }, icono('qr'), 'Mostrar QR'));
+          : h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: escanearEntrega }, icono('escanear'), 'Escanear QR del portero'));
       } else {
-        acciones.push(h('a', { class: `btn btn-primary btn-sm${abierta ? ' is-disabled' : ''}`, href: abierta ? null : `#/inspecciones?ambiente=${a.id}`, 'aria-disabled': abierta ? 'true' : false }, icono('inspeccion'), 'Revisar y entregar'));
+        acciones.push(h('a', { class: `btn btn-primary btn-sm${abierta ? ' is-disabled' : ''}`, href: abierta ? null : `#/inspecciones?ambiente=${a.id}`, 'aria-disabled': abierta ? 'true' : false }, icono('inspeccion'), 'Revisar'));
       }
     }
-    if (u.rol === 'instructor' && ult?.estado === 'pendiente_recepcion') {
-      acciones.push(h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: escanearEntrega }, icono('escanear'), 'Recibir con QR'));
+    if (u.rol === 'portero' && ult?.estado === 'pendiente_recepcion') {
+      acciones.push(h('a', { class: 'btn btn-primary btn-sm', href: `#/planilla?id=${ult.id}` }, icono('qr'), 'Generar QR'));
     }
     if (u.rol !== 'aprendiz') acciones.push(h('a', { class: 'btn btn-outline btn-sm', href: `#/inventario?ambiente=${a.id}` }, icono('caja'), 'Inventario'));
     if (admin) {
@@ -71,8 +71,8 @@ export async function render(raiz) {
       h('dl', { class: 'amb-datos' },
         h('div', {}, h('dt', {}, 'Portero'), h('dd', {}, a.portero || 'Sin asignar')),
         h('div', {}, h('dt', {}, 'Inventario'), h('dd', {}, `${a.itemsTotal} ítems`, a.itemsNovedad ? h('span', { class: 'amb-novedad' }, ` · ${a.itemsNovedad} con novedad`) : '')),
-        h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Entrega de hoy'), h('dd', {},
-          hoy ? [chipInspeccion(ult.estado), h('span', { class: 'text-muted' }, ` ${ult.portero}${ult.instructor ? ` → ${ult.instructor}` : ''} · ${fecha.hora(ult.iniciadaEn)}`)]
+        h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Revisión de hoy'), h('dd', {},
+          hoy ? [chipInspeccion(ult.estado), h('span', { class: 'text-muted' }, ` ${ult.instructor}${ult.portero ? ` · entregó ${ult.portero}` : ''} · ${fecha.hora(ult.iniciadaEn)}`)]
             : h('span', { class: 'status-chip neutro' }, ult ? `Última: ${fecha.corta(ult.iniciadaEn)}` : 'Sin inspecciones')))),
       acciones.length ? h('div', { class: 'amb-acciones' }, acciones) : null);
   }

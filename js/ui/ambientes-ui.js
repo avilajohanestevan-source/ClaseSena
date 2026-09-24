@@ -90,12 +90,13 @@ export function tarjetaInspeccion(s, { accion } = {}) {
       h('span', { class: 'amb-numero', 'aria-hidden': 'true' }, s.ambiente.codigo),
       h('div', { class: 'insp-tarjeta-datos' },
         h('strong', {}, `Ambiente ${s.ambiente.codigo} · ${s.ambiente.nombre}`),
-        h('span', { class: 'text-muted' }, `Entrega ${s.portero.nombre}${s.instructor ? ` → ${s.instructor.nombre}` : ''} · ${fecha.corta(s.iniciadaEn)}`)),
+        h('span', { class: 'text-muted' }, `Revisó ${s.instructor.nombre}${s.portero ? ` · entregó ${s.portero.nombre}` : ''} · ${fecha.corta(s.iniciadaEn)}`)),
       chipInspeccion(s.estado)),
     h('div', { class: 'insp-tarjeta-pie' },
       chipResultado(s.resultado),
       s.danos ? h('span', { class: 'status-chip error' }, `${s.danos} daño${s.danos === 1 ? '' : 's'}${s.danosGraves ? ` (${s.danosGraves} grave)` : ''}`) : null,
       s.recibidaEn ? h('span', { class: 'text-muted insp-tarjeta-hora' }, `Recibido ${fecha.relativa(s.recibidaEn)}`)
-        : s.confirmadaEn && h('span', { class: 'text-muted insp-tarjeta-hora' }, `QR generado ${fecha.relativa(s.confirmadaEn)}`),
+        : s.qrGeneradoEn ? h('span', { class: 'text-muted insp-tarjeta-hora' }, `QR generado ${fecha.relativa(s.qrGeneradoEn)}`)
+          : s.confirmadaEn && h('span', { class: 'text-muted insp-tarjeta-hora' }, `Revisión terminada ${fecha.relativa(s.confirmadaEn)}`),
       accion || h('a', { class: 'btn btn-outline btn-sm insp-tarjeta-ir', href: `#/planilla?id=${s.id}` }, icono('archivo'), 'Ver planilla')));
 }

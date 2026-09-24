@@ -156,9 +156,9 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 | `api_tokens` | sesiones |
 | `environments` | `codigo` (107…), nombre, bloque, capacidad, `portero_id` asignado, activo |
 | `inventory_items` | ítems por ambiente; `codigo` (AMB107-003) es lo que lleva el QR `SENA-INV:<codigo>`; estado |
-| `inspections` | `environment_id`, `portero_id` (entrega), `instructor_id` (recibe), estado, resultado, `qr_token`, checklist (JSON), observaciones, `iniciada_en`, `confirmada_en`, `recibida_en`, firma del portero (PNG) y nombres |
+| `inspections` | `environment_id`, `instructor_id` (revisa y recibe), `portero_id` (entrega), estado, resultado, `qr_token`, checklist (JSON), observaciones, `iniciada_en`, `confirmada_en`, `qr_generado_en`, `recibida_en`, nombres de quien entregó y recibió |
 | `inspection_items` | daño reportado: `inspection_id` → `inventory_item_id`, tipo, severidad, comentario, foto |
-| `notifications` | `entrega_recibida` (al portero), `dano_reportado` / `dano_grave` (a coordinación cuando se recibe un ambiente con daños) |
+| `notifications` | `revision_lista` (al portero: genera el QR), `entrega_recibida` (al portero), `dano_reportado` / `dano_grave` (a coordinación cuando se recibe un ambiente con daños) |
 
 ## Sesión y perfil
 
@@ -185,32 +185,37 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 
 ## Inspecciones (entrega del ambiente)
 
-El portero revisa el ambiente con el instructor y lo entrega; el instructor
-lo recibe escaneando el QR que genera el portero.
+El instructor revisa el salón al entrar (checklist y daños con foto); el
+portero genera un QR de entrega y el instructor lo escanea para confirmar
+que recibe el ambiente.
 
 ```
-en_curso ──confirm (firma del portero, QR nuevo)──▶ pendiente_recepcion ──el instructor escanea el QR──▶ recibida
-en_curso | pendiente_recepcion ──cancel──▶ cancelada
+en_curso ──confirm (instructor termina)──▶ pendiente_recepcion ──qr (portero genera el QR)──▶ pendiente_recepcion + qrGeneradoEn
+         ──el instructor escanea el QR──▶ recibida
+en_curso | pendiente_recepcion ──cancel (instructor)──▶ cancelada
 ```
 
-`portero_id` = quien entrega (inicia la revisión); `instructor_id` = quien
-recibe (se guarda al escanear, junto con `recibida_en`).
+`instructor_id` = quien revisa y recibe; `portero_id` = quien entrega
+(genera el QR). El texto del QR (`qr`) solo lo reciben el portero y el
+administrativo, y solo mientras la entrega está pendiente: el instructor
+tiene que escanearlo en el celular del portero.
 
 | Método | Ruta | Rol | Notas |
 |---|---|---|---|
-| GET | `/inspections` | personal | Filtros: `estado, resultado, ambienteId, instructorId, desde, hasta, asignados`. El instructor solo ve las que recibió; con `asignados=1` el portero ve las suyas y las de sus ambientes |
-| POST | `/inspections` | portero | `{ambienteId}` inicia la revisión. Si ya tiene una en curso en ese ambiente la retoma; si el ambiente está en revisión o esperando al instructor → `409 EN_CURSO` |
-| GET | `/inspections/{id}` | personal | Detalle: checklist, inventario (con `reportado`), `reportes`, `firmaPortero`, `firmaInstructor` |
+| GET | `/inspections` | personal | Filtros: `estado, resultado, ambienteId, instructorId, desde, hasta, asignados`. El instructor solo ve las suyas; con `asignados=1` el portero ve las que entregó y las de sus ambientes |
+| POST | `/inspections` | instructor | `{ambienteId}` inicia la revisión. Si ya tiene una abierta en ese ambiente la devuelve; si es de otro instructor → `409 EN_CURSO` |
+| GET | `/inspections/{id}` | personal | Detalle: checklist, inventario (con `reportado`), `reportes`, `entrega` y `recibe` (`{nombre, fecha}`) |
 | GET | `/inspections/by-qr/{token}` | portero, administrativo | Consulta por el QR `SENA-INSP:<token>` |
-| PATCH | `/inspections/{id}/checklist` | portero dueño | `{checklist:[{clave, ok}], observaciones}` (guardado automático) |
-| POST | `/inspections/{id}/items` | portero dueño | `{itemId \| codigo, tipoDano, severidad, comentario, foto?}` crea `inspection_items` y deja el ítem `danado` en el inventario. Foto (data URL JPG/PNG/WebP, ≤ 3 MB) obligatoria si es `grave` |
-| DELETE | `/inspections/{id}/items/{reporteId}` | portero dueño | Quita el reporte y restaura el estado del ítem |
-| POST | `/inspections/{id}/confirm` | portero dueño | `{checklist, observaciones?, firma, nombreFirma}`. Checklist completo; observaciones obligatorias si hay novedad. → `pendiente_recepcion` con un `qr` nuevo |
-| POST | `/inspections/by-qr/{token}/receive` | instructor | Sin cuerpo. → `recibida`, guarda `instructor_id` y la hora; notifica al portero y, si hay daños o novedades, a los administrativos (coordinación). QR ya usado por otro → `409`; QR viejo o inexistente → `404` |
-| POST | `/inspections/{id}/cancel` | portero dueño | En revisión o esperando al instructor. Deshace los reportes |
+| PATCH | `/inspections/{id}/checklist` | instructor dueño | `{checklist:[{clave, ok}], observaciones}` (guardado automático) |
+| POST | `/inspections/{id}/items` | instructor dueño | `{itemId \| codigo, tipoDano, severidad, comentario, foto}` crea `inspection_items` y deja el ítem `danado` en el inventario. La foto (data URL JPG/PNG/WebP, ≤ 3 MB) es la evidencia y siempre es obligatoria |
+| DELETE | `/inspections/{id}/items/{reporteId}` | instructor dueño | Quita el reporte y restaura el estado del ítem |
+| POST | `/inspections/{id}/confirm` | instructor dueño | `{checklist, observaciones?}` termina la revisión. Checklist completo; observaciones obligatorias si hay novedad. Notifica al portero del ambiente (o a todos si no tiene) |
+| POST | `/inspections/{id}/qr` | portero | Genera (o renueva) el QR de entrega; guarda `portero_id`. Antes de que el instructor termine → `409` |
+| POST | `/inspections/by-qr/{token}/receive` | instructor | Sin cuerpo. → `recibida` con la hora; notifica al portero y, si hay daños o novedades, a los administrativos (coordinación). QR de otro instructor → `403`; QR viejo o inexistente → `404` |
+| POST | `/inspections/{id}/cancel` | instructor dueño | Mientras no haya recibido el ambiente. Deshace los reportes |
 
 `tipoDano` ∈ `rotura | no_funciona | faltante | suciedad | otro`;
-`severidad` ∈ `leve | moderada | grave`; firma: data URL PNG ≤ 400 KB.
+`severidad` ∈ `leve | moderada | grave`.
 
 ## Notificaciones y reportes
 

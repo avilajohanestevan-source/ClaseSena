@@ -3,11 +3,12 @@
 -- este archivo y luego seed.sql en phpMyAdmin.
 --
 -- Flujo que modela (entrega del ambiente al instructor):
---   el portero inicia la revisión del ambiente       → inspections (en_curso, portero_id)
---   reporta daños de ítems del inventario            → inspection_items → inventory_items (estado 'danado')
---   confirma la entrega y firma: se genera un QR     → inspections (pendiente_recepcion, qr_token nuevo)
---   el instructor escanea el QR y recibe el ambiente → inspections (recibida, instructor_id)
---                                                      + notifications al portero y, si hay daños, a coordinación
+--   el instructor revisa el salón al entrar           → inspections (en_curso, instructor_id)
+--   escanea los ítems dañados y deja foto              → inspection_items → inventory_items (estado 'danado')
+--   termina la revisión                                → inspections (pendiente_recepcion) + notifications al portero
+--   el portero genera el QR de entrega                 → inspections (portero_id, qr_token nuevo, qr_generado_en)
+--   el instructor escanea el QR y confirma que recibe  → inspections (recibida, recibida_en)
+--                                                        + notifications al portero y, si hay daños, a coordinación
 
 CREATE DATABASE IF NOT EXISTS sena_ambientes CHARACTER SET utf8mb4 COLLATE utf8mb4_spanish_ci;
 USE sena_ambientes;
@@ -71,20 +72,21 @@ CREATE TABLE inventory_items (
 CREATE TABLE inspections (
   id                       INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   environment_id           INT UNSIGNED NOT NULL,
-  portero_id               INT UNSIGNED NOT NULL,   -- quien revisa y entrega el ambiente
-  instructor_id            INT UNSIGNED NULL,       -- quien lo recibe (al escanear el QR)
+  instructor_id            INT UNSIGNED NOT NULL,   -- quien revisa y recibe el ambiente
+  portero_id               INT UNSIGNED NULL,       -- quien lo entrega (genera el QR)
   estado                   ENUM('en_curso','pendiente_recepcion','recibida','cancelada') NOT NULL DEFAULT 'en_curso',
   resultado                ENUM('ok','con_danos') NULL,
   qr_token                 CHAR(16)     NOT NULL,   -- QR de la entrega: SENA-INSP:<qr_token> (se regenera al confirmar)
   checklist                JSON         NULL,       -- [{clave, etiqueta, ok}]
   observaciones            VARCHAR(500) NULL,
   iniciada_en              DATETIME     NOT NULL,
-  confirmada_en            DATETIME     NULL,       -- el portero confirma la entrega
+  confirmada_en            DATETIME     NULL,       -- el instructor termina la revisión
+  qr_generado_en           DATETIME     NULL,       -- el portero genera el QR de entrega
   recibida_en              DATETIME     NULL,       -- el instructor escanea el QR
-  firma_portero            MEDIUMTEXT   NULL,       -- data URL PNG
-  firma_portero_nombre     VARCHAR(120) NULL,
-  firma_instructor         MEDIUMTEXT   NULL,       -- sin imagen: el instructor confirma con el QR
-  firma_instructor_nombre  VARCHAR(120) NULL,
+  firma_portero            MEDIUMTEXT   NULL,       -- (sin uso: la constancia es el QR)
+  firma_portero_nombre     VARCHAR(120) NULL,       -- nombre de quien entregó
+  firma_instructor         MEDIUMTEXT   NULL,       -- (sin uso: la constancia es el QR)
+  firma_instructor_nombre  VARCHAR(120) NULL,       -- nombre de quien recibió
   UNIQUE KEY uq_insp_qr (qr_token),
   KEY ix_insp_env (environment_id, iniciada_en),
   KEY ix_insp_estado (estado),
@@ -112,7 +114,7 @@ CREATE TABLE inspection_items (
 CREATE TABLE notifications (
   id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id        INT UNSIGNED NOT NULL,
-  tipo           ENUM('entrega_recibida','dano_reportado','dano_grave') NOT NULL,
+  tipo           ENUM('revision_lista','entrega_recibida','dano_reportado','dano_grave') NOT NULL,
   titulo         VARCHAR(160) NOT NULL,
   detalle        VARCHAR(300) NOT NULL,
   inspection_id  INT UNSIGNED NULL,

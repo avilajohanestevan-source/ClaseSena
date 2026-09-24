@@ -199,16 +199,6 @@ function guardarFoto(string $dataUrl): string
     return CARPETA_FOTOS . '/' . $nombre;
 }
 
-/** Valida una firma (data URL PNG del lienzo). */
-function validarFirma($firma): string
-{
-    if (!is_string($firma) || !preg_match('#^data:image/png;base64,[A-Za-z0-9+/=]+$#', $firma)) {
-        fallar(422, 'Falta la firma.', 'VALIDACION');
-    }
-    if (strlen($firma) > MAX_FIRMA_BYTES) fallar(422, 'La firma es demasiado grande.', 'VALIDACION');
-    return $firma;
-}
-
 function notificar(int $userId, string $tipo, string $titulo, string $detalle, ?int $inspeccionId): void
 {
     insertar(

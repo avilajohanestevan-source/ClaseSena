@@ -23,11 +23,11 @@ test('QR de inspección: exige el prefijo y 16 caracteres', () => {
   assert.equal(leerQrInspeccion('SENA-INV:AMB107-003'), null);
 });
 
-test('reporte de daño: campos obligatorios y foto solo si es grave', () => {
-  const base = { itemId: 5, tipoDano: 'rotura', severidad: 'leve', comentario: 'Pantalla con una grieta', foto: null };
+test('reporte de daño: campos obligatorios y foto de evidencia siempre', () => {
+  const base = { itemId: 5, tipoDano: 'rotura', severidad: 'leve', comentario: 'Pantalla con una grieta', foto: 'data:image/jpeg;base64,xx' };
   assert.deepEqual(validarReporteDano(base), {});
-  assert.ok(validarReporteDano({ ...base, severidad: 'grave' }).foto);
-  assert.deepEqual(validarReporteDano({ ...base, severidad: 'grave', foto: 'data:image/jpeg;base64,xx' }), {});
+  assert.ok(validarReporteDano({ ...base, foto: null }).foto);
+  assert.deepEqual(validarReporteDano({ ...base, severidad: 'grave' }), {});
   const e = validarReporteDano({ itemId: null, tipoDano: 'x', severidad: '', comentario: 'corto' });
   assert.ok(e.itemId && e.tipoDano && e.severidad && e.comentario);
 });

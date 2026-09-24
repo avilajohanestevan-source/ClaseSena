@@ -31,7 +31,7 @@ export async function render(raiz) {
       h('div', { class: 'filtros' },
         campoFecha('desde', 'Desde'), campoFecha('hasta', 'Hasta'),
         campoSel('ambienteId', 'Ambiente', ambientes.map((a) => h('option', { value: a.id }, `${a.codigo} · ${a.nombre}`))),
-        campoSel('instructorId', 'Instructor que recibió', instructores.map((i) => h('option', { value: i.id }, i.nombre))))),
+        campoSel('instructorId', 'Instructor', instructores.map((i) => h('option', { value: i.id }, i.nombre))))),
     cuerpo);
 
   async function cargar() {
@@ -62,20 +62,20 @@ export async function render(raiz) {
       h('section', { class: 'card' },
         h('h3', { class: 'bloque-titulo' }, `Daños reportados (${rep.danos.length})`),
         rep.danos.length ? h('div', { class: 'table-wrap' }, h('table', {},
-          h('thead', {}, h('tr', {}, ['Fecha', 'Ambiente', 'Ítem', 'Tipo', 'Severidad', 'Comentario', 'Estado actual', 'Entregó', 'Recibió', ''].map((t) => h('th', {}, t)))),
+          h('thead', {}, h('tr', {}, ['Fecha', 'Ambiente', 'Ítem', 'Tipo', 'Severidad', 'Comentario', 'Estado actual', 'Reportó', 'Entregó', ''].map((t) => h('th', {}, t)))),
           h('tbody', {}, rep.danos.map((x) => h('tr', {},
             h('td', { class: 'celda-fecha' }, fecha.corta(x.reportadoEn)), h('td', {}, x.ambiente),
             h('td', {}, h('strong', {}, x.item), h('div', { class: 'celda-detalle mono' }, x.codigo)),
             h('td', {}, etiquetaTipoDano(x.tipoDano)), h('td', {}, chipSeveridad(x.severidad)),
-            h('td', { class: 'celda-larga' }, x.comentario), h('td', {}, chipItem(x.estadoActual)), h('td', {}, x.portero), h('td', {}, x.instructor || '—'),
+            h('td', { class: 'celda-larga' }, x.comentario), h('td', {}, chipItem(x.estadoActual)), h('td', {}, x.instructor), h('td', {}, x.portero || '—'),
             h('td', {}, h('a', { class: 'table-link', href: `#/planilla?id=${x.inspeccionId}` }, 'Planilla')))))))
           : vacio('Sin daños en el periodo', '', 'check')),
       h('section', { class: 'card' },
         h('h3', { class: 'bloque-titulo' }, `Inspecciones (${inspecciones.length})`),
         inspecciones.length ? h('div', { class: 'table-wrap' }, h('table', {},
-          h('thead', {}, h('tr', {}, ['Inicio', 'Ambiente', 'Entregó', 'Recibió', 'Estado', 'Resultado', 'Daños', 'Hora de recibo', ''].map((t) => h('th', {}, t)))),
+          h('thead', {}, h('tr', {}, ['Inicio', 'Ambiente', 'Revisó y recibió', 'Entregó', 'Estado', 'Resultado', 'Daños', 'Hora de recibo', ''].map((t) => h('th', {}, t)))),
           h('tbody', {}, inspecciones.map((s) => h('tr', {},
-            h('td', { class: 'celda-fecha' }, fecha.corta(s.iniciadaEn)), h('td', {}, s.ambiente.codigo), h('td', {}, s.portero.nombre), h('td', {}, s.instructor?.nombre || '—'),
+            h('td', { class: 'celda-fecha' }, fecha.corta(s.iniciadaEn)), h('td', {}, s.ambiente.codigo), h('td', {}, s.instructor.nombre), h('td', {}, s.portero?.nombre || '—'),
             h('td', {}, chipInspeccion(s.estado)), h('td', {}, chipResultado(s.resultado) || '—'), h('td', {}, String(s.danos)),
             h('td', {}, s.recibidaEn ? fecha.hora(s.recibidaEn) : '—'),
             h('td', {}, h('a', { class: 'table-link', href: `#/planilla?id=${s.id}` }, 'Planilla')))))))
@@ -87,12 +87,12 @@ export async function render(raiz) {
 
   function exportar(tipo) {
     const filas = tipo === 'danos'
-      ? rep?.danos.map((x) => [x.reportadoEn, x.ambiente, x.codigo, x.item, etiquetaTipoDano(x.tipoDano), x.severidad, x.comentario, x.estadoActual, x.portero, x.instructor || '', x.inspeccionId])
-      : inspecciones.map((s) => [s.id, s.ambiente.codigo, s.portero.nombre, s.instructor?.nombre || '', ESTADOS_INSPECCION[s.estado]?.[0], s.resultado || '', s.danos, s.iniciadaEn, s.confirmadaEn || '', s.recibidaEn || '']);
+      ? rep?.danos.map((x) => [x.reportadoEn, x.ambiente, x.codigo, x.item, etiquetaTipoDano(x.tipoDano), x.severidad, x.comentario, x.estadoActual, x.instructor, x.portero || '', x.inspeccionId])
+      : inspecciones.map((s) => [s.id, s.ambiente.codigo, s.instructor.nombre, s.portero?.nombre || '', ESTADOS_INSPECCION[s.estado]?.[0], s.resultado || '', s.danos, s.iniciadaEn, s.confirmadaEn || '', s.recibidaEn || '']);
     if (!filas?.length) { toast('aviso', 'Nada para exportar', 'Ajusta los filtros.'); return; }
     const cabeza = tipo === 'danos'
-      ? ['Fecha', 'Ambiente', 'Código', 'Ítem', 'Tipo', 'Severidad', 'Comentario', 'Estado actual', 'Entregó (portero)', 'Recibió (instructor)', 'Inspección']
-      : ['Inspección', 'Ambiente', 'Entregó (portero)', 'Recibió (instructor)', 'Estado', 'Resultado', 'Daños', 'Inicio', 'Entrega confirmada', 'Recibida'];
+      ? ['Fecha', 'Ambiente', 'Código', 'Ítem', 'Tipo', 'Severidad', 'Comentario', 'Estado actual', 'Reportó (instructor)', 'Entregó (portero)', 'Inspección']
+      : ['Inspección', 'Ambiente', 'Revisó y recibió (instructor)', 'Entregó (portero)', 'Estado', 'Resultado', 'Daños', 'Inicio', 'Revisión terminada', 'Recibida'];
     const celda = (v) => { const t = String(v ?? ''); return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
     const csv = '﻿' + [cabeza, ...filas].map((fila) => fila.map(celda).join(';')).join('\n');
     descargar(`${tipo}-${f.desde || 'inicio'}-a-${f.hasta || fechaIso()}.csv`, csv, 'text/csv;charset=utf-8');

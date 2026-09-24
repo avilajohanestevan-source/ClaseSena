@@ -1,9 +1,8 @@
 // Inspecciones (entrega de ambientes) según el rol:
-//  · Portero: elige el ambiente y pulsa "Iniciar revisión"; lo revisa con el
-//    instructor, lo entrega y genera el QR. Pestañas: esperando al instructor
-//    (vuelve a mostrar el QR) y entregados hoy.
-//  · Instructor: "Recibir ambiente" escanea el QR del portero; lista de los
-//    ambientes que ha recibido.
+//  · Instructor: elige el ambiente y pulsa "Iniciar revisión"; si ya la
+//    terminó, "Escanear QR del portero" para recibirlo. Lista de sus revisiones.
+//  · Portero: pestañas "Por entregar" (revisiones terminadas: generar o
+//    mostrar el QR) y "Entregados hoy".
 //  · Administrativo: historial con filtros.
 import { h, anexar, icono, vaciar } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
@@ -19,27 +18,25 @@ const ABIERTAS = ['en_curso', 'pendiente_recepcion'];
 
 export async function render(raiz, { params, alSalir }) {
   const u = estado.usuario;
-  if (u.rol === 'portero') return portero(raiz, params, alSalir);
-  if (u.rol === 'instructor') return instructor(raiz, alSalir);
+  if (u.rol === 'instructor') return instructor(raiz, params);
+  if (u.rol === 'portero') return portero(raiz, alSalir);
   return administrativo(raiz);
 }
 
-/* ---------------- portero ---------------- */
+/* ---------------- instructor ---------------- */
 
-async function portero(raiz, params, alSalir) {
+async function instructor(raiz, params) {
   const u = estado.usuario;
-  const [ambientes, abiertas] = await Promise.all([apiAmb.ambientes(), apiAmb.inspecciones({ estado: 'en_curso' })]);
-  const enCurso = abiertas.find((s) => s.portero.id === u.id);
-  // Primero los ambientes asignados al portero.
-  const activos = ambientes.filter((a) => a.activo).sort((a, b) => (b.porteroId === u.id) - (a.porteroId === u.id));
-  const ocupado = (a) => ABIERTAS.includes(a.ultimaInspeccion?.estado);
+  const [ambientes, mias] = await Promise.all([apiAmb.ambientes(), apiAmb.inspecciones()]);
+  const enCurso = mias.find((s) => s.estado === 'en_curso');
+  const porRecibir = mias.filter((s) => s.estado === 'pendiente_recepcion');
+  const ocupado = (a) => ABIERTAS.includes(a.ultimaInspeccion?.estado) && a.ultimaInspeccion.instructorId !== u.id;
   let elegido = Number(params.get('ambiente')) || null;
-  if (!activos.some((a) => a.id === elegido && !ocupado(a))) elegido = null;
 
   const iniciar = h('button', { class: 'btn btn-primary btn-block btn-lg inicio-inspeccion', type: 'button', disabled: !elegido, onclick: () => arrancar() },
     icono('inspeccion'), h('span', {}, 'Iniciar revisión'));
-  const opciones = h('div', { class: 'amb-selector', role: 'radiogroup', 'aria-label': 'Ambiente a entregar' },
-    activos.map((a) => {
+  const opciones = h('div', { class: 'amb-selector', role: 'radiogroup', 'aria-label': 'Ambiente a revisar' },
+    ambientes.filter((a) => a.activo).map((a) => {
       const ult = a.ultimaInspeccion;
       const hoy = ult && esHoy(ult.iniciadaEn);
       return h('label', { class: `amb-opcion${ocupado(a) ? ' amb-opcion--ocupado' : ''}` },
@@ -48,9 +45,9 @@ async function portero(raiz, params, alSalir) {
           h('span', { class: 'amb-numero amb-numero--grande' }, a.codigo),
           h('span', { class: 'amb-opcion-datos' },
             h('strong', {}, a.nombre),
-            h('span', { class: 'text-muted' }, `${a.itemsTotal} ítems · ${a.porteroId === u.id ? 'asignado a ti' : (a.portero || 'sin portero')}`),
-            ocupado(a) ? h('span', { class: 'status-chip azul' }, `${ESTADOS_INSPECCION[ult.estado][0]} · ${ult.portero}`)
-              : hoy ? chipInspeccion(ult.estado) : h('span', { class: 'status-chip neutro' }, 'Sin entrega hoy')),
+            h('span', { class: 'text-muted' }, `${a.itemsTotal} ítems · ${a.bloque || ''}`),
+            ocupado(a) ? h('span', { class: 'status-chip azul' }, `${ESTADOS_INSPECCION[ult.estado][0]} · ${ult.instructor}`)
+              : hoy ? chipInspeccion(ult.estado) : h('span', { class: 'status-chip neutro' }, 'Sin revisión hoy')),
           h('span', { class: 'amb-opcion-marca', 'aria-hidden': 'true' }, icono('check'))));
     }));
 
@@ -66,6 +63,7 @@ async function portero(raiz, params, alSalir) {
     try {
       const s = await apiAmb.iniciarInspeccion(elegido);
       emitir('inspecciones');
+      if (s.estado === 'pendiente_recepcion') { location.hash = `#/planilla?id=${s.id}`; return; }
       toast('exito', `Revisión iniciada · ambiente ${s.ambiente.codigo}`, `Inicio registrado a las ${fecha.hora(s.iniciadaEn)}`);
       location.hash = `#/inspeccion?id=${s.id}`;
     } catch (e) {
@@ -75,82 +73,68 @@ async function portero(raiz, params, alSalir) {
     }
   }
 
-  let pestana = 'esperando';
+  const anteriores = mias.filter((s) => !ABIERTAS.includes(s.estado));
+  anexar(raiz,
+    cabecera({ eyebrow: 'Revisión al entrar', titulo: 'Inspecciones', subtitulo: 'Revisa el salón, reporta los daños con foto y recíbelo escaneando el QR del portero.' }),
+    porRecibir.map((s) => h('button', { class: 'accion-grande accion-grande--alerta', type: 'button', onclick: escanearEntrega, 'data-anim': '' },
+      h('span', { class: 'accion-grande-icono' }, icono('escanear')),
+      h('span', {}, h('strong', {}, `Escanear QR del portero · ambiente ${s.ambiente.codigo}`),
+        h('span', {}, s.qrGeneradoEn ? 'El portero ya generó el QR de entrega' : 'Revisión terminada: pide al portero que genere el QR')),
+      icono('flecha'))),
+    enCurso && h('a', { class: 'accion-grande accion-grande--continuar', href: `#/inspeccion?id=${enCurso.id}`, 'data-anim': '' },
+      h('span', { class: 'accion-grande-icono' }, icono('inspeccion')),
+      h('span', {}, h('strong', {}, `Tienes una revisión en curso · ambiente ${enCurso.ambiente.codigo}`),
+        h('span', {}, `Iniciada ${fecha.relativa(enCurso.iniciadaEn)}. Termínala o cancélala antes de iniciar otra.`)),
+      icono('flecha')),
+    !enCurso && h('section', { class: 'card', 'data-anim': '' },
+      h('h3', { class: 'bloque-titulo' }, 'Elige el ambiente que vas a recibir'), opciones,
+      h('div', { class: 'accion-fija' }, iniciar)),
+    h('section', { 'data-anim': '' },
+      h('h3', { class: 'bloque-titulo bloque-titulo--fuera' }, 'Mis ambientes recibidos'),
+      anteriores.length ? h('div', { class: 'insp-lista' }, anteriores.map((s) => tarjetaInspeccion(s)))
+        : vacio('Todavía no has recibido ambientes', 'Cuando escanees el QR de un portero, aparecerán aquí.', 'inspeccion')));
+  actualizar();
+  anim.entrarVista(raiz);
+}
+
+/* ---------------- portero ---------------- */
+
+async function portero(raiz, alSalir) {
+  const u = estado.usuario;
+  let pestana = 'pendientes';
   const cuerpo = h('div', { class: 'insp-lista' }, cargando());
   const pestanas = h('div', { class: 'pestanas', role: 'tablist', 'aria-label': 'Entregas' });
 
   anexar(raiz,
     cabecera({ eyebrow: 'Entrega de ambientes', titulo: 'Inspecciones',
-      subtitulo: 'Revisa el ambiente con el instructor, entrégalo y muéstrale el QR para que lo reciba.' }),
-    enCurso ? h('a', { class: 'accion-grande accion-grande--continuar', href: `#/inspeccion?id=${enCurso.id}`, 'data-anim': '' },
-      h('span', { class: 'accion-grande-icono' }, icono('inspeccion')),
-      h('span', {}, h('strong', {}, `Tienes una revisión en curso · ambiente ${enCurso.ambiente.codigo}`),
-        h('span', {}, `Iniciada ${fecha.relativa(enCurso.iniciadaEn)}. Termínala para generar el QR.`)),
-      icono('flecha'))
-      : h('section', { class: 'card', 'data-anim': '' },
-        h('h3', { class: 'bloque-titulo' }, 'Elige el ambiente que vas a entregar'), opciones,
-        h('div', { class: 'accion-fija' }, iniciar)),
+      subtitulo: 'Cuando el instructor termine la revisión, genera el QR de entrega y muéstraselo para que lo escanee.' }),
     h('div', { class: 'barra-filtros', 'data-anim': '' }, pestanas),
     cuerpo);
 
   async function cargar() {
     vaciar(cuerpo, cargando());
-    let esperando, entregados;
+    let pendientes, entregados;
     try {
-      [esperando, entregados] = await Promise.all([
-        apiAmb.inspecciones({ estado: 'pendiente_recepcion', asignados: 1 }),
+      [pendientes, entregados] = await Promise.all([
+        apiAmb.inspecciones({ estado: 'pendiente_recepcion' }),
         apiAmb.inspecciones({ estado: 'recibida', desde: fechaIso(), asignados: 1 }),
       ]);
     } catch (e) { vaciar(cuerpo, tarjetaError(e, cargar)); return; }
+    // Primero las de los ambientes asignados a este portero.
+    pendientes.sort((a, b) => (b.ambiente.porteroId === u.id) - (a.ambiente.porteroId === u.id));
     const tab = (clave, texto, n) => h('button', {
       class: 'pestana', type: 'button', role: 'tab', 'aria-selected': String(pestana === clave),
       onclick: () => { pestana = clave; cargar(); },
     }, texto, h('span', { class: 'pestana-cuenta' }, n));
-    vaciar(pestanas, tab('esperando', 'Esperando al instructor', esperando.length), tab('entregados', 'Entregados hoy', entregados.length));
-    const lista = pestana === 'esperando' ? esperando : entregados;
-    vaciar(cuerpo, lista.length ? lista.map((s) => tarjetaInspeccion(s, pestana === 'esperando' && s.portero.id === u.id ? {
-      accion: h('a', { class: 'btn btn-primary btn-sm insp-tarjeta-ir', href: `#/planilla?id=${s.id}` }, icono('qr'), 'Mostrar QR'),
-    } : {})) : vacio(pestana === 'esperando' ? 'No hay entregas esperando al instructor' : 'Aún no has entregado ambientes hoy',
-      pestana === 'esperando' ? 'Cuando confirmes una entrega, su QR queda aquí hasta que el instructor lo escanee.' : '', 'portero'));
+    vaciar(pestanas, tab('pendientes', 'Por entregar', pendientes.length), tab('entregados', 'Entregados hoy', entregados.length));
+    const lista = pestana === 'pendientes' ? pendientes : entregados;
+    vaciar(cuerpo, lista.length ? lista.map((s) => tarjetaInspeccion(s, pestana === 'pendientes' ? {
+      accion: h('a', { class: 'btn btn-primary btn-sm insp-tarjeta-ir', href: `#/planilla?id=${s.id}` }, icono('qr'), s.qrGeneradoEn ? 'Mostrar QR' : 'Generar QR'),
+    } : {})) : vacio(pestana === 'pendientes' ? 'No hay ambientes por entregar' : 'Aún no has entregado ambientes hoy',
+      pestana === 'pendientes' ? 'Te avisaremos cuando un instructor termine la revisión de un ambiente.' : '', 'portero'));
     anim.lista(cuerpo.children);
   }
 
-  actualizar();
-  alSalir(escuchar('bandeja', cargar));
-  await cargar();
-  anim.entrarVista(raiz);
-}
-
-/* ---------------- instructor ---------------- */
-
-async function instructor(raiz, alSalir) {
-  const cuerpo = h('div', { class: 'insp-instructor' }, cargando());
-  anexar(raiz,
-    cabecera({ eyebrow: 'Recepción de ambientes', titulo: 'Inspecciones',
-      subtitulo: 'Revisa el salón con el portero y escanea el QR que te muestra para recibirlo.' }),
-    h('button', { class: 'accion-grande', type: 'button', onclick: escanearEntrega, 'data-anim': '' },
-      h('span', { class: 'accion-grande-icono' }, icono('escanear')),
-      h('span', {}, h('strong', {}, 'Recibir ambiente'), h('span', {}, 'Escanea el QR del portero')),
-      icono('flecha')),
-    cuerpo);
-
-  async function cargar() {
-    let ambientes, mias;
-    try { [ambientes, mias] = await Promise.all([apiAmb.ambientes(), apiAmb.inspecciones()]); } catch (e) { vaciar(cuerpo, tarjetaError(e, cargar)); return; }
-    const listos = ambientes.filter((a) => a.ultimaInspeccion?.estado === 'pendiente_recepcion');
-    vaciar(cuerpo,
-      listos.length ? h('section', { class: 'card' },
-        h('h3', { class: 'bloque-titulo' }, 'Listos para recibir'),
-        h('ul', { class: 'lista-ambientes' }, listos.map((a) => h('li', { class: 'fila-ambiente' },
-          h('span', { class: 'amb-numero' }, a.codigo),
-          h('div', { class: 'fila-ambiente-datos' }, h('strong', {}, a.nombre), h('span', { class: 'text-muted' }, `Entrega ${a.ultimaInspeccion.portero}`)),
-          h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: escanearEntrega, 'aria-label': `Recibir ambiente ${a.codigo}` }, icono('escanear'), 'Escanear'))))) : null,
-      h('section', {},
-        h('h3', { class: 'bloque-titulo bloque-titulo--fuera' }, 'Ambientes que he recibido'),
-        mias.length ? h('div', { class: 'insp-lista' }, mias.map((s) => tarjetaInspeccion(s)))
-          : vacio('Todavía no has recibido ambientes', 'Cuando escanees el QR de un portero, aparecerá aquí.', 'inspeccion')));
-    anim.lista(cuerpo.children);
-  }
   alSalir(escuchar('bandeja', cargar));
   await cargar();
   anim.entrarVista(raiz);

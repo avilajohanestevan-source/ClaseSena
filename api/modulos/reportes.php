@@ -46,8 +46,8 @@ function rutaReporte(): never
          JOIN inspections s ON s.id = d.inspection_id
          JOIN inventory_items it ON it.id = d.inventory_item_id
          JOIN environments e ON e.id = s.environment_id
-         JOIN users p ON p.id = s.portero_id
-         LEFT JOIN users u ON u.id = s.instructor_id
+         JOIN users u ON u.id = s.instructor_id
+         LEFT JOIN users p ON p.id = s.portero_id
          WHERE $w ORDER BY d.reportado_en DESC LIMIT 300",
         $params
     );

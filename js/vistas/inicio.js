@@ -1,6 +1,6 @@
 // Inicio según el rol:
-//  · Instructor: botón grande "Recibir ambiente" (escanea el QR del portero) y lo que ha recibido.
-//  · Portero: entregar un ambiente (o continuar la revisión), entregas esperando al instructor y sus ambientes.
+//  · Instructor: revisar el ambiente (o continuarlo), escanear el QR del portero y lo que ha recibido.
+//  · Portero: ambientes por entregar (generar o mostrar el QR) y sus ambientes asignados.
 //  · Administrativo: indicadores del día y estado de los ambientes.
 //  · Aprendiz: estado de los ambientes y acceso a registrar asistencia.
 import { h, anexar, icono, vaciar } from '../ui/dom.js';
@@ -34,8 +34,8 @@ export async function render(raiz, { alSalir }) {
 }
 
 const SUBTITULO = {
-  instructor: 'Recibe el ambiente escaneando el QR del portero antes de empezar la formación.',
-  portero: 'Revisa los ambientes con el instructor y entrégalos con un QR.',
+  instructor: 'Revisa el salón al entrar y recíbelo escaneando el QR del portero.',
+  portero: 'Entrega los ambientes con un QR cuando el instructor termine la revisión.',
   administrativo: 'Así van las entregas de ambientes hoy.',
   aprendiz: 'Consulta el estado de los ambientes de formación.',
 };
@@ -43,7 +43,7 @@ const SUBTITULO = {
 /** Estado de hoy de un ambiente, para las listas. */
 function estadoHoy(a) {
   const ult = a.ultimaInspeccion;
-  if (!ult || !esHoy(ult.iniciadaEn)) return h('span', { class: 'status-chip neutro' }, 'Sin entrega hoy');
+  if (!ult || !esHoy(ult.iniciadaEn)) return h('span', { class: 'status-chip neutro' }, 'Sin revisión hoy');
   return chipInspeccion(ult.estado);
 }
 
@@ -58,53 +58,54 @@ function listaAmbientes(ambientes, accion) {
 
 async function instructor() {
   const [mias, ambientes] = await Promise.all([apiAmb.inspecciones(), apiAmb.ambientes()]);
-  const listos = ambientes.filter((a) => a.ultimaInspeccion?.estado === 'pendiente_recepcion');
-  const recientes = mias.slice(0, 3);
-  return [
-    h('button', { class: `accion-grande${listos.length ? ' accion-grande--alerta' : ''}`, type: 'button', onclick: escanearEntrega, 'data-anim': '' },
+  const actual = mias.find((s) => s.estado === 'en_curso');
+  const porRecibir = mias.find((s) => s.estado === 'pendiente_recepcion');
+  const cta = porRecibir
+    ? h('button', { class: 'accion-grande accion-grande--alerta', type: 'button', onclick: escanearEntrega },
       h('span', { class: 'accion-grande-icono' }, icono('escanear')),
-      h('span', {}, h('strong', {}, 'Recibir ambiente'),
-        h('span', {}, listos.length ? `${listos.map((a) => a.codigo).join(', ')} listo${listos.length === 1 ? '' : 's'} para recibir · escanea el QR del portero` : 'Escanea el QR que te muestra el portero')),
-      icono('flecha')),
+      h('span', {}, h('strong', {}, `Escanear QR del portero · ambiente ${porRecibir.ambiente.codigo}`),
+        h('span', {}, porRecibir.qrGeneradoEn ? 'El QR de entrega ya está listo' : 'Pide al portero que genere el QR de entrega')),
+      icono('flecha'))
+    : actual
+      ? h('a', { class: 'accion-grande accion-grande--continuar', href: `#/inspeccion?id=${actual.id}` },
+        h('span', { class: 'accion-grande-icono' }, icono('inspeccion')),
+        h('span', {}, h('strong', {}, `Continuar revisión · ambiente ${actual.ambiente.codigo}`),
+          h('span', {}, `Iniciada ${fecha.relativa(actual.iniciadaEn)}`)),
+        icono('flecha'))
+      : h('a', { class: 'accion-grande', href: '#/inspecciones' },
+        h('span', { class: 'accion-grande-icono' }, icono('inspeccion')),
+        h('span', {}, h('strong', {}, 'Revisar el ambiente'), h('span', {}, 'Verifica cada elemento antes de recibir el salón')),
+        icono('flecha'));
+  const recientes = mias.filter((s) => s.estado === 'recibida').slice(0, 3);
+  return [
+    h('div', { 'data-anim': '' }, cta),
     h('section', { class: 'card', 'data-anim': '' },
       h('h3', { class: 'bloque-titulo' }, 'Estado de los ambientes hoy'),
-      listaAmbientes(ambientes, (a) => a.ultimaInspeccion?.estado === 'pendiente_recepcion'
-        && h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: escanearEntrega, 'aria-label': `Recibir ambiente ${a.codigo}` }, icono('escanear'), 'Recibir'))),
+      listaAmbientes(ambientes, (a) => !actual && !porRecibir && !['en_curso', 'pendiente_recepcion'].includes(a.ultimaInspeccion?.estado)
+        && h('a', { class: 'btn btn-outline btn-sm', href: `#/inspecciones?ambiente=${a.id}`, 'aria-label': `Revisar ambiente ${a.codigo}` }, 'Revisar'))),
     h('section', { 'data-anim': '' },
       h('h3', { class: 'bloque-titulo bloque-titulo--fuera' }, 'Ambientes que he recibido'),
       recientes.length ? h('div', { class: 'insp-lista' }, recientes.map((s) => tarjetaInspeccion(s)))
-        : vacio('Aún no has recibido ambientes', 'Cuando escanees el QR de un portero, aparecerá aquí.', 'inspeccion')),
+        : vacio('Aún no has recibido ambientes', 'Cuando escanees el QR de un portero, aparecerán aquí.', 'inspeccion')),
   ];
 }
 
-async function portero(u) {
-  const [abiertas, ambientes] = await Promise.all([
-    apiAmb.inspecciones({ asignados: 1 }), apiAmb.ambientes({ asignados: 1 }),
+async function portero() {
+  const [pendientes, ambientes] = await Promise.all([
+    apiAmb.inspecciones({ estado: 'pendiente_recepcion', asignados: 1 }), apiAmb.ambientes({ asignados: 1 }),
   ]);
-  const enCurso = abiertas.find((s) => s.estado === 'en_curso' && s.portero.id === u.id);
-  const esperando = abiertas.filter((s) => s.estado === 'pendiente_recepcion');
-  const cta = enCurso
-    ? h('a', { class: 'accion-grande accion-grande--continuar', href: `#/inspeccion?id=${enCurso.id}` },
-      h('span', { class: 'accion-grande-icono' }, icono('inspeccion')),
-      h('span', {}, h('strong', {}, `Continuar revisión · ambiente ${enCurso.ambiente.codigo}`),
-        h('span', {}, `Iniciada ${fecha.relativa(enCurso.iniciadaEn)}`)),
-      icono('flecha'))
-    : h('a', { class: 'accion-grande', href: '#/inspecciones' },
-      h('span', { class: 'accion-grande-icono' }, icono('inspeccion')),
-      h('span', {}, h('strong', {}, 'Entregar un ambiente'), h('span', {}, 'Revísalo con el instructor y genera el QR')),
-      icono('flecha'));
   return [
-    h('div', { 'data-anim': '' }, cta),
-    esperando.length ? h('section', { 'data-anim': '' },
-      h('h3', { class: 'bloque-titulo bloque-titulo--fuera' }, 'Esperando al instructor'),
-      h('div', { class: 'insp-lista' }, esperando.map((s) => tarjetaInspeccion(s, s.portero.id === u.id ? {
-        accion: h('a', { class: 'btn btn-primary btn-sm insp-tarjeta-ir', href: `#/planilla?id=${s.id}` }, icono('qr'), 'Mostrar QR'),
-      } : {})))) : null,
+    h('a', { class: `accion-grande${pendientes.length ? ' accion-grande--alerta' : ''}`, href: '#/inspecciones', 'data-anim': '' },
+      h('span', { class: 'accion-grande-numero' }, String(pendientes.length)),
+      h('span', {}, h('strong', {}, pendientes.length === 1 ? 'Ambiente por entregar' : 'Ambientes por entregar'),
+        h('span', {}, pendientes.length ? 'Genera el QR de entrega para el instructor' : 'No tienes pendientes por ahora')),
+      icono('flecha')),
+    pendientes.length ? h('div', { class: 'insp-lista', 'data-anim': '' }, pendientes.map((s) => tarjetaInspeccion(s, {
+      accion: h('a', { class: 'btn btn-primary btn-sm insp-tarjeta-ir', href: `#/planilla?id=${s.id}` }, icono('qr'), s.qrGeneradoEn ? 'Mostrar QR' : 'Generar QR'),
+    }))) : null,
     h('section', { class: 'card', 'data-anim': '' },
       h('h3', { class: 'bloque-titulo' }, 'Mis ambientes asignados'),
-      ambientes.length ? listaAmbientes(ambientes, (a) => !['en_curso', 'pendiente_recepcion'].includes(a.ultimaInspeccion?.estado)
-        && h('a', { class: 'btn btn-outline btn-sm', href: `#/inspecciones?ambiente=${a.id}`, 'aria-label': `Entregar ambiente ${a.codigo}` }, 'Entregar'))
-        : vacio('No tienes ambientes asignados', 'Coordinación te los asigna en Ambientes.', 'ambiente')),
+      ambientes.length ? listaAmbientes(ambientes) : vacio('No tienes ambientes asignados', 'Coordinación te los asigna en Ambientes.', 'ambiente')),
   ];
 }
 
@@ -118,8 +119,8 @@ async function administrativo() {
     h('span', { class: 'adm-kpi-icono' }, icono(ic)), h('span', { class: 'adm-kpi-etiqueta' }, etiqueta),
     h('strong', { class: 'adm-kpi-valor', 'data-valor': valor }, '0'));
   const kpis = h('section', { class: 'adm-kpis', 'data-anim': '', 'aria-label': 'Indicadores de hoy' },
-    kpi(r.total, 'Entregas hoy', 'notis', 'inspeccion'),
-    kpi(r.pendientes, 'Esperando instructor', 'canceladas', 'portero'),
+    kpi(r.total, 'Revisiones hoy', 'notis', 'inspeccion'),
+    kpi(r.pendientes, 'Por entregar', 'canceladas', 'portero'),
     kpi(r.conDanos, 'Con novedades', 'riesgo', 'alerta'),
     kpi(r.danos, 'Daños reportados', 'total', 'herramienta'));
   setTimeout(() => kpis.querySelectorAll('[data-valor]').forEach((el) => anim.contar(el, Number(el.dataset.valor))), 0);

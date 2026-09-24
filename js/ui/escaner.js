@@ -2,7 +2,7 @@
 // barras. Usa BarcodeDetector nativo si el navegador lo trae; si no, jsQR
 // para QR y ZXing para códigos de barras. Siempre ofrece alternativas sin
 // cámara: subir una foto del código o escribirlo.
-import { h, icono } from './dom.js';
+import { h, icono, vibrar } from './dom.js';
 
 const FORMATOS_NATIVOS = { qr: ['qr_code'], barras: ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a'] };
 
@@ -121,7 +121,7 @@ export function crearEscaner({ tipos, alLeer, etiqueta = 'Escanear', manual = tr
     const texto = await decodificarCanvas(canvas, tipos, nativo);
     ocupado = false;
     if (texto && flujo) {
-      navigator.vibrate?.(60);
+      vibrar(60);
       entregar(texto);
     }
   }

@@ -5,8 +5,9 @@ de formación, más el módulo de **asistencia a clases** que ya existía.
 
 - **Entrega y revisión de ambientes** (backend real: PHP + MySQL de XAMPP):
   login por rol, perfiles, CRUD de ambientes e inventario, revisión del
-  ambiente por el portero (checklist y daños con foto), entrega con QR que
-  el instructor escanea para recibirlo, avisos a coordinación y reportes.
+  salón por el instructor (checklist y daños con foto de evidencia), QR de
+  entrega que genera el portero y el instructor escanea para recibirlo,
+  avisos a coordinación y reportes.
 - **Asistencia a clases** (QR de clase, semáforo de faltas, P004): sigue
   con datos simulados en el navegador (`js/api/mock`), como antes.
 
@@ -55,25 +56,29 @@ anteriores para que los reportes tengan datos.
 
 ## Flujo de la demostración
 
-1. **Portero** (4040404040) → *Inspecciones* → elige el ambiente 107 →
-   **Iniciar revisión** (se registra la hora de inicio). Lo revisa con el
-   instructor en el salón:
+1. **Instructor** (1010101010) → *Inspecciones* → elige el ambiente 107 →
+   **Iniciar revisión** (se registra la hora). Al entrar al salón revisa
+   cada elemento:
    - marca el checklist (Bien / Novedad);
-   - si hay un daño, **Escanear QR de ítem** (etiquetas en *Inventario →
-     Etiquetas QR*, o escribe el código, p. ej. `AMB107-005`) y llena tipo,
-     severidad, foto y comentario. El ítem queda *Dañado* en el inventario.
-2. **Entregar y generar QR**: el portero firma y aparece un **QR grande**
-   con "Esperando que el instructor lo escanee…".
-3. **Instructor** (1010101010) → *Recibir ambiente* (en Inicio o
-   Inspecciones) → escanea el QR del portero (o escribe `SENA-INSP:…`).
-4. Al escanear queda guardado automáticamente quién entregó (`portero_id`),
-   quién recibió (`instructor_id`), las horas de inicio, entrega y
-   recepción, el checklist y el estado de los ítems. La pantalla del portero
-   cambia sola a **"Ambiente entregado"**.
-5. Si había daños o novedades, **coordinación** (administrativo 2020202020)
+   - si algo está dañado (mouse, teclado, silla, mesa, computador…),
+     **Escanear QR de ítem** (etiquetas en *Inventario → Etiquetas QR*, o
+     escribe el código, p. ej. `AMB107-005`), toma la **foto de evidencia**
+     y llena tipo, severidad y comentario. El ítem queda *Dañado* en el
+     inventario.
+2. **Terminar revisión**: se avisa al portero del ambiente.
+3. **Portero** (4040404040) → *Inspecciones → Por entregar* → **Generar QR
+   de entrega**. Aparece un QR grande con "Esperando que el instructor lo
+   escanee…".
+4. El instructor pulsa **Escanear QR del portero** (en Inicio, Inspecciones
+   o la planilla) y lo escanea (o escribe `SENA-INSP:…`).
+5. Queda guardado automáticamente quién revisó y recibió (`instructor_id`),
+   quién entregó (`portero_id`), las horas de cada paso, el checklist y los
+   daños con foto. La pantalla del portero cambia sola a **"Ambiente
+   entregado"**.
+6. Si había daños o novedades, **coordinación** (administrativo 2020202020)
    recibe la notificación; el inventario ya muestra los ítems dañados.
-6. El administrativo consulta el historial en *Inspecciones* y genera
-   **Reportes** (CSV o impresión) con quién entregó y quién recibió.
+7. El administrativo consulta el historial en *Inspecciones* y genera
+   **Reportes** (CSV o impresión).
 
 Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
 
@@ -92,13 +97,13 @@ Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
   en el login las dos piezas del fondo regresan y la tarjeta sube con un
   micro-rebote (inverso de la animación de ingreso).
 - Ítems según el rol, indicador animado de la sección actual, insignias
-  (entregas esperando al instructor), foco atrapado mientras está abierto
+  (revisiones por entregar o en proceso), foco atrapado mientras está abierto
   y áreas táctiles de 44 px.
 
 | Sección | Instructor | Portero | Administrativo | Aprendiz |
 |---|---|---|---|---|
 | Inicio, Mi perfil, Ambientes, Ajustes | ✓ | ✓ | ✓ (CRUD de ambientes) | ✓ |
-| Inspecciones | Recibir el ambiente (escanear QR) | Revisar, entregar y mostrar el QR | Historial | — |
+| Inspecciones | Revisar, reportar daños y escanear el QR | Generar y mostrar el QR de entrega | Historial | — |
 | Inventario | Consulta y QR | Consulta y QR | CRUD | — |
 | Reportes | — | — | ✓ | — |
 | Asistencia (datos simulados) | Clases, historial | — | Semáforo, P004, historial | Registrar asistencia |
@@ -124,7 +129,7 @@ js/api/ambientes.js     Funciones del backend real (entrega y revisión de ambie
 js/api/contratos.js     Funciones de la API de asistencia
 js/api/cliente.js       fetch al backend real y al servidor simulado
 js/api/mock/            Datos de prueba y servidor simulado de asistencia
-js/ui/                  Menú lateral, bandeja, firma, escáner, cámara, avisos, animaciones
+js/ui/                  Menú lateral, bandeja, selector de rol, recepción con QR, escáner, cámara, avisos, animaciones
 js/vistas/              Una vista por ruta
 vendor/                 Librerías (GSAP, ZXing, jsQR, qrcode.js)
 tests/                  Pruebas (npm test y npm run test:api)

@@ -63,12 +63,12 @@ SET @checklist_ok = '[{"clave":"aseo","etiqueta":"Aseo y orden","ok":true},{"cla
 SET @checklist_novedad = REPLACE(@checklist_ok, '"clave":"equipos","etiqueta":"Equipos encienden","ok":true', '"clave":"equipos","etiqueta":"Equipos encienden","ok":false');
 
 INSERT INTO inspections (id, environment_id, instructor_id, portero_id, estado, resultado, qr_token, checklist, observaciones,
-                         iniciada_en, confirmada_en, recibida_en, firma_instructor_nombre, firma_portero_nombre) VALUES
+                         iniciada_en, confirmada_en, qr_generado_en, recibida_en, firma_instructor_nombre, firma_portero_nombre) VALUES
   (1, 1, 1, 4, 'recibida', 'ok',        'H1A2B3C4D5E6F7A8', @checklist_ok,       NULL,
-     TIMESTAMP(CURDATE() - INTERVAL 2 DAY, '06:52:00'), TIMESTAMP(CURDATE() - INTERVAL 2 DAY, '07:05:00'), TIMESTAMP(CURDATE() - INTERVAL 2 DAY, '07:12:00'),
+     TIMESTAMP(CURDATE() - INTERVAL 2 DAY, '06:52:00'), TIMESTAMP(CURDATE() - INTERVAL 2 DAY, '07:05:00'), TIMESTAMP(CURDATE() - INTERVAL 2 DAY, '07:10:00'), TIMESTAMP(CURDATE() - INTERVAL 2 DAY, '07:12:00'),
      'Laura Gómez Patiño', 'Jorge Enrique Salazar'),
   (2, 3, 3, 5, 'recibida', 'con_danos', 'H9B8C7D6E5F4A3B2', @checklist_novedad, 'La estación de soldadura no calienta; se envía a mantenimiento.',
-     TIMESTAMP(CURDATE() - INTERVAL 1 DAY, '06:48:00'), TIMESTAMP(CURDATE() - INTERVAL 1 DAY, '07:09:00'), TIMESTAMP(CURDATE() - INTERVAL 1 DAY, '07:20:00'),
+     TIMESTAMP(CURDATE() - INTERVAL 1 DAY, '06:48:00'), TIMESTAMP(CURDATE() - INTERVAL 1 DAY, '07:09:00'), TIMESTAMP(CURDATE() - INTERVAL 1 DAY, '07:18:00'), TIMESTAMP(CURDATE() - INTERVAL 1 DAY, '07:20:00'),
      'Diana Marcela Ruiz', 'Martha Lucía Peña');
 
 INSERT INTO inspection_items (inspection_id, inventory_item_id, tipo_dano, severidad, comentario, foto, reportado_en)

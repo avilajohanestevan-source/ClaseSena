@@ -47,6 +47,7 @@ $RUTAS = [
     ['POST',   '#^/inspections/(\d+)/items$#',           'rutaReportarDano'],
     ['DELETE', '#^/inspections/(\d+)/items/(\d+)$#',     'rutaQuitarDano'],
     ['POST',   '#^/inspections/(\d+)/confirm$#',         'rutaConfirmarInspeccion'],
+    ['POST',   '#^/inspections/(\d+)/qr$#',              'rutaGenerarQr'],
     ['POST',   '#^/inspections/by-qr/([A-Z0-9]{16})/receive$#', 'rutaRecibirPorQr'],
     ['POST',   '#^/inspections/(\d+)/cancel$#',          'rutaCancelarInspeccion'],
 
@@ -82,5 +83,6 @@ try {
 
 function intval_si_numero(string $v)
 {
-    return ctype_digit($v) ? (int) $v : $v;
+    // Solo ids: un token de QR de 16 caracteres puede ser todo dígitos y empezar por cero.
+    return ctype_digit($v) && strlen($v) < 16 ? (int) $v : $v;
 }

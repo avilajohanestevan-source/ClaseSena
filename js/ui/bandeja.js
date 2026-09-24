@@ -10,7 +10,7 @@ import { emitir } from '../estado.js';
 import { CONFIG } from '../config.js';
 import { preferencia } from './preferencias.js';
 
-const ICONO = { entrega_recibida: 'check', dano_reportado: 'herramienta', dano_grave: 'alerta' };
+const ICONO = { revision_lista: 'qr', entrega_recibida: 'check', dano_reportado: 'herramienta', dano_grave: 'alerta' };
 
 export function crearBandeja() {
   let vistos = null, lista = [], sinLeer = 0, sondeo = null;

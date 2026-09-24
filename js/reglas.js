@@ -221,8 +221,8 @@ export const TIPOS_DANO = [
 /** [etiqueta, clase de .status-chip] por estado de la inspección. */
 export const ESTADOS_INSPECCION = {
   en_curso: ['En revisión', 'azul'],
-  pendiente_recepcion: ['Esperando al instructor', 'out'],
-  recibida: ['Entregado', 'in'],
+  pendiente_recepcion: ['Por entregar', 'out'],
+  recibida: ['Recibido', 'in'],
   cancelada: ['Cancelada', 'neutro'],
 };
 
@@ -258,7 +258,7 @@ export function validarReporteDano({ itemId, tipoDano, severidad, comentario, fo
   const texto = String(comentario ?? '').trim();
   if (texto.length < 10) errores.comentario = 'Describe el daño con al menos 10 caracteres.';
   else if (texto.length > 500) errores.comentario = 'El comentario admite máximo 500 caracteres.';
-  if (severidad === 'grave' && !foto) errores.foto = 'La foto es obligatoria cuando el daño es grave.';
+  if (!foto) errores.foto = 'Toma una foto del daño como evidencia.';
   return errores;
 }
 

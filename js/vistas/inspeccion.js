@@ -1,29 +1,29 @@
-// Revisión del ambiente (portero), en una sola columna pensada para el celular.
-// El portero la hace con el instructor en el salón, antes de entregárselo:
+// Revisión del ambiente (instructor), en una sola columna pensada para el celular.
+// El instructor la hace al entrar al salón, antes de recibirlo:
 //  1. Cabecera con el ambiente y la hora de inicio.
-//  2. Botón grande "Escanear QR de ítem" → formulario de daño (tipo, severidad, foto, comentario).
+//  2. Botón grande "Escanear QR de ítem" (mouse, teclado, silla, computador…)
+//     → formulario de daño con foto de evidencia, tipo, severidad y comentario.
 //  3. Checklist visible (Bien / Novedad) que se guarda solo, y observaciones.
 //  4. Inventario del ambiente con "Reportar daño" por ítem y la lista de daños reportados.
-//  5. Barra fija: "Entregar y generar QR". El portero firma y se abre la planilla
-//     con el QR grande que el instructor escanea para recibir el ambiente.
+//  5. Barra fija: "Terminar revisión". Se avisa al portero, que genera el QR
+//     de entrega; el instructor lo escanea desde la planilla para recibir.
 // Si la revisión ya no está en curso, se muestra su planilla.
-import { h, anexar, icono, vaciar, errorCampo } from '../ui/dom.js';
+import { h, anexar, icono, vaciar, errorCampo, vibrar } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { toast, abrirModal, confirmar } from '../ui/avisos.js';
 import { crearEscaner } from '../ui/escaner.js';
 import { crearCapturaFoto } from '../ui/camara.js';
-import { pedirFirma } from '../ui/firma.js';
 import { chipItem, chipSeveridad, etiquetaTipoDano, fecha } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado, emitir } from '../estado.js';
 import { leerQrItem, validarReporteDano, progresoChecklist, resultadoInspeccion, TIPOS_DANO, PRIORIDADES } from '../reglas.js';
 
-const AYUDA_SEVERIDAD = { leve: 'Se puede seguir usando.', moderada: 'Funciona con limitaciones.', grave: 'No se puede usar o es un riesgo. Foto obligatoria.' };
+const AYUDA_SEVERIDAD = { leve: 'Se puede seguir usando.', moderada: 'Funciona con limitaciones.', grave: 'No se puede usar o es un riesgo.' };
 
 export async function render(raiz, { params, alSalir }) {
   const id = Number(params.get('id'));
   let d = await apiAmb.inspeccion(id);
-  if (d.estado !== 'en_curso' || d.portero.id !== estado.usuario.id) {
+  if (d.estado !== 'en_curso' || d.instructor.id !== estado.usuario.id) {
     location.replace(`#/planilla?id=${id}`);
     return;
   }
@@ -39,11 +39,11 @@ export async function render(raiz, { params, alSalir }) {
     h('div', { class: 'insp-cabecera-fila' },
       h('span', { class: 'amb-numero amb-numero--grande' }, d.ambiente.codigo),
       h('div', {},
-        h('span', { class: 'eyebrow eyebrow-verde' }, 'Revisión antes de entregar'),
+        h('span', { class: 'eyebrow eyebrow-verde' }, 'Revisión al entrar'),
         h('h2', { class: 'vista-titulo' }, d.ambiente.nombre),
         h('p', { class: 'section-sub' }, transcurrido))),
     h('p', { class: 'insp-cabecera-ayuda' }, icono('qr'),
-      h('span', {}, 'Revisa el salón con el instructor. Al terminar se genera un QR que él escanea para recibirlo.')));
+      h('span', {}, 'Revisa cada elemento. Si algo está dañado, escanea su etiqueta y toma una foto. Al terminar, el portero genera el QR que escaneas para recibir el salón.')));
 
   /* --- escanear ítem --- */
   const escanearBtn = h('button', { class: 'btn btn-primary btn-block btn-lg', type: 'button', onclick: () => escanearItem() },
@@ -105,7 +105,7 @@ export async function render(raiz, { params, alSalir }) {
         h('div', { class: 'reporte-chips' }, h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(r.tipoDano)), chipSeveridad(r.severidad)),
         h('p', {}, r.comentario)),
       h('button', { class: 'btn btn-outline btn-sm btn-icono', type: 'button', 'aria-label': `Quitar el reporte de ${r.nombre}`, onclick: () => quitar(r) }, icono('basura'))))
-      : h('p', { class: 'text-muted reportes-vacio' }, 'Ningún daño reportado. Si todo está bien, marca el checklist y entrega el ambiente.'));
+      : h('p', { class: 'text-muted reportes-vacio' }, 'Ningún daño reportado. Si todo está bien, marca el checklist y termina la revisión.'));
   }
 
   async function quitar(r) {
@@ -132,7 +132,7 @@ export async function render(raiz, { params, alSalir }) {
             }
             cerrar();
             if (it.reportado) { toast('aviso', 'Ya reportado', `${it.nombre} ya tiene un daño en esta inspección.`); return; }
-            navigator.vibrate?.(40);
+            vibrar(40);
             formularioDano(it);
           },
         });
@@ -150,13 +150,13 @@ export async function render(raiz, { params, alSalir }) {
         h('span', {}, t.etiqueta))));
     const severidades = h('div', { class: 'prioridades', role: 'radiogroup', 'aria-labelledby': 'dano-sev' },
       PRIORIDADES.map((p) => h('label', { class: `prioridad prioridad--${p.clave}` },
-        h('input', { type: 'radio', name: 'severidad', value: p.clave, onchange: () => { severidad = p.clave; errorCampo(severidades, null); marcaFoto.hidden = p.clave !== 'grave'; } }),
+        h('input', { type: 'radio', name: 'severidad', value: p.clave, onchange: () => { severidad = p.clave; errorCampo(severidades, null); } }),
         h('strong', {}, p.etiqueta), h('span', {}, AYUDA_SEVERIDAD[p.clave]))));
     const comentario = h('textarea', { id: 'dano-comentario', rows: 3, maxlength: 500, placeholder: '¿Qué le pasa? ¿Desde cuándo?' });
     const contador = h('span', { class: 'contador-caracteres' }, '0/500');
     comentario.addEventListener('input', () => { contador.textContent = `${comentario.value.length}/500`; errorCampo(comentario, null); });
     const captura = crearCapturaFoto({ alCambiar: (f) => { foto = f; if (f) errorCampo(captura.el, null); } });
-    const marcaFoto = h('span', { class: 'foto-requisito foto-requisito--obligatoria', hidden: true }, '(obligatoria)');
+    const marcaFoto = h('span', { class: 'foto-requisito foto-requisito--obligatoria' }, '(evidencia obligatoria)');
     const enviar = h('button', { class: 'btn btn-peligro', type: 'button', onclick: () => guardar() }, icono('herramienta'), 'Reportar daño');
 
     const { cerrar } = abrirModal({
@@ -194,7 +194,7 @@ export async function render(raiz, { params, alSalir }) {
     }
   }
 
-  /* --- pie fijo: confirmar y firmar --- */
+  /* --- pie fijo: terminar la revisión --- */
   const ayudaPie = h('p', { class: 'insp-pie-ayuda', role: 'status' });
   const confirmarBtn = h('button', { class: 'btn btn-primary btn-block btn-lg', type: 'button', onclick: () => confirmarInspeccion() });
   const cancelarBtn = h('button', { class: 'btn btn-outline', type: 'button', onclick: () => cancelar() }, 'Cancelar revisión');
@@ -204,10 +204,10 @@ export async function render(raiz, { params, alSalir }) {
     const resultado = resultadoInspeccion(d);
     confirmarBtn.disabled = !p.completo;
     confirmarBtn.className = `btn btn-block btn-lg ${resultado === 'ok' ? 'btn-primary' : 'btn-out'}`;
-    vaciar(confirmarBtn, icono('qr'),
-      resultado === 'ok' ? 'Entregar en buen estado y generar QR' : 'Entregar con novedades y generar QR');
+    vaciar(confirmarBtn, icono(resultado === 'ok' ? 'check' : 'alerta'),
+      resultado === 'ok' ? 'Todo en orden · terminar revisión' : 'Terminar revisión con novedades');
     ayudaPie.textContent = p.completo
-      ? (resultado === 'ok' ? 'Todo en orden. Firma y muéstrale el QR al instructor.' : `${d.reportes.length} daño(s) y ${p.novedades} novedad(es): se avisará a coordinación cuando el instructor reciba.`)
+      ? (resultado === 'ok' ? 'Al terminar, el portero genera el QR de entrega.' : `${d.reportes.length} daño(s) y ${p.novedades} novedad(es): coordinación recibirá el aviso cuando escanees el QR.`)
       : `Falta revisar ${p.total - p.revisados} punto(s) del checklist.`;
   }
 
@@ -220,25 +220,24 @@ export async function render(raiz, { params, alSalir }) {
       return;
     }
     const resultado = resultadoInspeccion(d);
-    const firma = await pedirFirma({
-      titulo: 'Firma del portero',
-      declaracion: `Entrego el ambiente ${d.ambiente.codigo} ${resultado === 'ok' ? 'en buen estado' : `con ${[
-        d.reportes.length && `${d.reportes.length} daño(s) reportado(s)`, p.novedades && `${p.novedades} novedad(es) en el checklist`,
-      ].filter(Boolean).join(' y ')}`}.`,
-      nombre: estado.usuario.nombre,
-      textoConfirmar: 'Firmar y generar QR',
-    });
-    if (!firma) return;
+    const novedades = [
+      d.reportes.length && `${d.reportes.length} daño(s) reportado(s)`, p.novedades && `${p.novedades} novedad(es) en el checklist`,
+    ].filter(Boolean).join(' y ');
+    if (!await confirmar({
+      titulo: `¿Terminar la revisión del ${d.ambiente.codigo}?`,
+      mensaje: `${resultado === 'ok' ? 'Todo en orden.' : `Con ${novedades}.`} Se avisa a ${d.ambiente.portero || 'portería'} para que genere el QR de entrega. Después ya no podrás cambiar la revisión.`,
+      textoAceptar: 'Terminar revisión',
+    })) return;
     confirmarBtn.disabled = true;
     try {
       d = await apiAmb.confirmarInspeccion(id, {
-        checklist: d.checklist.map(({ clave, ok }) => ({ clave, ok })), observaciones: observaciones.value.trim(), ...firma,
+        checklist: d.checklist.map(({ clave, ok }) => ({ clave, ok })), observaciones: observaciones.value.trim(),
       });
       clearTimeout(temporizador); temporizador = null;
       emitir('inspecciones');
-      location.hash = `#/planilla?id=${id}&qr=1`;
+      location.hash = `#/planilla?id=${id}`;
     } catch (e) {
-      toast('error', 'No se confirmó la entrega', e.message);
+      toast('error', 'No se terminó la revisión', e.message);
       confirmarBtn.disabled = false;
     }
   }

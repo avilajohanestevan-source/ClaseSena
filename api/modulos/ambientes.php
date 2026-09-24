@@ -33,9 +33,9 @@ function ambientePublico(array $e): array
             'estado' => $e['ult_estado'],
             'resultado' => $e['ult_resultado'],
             'iniciadaEn' => iso($e['ult_iniciada']),
-            'porteroId' => (int) $e['ult_portero_id'],
+            'porteroId' => $e['ult_portero_id'] !== null ? (int) $e['ult_portero_id'] : null,
             'portero' => $e['ult_portero'],
-            'instructorId' => $e['ult_instructor_id'] !== null ? (int) $e['ult_instructor_id'] : null,
+            'instructorId' => (int) $e['ult_instructor_id'],
             'instructor' => $e['ult_instructor'],
         ] : null,
     ];

@@ -1,17 +1,18 @@
 <?php
 /**
- * Entrega de ambientes: el portero revisa el ambiente y lo entrega; el
- * instructor lo recibe escaneando el QR que genera el portero.
+ * Entrega de ambientes.
  *
- *   en_curso ──confirm (portero firma, se genera el QR)──▶ pendiente_recepcion
- *            ──el instructor escanea el QR──▶ recibida
- *   en_curso | pendiente_recepcion ──cancel──▶ cancelada
+ *   1. El instructor revisa el salón al entrar: checklist y, si hay daños,
+ *      escanea el ítem y deja foto como evidencia          → en_curso
+ *   2. Termina la revisión; se avisa al portero              → pendiente_recepcion
+ *   3. El portero genera el QR de entrega                    → pendiente_recepcion + qr_generado_en
+ *   4. El instructor escanea el QR y confirma la recepción   → recibida
+ *   en_curso | pendiente_recepcion ──cancel (instructor)──▶ cancelada
  *
- * portero_id = quien entrega (inicia la revisión); instructor_id = quien
- * recibe (se guarda al escanear). Cada daño reportado es una fila de
- * inspection_items vinculada a inventory_items; el ítem pasa a "danado"
- * mientras el reporte exista. Al recibir un ambiente con daños se avisa a
- * coordinación (administrativos).
+ * instructor_id = quien revisa y recibe; portero_id = quien genera el QR
+ * (entrega). Cada daño es una fila de inspection_items vinculada a
+ * inventory_items; el ítem pasa a "danado" mientras el reporte exista. Al
+ * recibir un ambiente con daños se avisa a coordinación (administrativos).
  */
 
 const CHECKLIST = [
@@ -34,8 +35,8 @@ const SQL_INSPECCIONES = "
            (SELECT COUNT(*) FROM inspection_items d WHERE d.inspection_id = s.id AND d.severidad = 'grave') AS danos_graves
     FROM inspections s
     JOIN environments e ON e.id = s.environment_id
-    JOIN users p ON p.id = s.portero_id
-    LEFT JOIN users i ON i.id = s.instructor_id
+    JOIN users i ON i.id = s.instructor_id
+    LEFT JOIN users p ON p.id = s.portero_id
     LEFT JOIN users pa ON pa.id = e.portero_id";
 
 function checklistVacio(): array
@@ -45,18 +46,21 @@ function checklistVacio(): array
 
 function resumenInspeccion(array $s): array
 {
+    // El instructor nunca recibe el texto del QR: tiene que escanearlo en el celular del portero.
+    $verQr = $s['qr_generado_en'] && $s['estado'] === 'pendiente_recepcion' && usuario()['rol'] !== 'instructor';
     return [
         'id' => (int) $s['id'],
         'estado' => $s['estado'],
         'resultado' => $s['resultado'],
-        'qr' => 'SENA-INSP:' . $s['qr_token'],
+        'qr' => $verQr ? 'SENA-INSP:' . $s['qr_token'] : null,
+        'qrGeneradoEn' => iso($s['qr_generado_en']),
         'ambiente' => [
             'id' => (int) $s['environment_id'], 'codigo' => $s['amb_codigo'], 'nombre' => $s['amb_nombre'],
             'bloque' => $s['amb_bloque'], 'porteroId' => $s['amb_portero_id'] !== null ? (int) $s['amb_portero_id'] : null,
             'portero' => $s['amb_portero'],
         ],
-        'portero' => ['id' => (int) $s['portero_id'], 'nombre' => $s['portero_nombre']],
-        'instructor' => $s['instructor_id'] ? ['id' => (int) $s['instructor_id'], 'nombre' => $s['instructor_nombre']] : null,
+        'instructor' => ['id' => (int) $s['instructor_id'], 'nombre' => $s['instructor_nombre']],
+        'portero' => $s['portero_id'] ? ['id' => (int) $s['portero_id'], 'nombre' => $s['portero_nombre']] : null,
         'iniciadaEn' => iso($s['iniciada_en']),
         'confirmadaEn' => iso($s['confirmada_en']),
         'recibidaEn' => iso($s['recibida_en']),
@@ -68,24 +72,24 @@ function resumenInspeccion(array $s): array
 function buscarInspeccion(int $id): array
 {
     $s = fila(SQL_INSPECCIONES . ' WHERE s.id = ?', [$id]);
-    if (!$s) fallar(404, 'La inspección no existe.', 'NO_ENCONTRADO');
+    if (!$s) fallar(404, 'La revisión no existe.', 'NO_ENCONTRADO');
     $u = usuario();
     $puede = match ($u['rol']) {
         'administrativo', 'portero' => true,
-        'instructor' => $s['instructor_id'] !== null && (int) $s['instructor_id'] === (int) $u['id'],
+        'instructor' => (int) $s['instructor_id'] === (int) $u['id'],
         default => false,
     };
-    if (!$puede) fallar(403, 'No tienes acceso a esta inspección.', 'PERMISO');
+    if (!$puede) fallar(403, 'No tienes acceso a esta revisión.', 'PERMISO');
     return $s;
 }
 
-/** Solo el portero que inició la revisión y mientras siga en curso. */
+/** Solo el instructor que la inició y mientras siga en curso. */
 function inspeccionEditable(int $id): array
 {
-    $u = exigirRol('portero');
+    $u = exigirRol('instructor');
     $s = buscarInspeccion($id);
-    if ((int) $s['portero_id'] !== (int) $u['id']) fallar(403, 'Solo el portero que inició la revisión puede modificarla.', 'PERMISO');
-    if ($s['estado'] !== 'en_curso') fallar(409, 'La entrega ya fue confirmada; no se puede modificar.', 'ESTADO');
+    if ((int) $s['instructor_id'] !== (int) $u['id']) fallar(403, 'Solo el instructor que inició la revisión puede modificarla.', 'PERMISO');
+    if ($s['estado'] !== 'en_curso') fallar(409, 'La revisión ya se terminó; no se puede modificar.', 'ESTADO');
     return $s;
 }
 
@@ -102,13 +106,9 @@ function detalleInspeccion(array $s): array
     return resumenInspeccion($s) + [
         'checklist' => $s['checklist'] ? json_decode($s['checklist'], true) : checklistVacio(),
         'observaciones' => $s['observaciones'],
-        // El portero firma al entregar; el instructor "firma" escaneando el QR (sin imagen).
-        'firmaPortero' => $s['confirmada_en'] ? [
-            'imagen' => $s['firma_portero'], 'nombre' => $s['firma_portero_nombre'], 'fecha' => iso($s['confirmada_en']),
-        ] : null,
-        'firmaInstructor' => $s['recibida_en'] ? [
-            'imagen' => $s['firma_instructor'], 'nombre' => $s['firma_instructor_nombre'], 'fecha' => iso($s['recibida_en']),
-        ] : null,
+        // Constancias: el portero al generar el QR (entrega) y el instructor al escanearlo (recibe).
+        'entrega' => $s['qr_generado_en'] ? ['nombre' => $s['firma_portero_nombre'], 'fecha' => iso($s['qr_generado_en'])] : null,
+        'recibe' => $s['recibida_en'] ? ['nombre' => $s['firma_instructor_nombre'], 'fecha' => iso($s['recibida_en'])] : null,
         'reportes' => array_map(fn($d) => [
             'id' => (int) $d['id'],
             'itemId' => (int) $d['inventory_item_id'],
@@ -164,26 +164,29 @@ function rutaInspeccionPorQr(string $token): never
     responder(detalleInspeccion(buscarInspeccion((int) $s['id'])));
 }
 
-/** POST /inspections {ambienteId}: el portero inicia la revisión. Si ya tenía una en curso en ese ambiente, la retoma. */
+/** POST /inspections {ambienteId}: el instructor inicia la revisión. Si ya tenía una en curso en ese ambiente, la retoma. */
 function rutaIniciarInspeccion(): never
 {
-    $u = exigirRol('portero');
+    $u = exigirRol('instructor');
     $ambienteId = entero(cuerpo(), 'ambienteId');
     $amb = buscarAmbiente($ambienteId);
     if (!$amb['activo']) fallar(409, 'El ambiente está desactivado.', 'ESTADO');
 
-    $abierta = fila("SELECT s.id, s.estado, s.portero_id, u.nombre FROM inspections s JOIN users u ON u.id = s.portero_id
+    $abierta = fila("SELECT s.id, s.estado, s.instructor_id, u.nombre FROM inspections s JOIN users u ON u.id = s.instructor_id
                      WHERE s.environment_id = ? AND s.estado IN ('en_curso', 'pendiente_recepcion')", [$ambienteId]);
     if ($abierta) {
-        $propia = (int) $abierta['portero_id'] === (int) $u['id'];
-        if ($propia && $abierta['estado'] === 'en_curso') responder(detalleInspeccion(buscarInspeccion((int) $abierta['id'])));
+        $propia = (int) $abierta['instructor_id'] === (int) $u['id'];
+        if ($propia) responder(detalleInspeccion(buscarInspeccion((int) $abierta['id'])));
         fallar(409, $abierta['estado'] === 'en_curso'
             ? "El ambiente {$amb['codigo']} ya lo está revisando {$abierta['nombre']}."
-            : "El ambiente {$amb['codigo']} ya tiene una entrega esperando a que el instructor escanee el QR.", 'EN_CURSO');
+            : "El ambiente {$amb['codigo']} está esperando la entrega a {$abierta['nombre']}.", 'EN_CURSO');
     }
+    $otra = fila("SELECT e.codigo FROM inspections s JOIN environments e ON e.id = s.environment_id
+                  WHERE s.instructor_id = ? AND s.estado = 'en_curso'", [(int) $u['id']]);
+    if ($otra) fallar(409, "Ya tienes una revisión en curso en el ambiente {$otra['codigo']}. Termínala o cancélala primero.", 'EN_CURSO');
 
     $id = insertar(
-        'INSERT INTO inspections (environment_id, portero_id, qr_token, checklist, iniciada_en) VALUES (?, ?, ?, ?, NOW())',
+        'INSERT INTO inspections (environment_id, instructor_id, qr_token, checklist, iniciada_en) VALUES (?, ?, ?, ?, NOW())',
         [$ambienteId, (int) $u['id'], nuevoToken(), json_encode(checklistVacio(), JSON_UNESCAPED_UNICODE)]
     );
     responder(detalleInspeccion(buscarInspeccion($id)), 201);
@@ -241,8 +244,9 @@ function rutaReportarDano(int $id): never
     $severidad = opcion($d, 'severidad', SEVERIDADES, true, 'la severidad');
     $comentario = texto($d, 'comentario', 500, true, 'el comentario');
     if (mb_strlen($comentario) < 10) fallar(422, 'Describe el daño con al menos 10 caracteres.', 'VALIDACION');
-    $foto = !empty($d['foto']) ? guardarFoto((string) $d['foto']) : null;
-    if ($severidad === 'grave' && !$foto) fallar(422, 'La foto es obligatoria cuando el daño es grave.', 'VALIDACION');
+    // La foto es la evidencia del daño: siempre obligatoria.
+    if (empty($d['foto'])) fallar(422, 'Toma una foto del daño como evidencia.', 'VALIDACION');
+    $foto = guardarFoto((string) $d['foto']);
 
     db()->begin_transaction();
     insertar(
@@ -273,10 +277,11 @@ function rutaQuitarDano(int $id, int $reporteId): never
     responder(detalleInspeccion(buscarInspeccion($id)));
 }
 
+
 /**
- * POST /inspections/{id}/confirm {checklist, observaciones, firma, nombreFirma}
- * El portero confirma la entrega y firma: se genera un QR nuevo que el
- * instructor debe escanear para recibir el ambiente.
+ * POST /inspections/{id}/confirm {checklist, observaciones}
+ * El instructor termina la revisión: queda esperando el QR del portero, a
+ * quien se avisa (el asignado al ambiente o, si no hay, todos los porteros).
  */
 function rutaConfirmarInspeccion(int $id): never
 {
@@ -286,48 +291,68 @@ function rutaConfirmarInspeccion(int $id): never
     $observaciones = texto($d, 'observaciones', 500, false, 'las observaciones');
     $conNovedad = in_array(false, array_column($checklist, 'ok'), true);
     if ($conNovedad && !$observaciones) fallar(422, 'Describe en observaciones la novedad marcada en el checklist.', 'VALIDACION');
-    $firma = validarFirma($d['firma'] ?? null);
-    $nombre = texto($d, 'nombreFirma', 120, true, 'el nombre de quien firma');
     $resultado = ((int) $s['danos'] > 0 || $conNovedad) ? 'con_danos' : 'ok';
 
+    db()->begin_transaction();
     consulta(
-        "UPDATE inspections SET estado = 'pendiente_recepcion', resultado = ?, checklist = ?, observaciones = ?, qr_token = ?,
-                firma_portero = ?, firma_portero_nombre = ?, confirmada_en = NOW() WHERE id = ?",
-        [$resultado, json_encode($checklist, JSON_UNESCAPED_UNICODE), $observaciones, nuevoToken(), $firma, $nombre, $id]
+        "UPDATE inspections SET estado = 'pendiente_recepcion', resultado = ?, checklist = ?, observaciones = ?, confirmada_en = NOW() WHERE id = ?",
+        [$resultado, json_encode($checklist, JSON_UNESCAPED_UNICODE), $observaciones, $id]
+    );
+    $porteros = $s['amb_portero_id']
+        ? [(int) $s['amb_portero_id']]
+        : array_map('intval', array_column(filas("SELECT id FROM users WHERE rol = 'portero' AND activo = 1"), 'id'));
+    $detalle = "{$s['instructor_nombre']} terminó la revisión · "
+        . ($resultado === 'ok' ? 'sin novedades' : ((int) $s['danos'] ? "{$s['danos']} daño(s) reportado(s)" : 'con novedades'));
+    foreach ($porteros as $p) notificar($p, 'revision_lista', "Genera el QR de entrega: ambiente {$s['amb_codigo']}", $detalle, $id);
+    db()->commit();
+    responder(detalleInspeccion(buscarInspeccion($id)));
+}
+
+/** POST /inspections/{id}/qr: el portero genera (o renueva) el QR de entrega. Cada QR sirve una sola vez. */
+function rutaGenerarQr(int $id): never
+{
+    $u = exigirRol('portero');
+    $s = buscarInspeccion($id);
+    if ($s['estado'] !== 'pendiente_recepcion') {
+        fallar(409, $s['estado'] === 'en_curso' ? 'El instructor todavía no ha terminado la revisión.' : 'Este ambiente ya fue entregado o la revisión se canceló.', 'ESTADO');
+    }
+    consulta(
+        "UPDATE inspections SET portero_id = ?, firma_portero_nombre = ?, qr_token = ?, qr_generado_en = NOW()
+         WHERE id = ? AND estado = 'pendiente_recepcion'",
+        [(int) $u['id'], $u['nombre'], nuevoToken(), $id]
     );
     responder(detalleInspeccion(buscarInspeccion($id)));
 }
 
 /**
  * POST /inspections/by-qr/{token}/receive: el instructor escanea el QR del
- * portero y recibe el ambiente. Queda guardado quién entregó (portero_id),
- * quién recibió (instructor_id), la hora y el estado de los ítems; si hay
- * daños se avisa a coordinación.
+ * portero y confirma que recibió el ambiente. Queda guardado quién entregó
+ * (portero_id), quién recibió (instructor_id), las horas y el estado de los
+ * ítems; si hay daños o novedades se avisa a coordinación.
  */
 function rutaRecibirPorQr(string $token): never
 {
     $u = exigirRol('instructor');
-    $s = fila(SQL_INSPECCIONES . ' WHERE s.qr_token = ?', [$token]);
-    if (!$s) fallar(404, 'El QR no corresponde a ninguna entrega de ambiente.', 'NO_ENCONTRADO');
-    if ($s['estado'] === 'recibida') {
-        if ((int) $s['instructor_id'] === (int) $u['id']) responder(detalleInspeccion($s));
-        fallar(409, "Este QR ya se usó: {$s['instructor_nombre']} recibió el ambiente {$s['amb_codigo']}.", 'ESTADO');
+    $s = fila(SQL_INSPECCIONES . ' WHERE s.qr_token = ? AND s.qr_generado_en IS NOT NULL', [$token]);
+    if (!$s) fallar(404, 'El QR no corresponde a ninguna entrega. Pide al portero que lo genere de nuevo.', 'NO_ENCONTRADO');
+    if ((int) $s['instructor_id'] !== (int) $u['id']) {
+        fallar(403, "Este QR es para {$s['instructor_nombre']}, que hizo la revisión del ambiente {$s['amb_codigo']}.", 'PERMISO');
     }
-    if ($s['estado'] !== 'pendiente_recepcion') {
-        fallar(409, $s['estado'] === 'en_curso' ? 'El portero todavía no ha confirmado la entrega.' : 'Esta entrega fue cancelada.', 'ESTADO');
-    }
+    if ($s['estado'] === 'recibida') responder(detalleInspeccion($s));
+    if ($s['estado'] !== 'pendiente_recepcion') fallar(409, 'Esta revisión fue cancelada.', 'ESTADO');
     $id = (int) $s['id'];
 
     db()->begin_transaction();
     consulta(
-        "UPDATE inspections SET estado = 'recibida', instructor_id = ?, firma_instructor_nombre = ?, recibida_en = NOW()
+        "UPDATE inspections SET estado = 'recibida', firma_instructor_nombre = ?, recibida_en = NOW()
          WHERE id = ? AND estado = 'pendiente_recepcion'",
-        [(int) $u['id'], $u['nombre'], $id]
+        [$u['nombre'], $id]
     );
+    consulta("UPDATE notifications SET leida = 1 WHERE inspection_id = ? AND tipo = 'revision_lista'", [$id]);
     notificar((int) $s['portero_id'], 'entrega_recibida', "{$u['nombre']} recibió el ambiente {$s['amb_codigo']}",
-        'Escaneó el QR de la entrega' . ((int) $s['danos'] ? " · {$s['danos']} daño(s) registrado(s)" : ' · sin novedades'), $id);
+        'Escaneó el QR de entrega' . ((int) $s['danos'] ? " · {$s['danos']} daño(s) registrado(s)" : ' · sin novedades'), $id);
     if ($s['resultado'] === 'con_danos') {
-        $detalle = "Entregó {$s['portero_nombre']} · recibió {$u['nombre']} · "
+        $detalle = "Revisó y recibió {$u['nombre']} · entregó {$s['portero_nombre']} · "
             . ((int) $s['danos'] ? "{$s['danos']} ítem(s) marcados como dañados en el inventario" : 'novedades en el checklist')
             . ((int) $s['danos_graves'] ? " ({$s['danos_graves']} grave)" : '');
         foreach (filas("SELECT id FROM users WHERE rol = 'administrativo' AND activo = 1") as $a) {
@@ -339,12 +364,12 @@ function rutaRecibirPorQr(string $token): never
     responder(detalleInspeccion(buscarInspeccion($id)));
 }
 
-/** POST /inspections/{id}/cancel: el portero cancela la revisión o la entrega que nadie ha recibido. */
+/** POST /inspections/{id}/cancel: el instructor cancela su revisión mientras no haya recibido el ambiente. */
 function rutaCancelarInspeccion(int $id): never
 {
-    $u = exigirRol('portero');
+    $u = exigirRol('instructor');
     $s = buscarInspeccion($id);
-    if ((int) $s['portero_id'] !== (int) $u['id']) fallar(403, 'Solo el portero que inició la revisión puede cancelarla.', 'PERMISO');
+    if ((int) $s['instructor_id'] !== (int) $u['id']) fallar(403, 'Solo el instructor que inició la revisión puede cancelarla.', 'PERMISO');
     if (!in_array($s['estado'], ['en_curso', 'pendiente_recepcion'], true)) fallar(409, 'El ambiente ya fue recibido; no se puede cancelar.', 'ESTADO');
     db()->begin_transaction();
     foreach (filas('SELECT * FROM inspection_items WHERE inspection_id = ?', [$id]) as $r) deshacerReporte($r);
