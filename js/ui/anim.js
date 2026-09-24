@@ -88,6 +88,49 @@ export const anim = {
     ]);
   },
 
+  /**
+   * Cierre de sesión (inverso del ingreso): el contenido se encoge y se
+   * desvanece, la barra sube y el menú lateral sale por la izquierda.
+   * Resuelve a los ~450 ms (con tope por tiempo si no hay fotogramas).
+   */
+  salidaSesion({ contenido, barra, menu }) {
+    if (!listo()) return Promise.resolve();
+    const tl = gsap.timeline();
+    if (contenido) tl.to(contenido, { autoAlpha: 0, y: 16, scale: 0.98, duration: 0.36, ease: CURVA.inOut }, 0);
+    if (barra) tl.to(barra, { autoAlpha: 0, y: -12, duration: 0.3, ease: CURVA.inOut }, 0.05);
+    if (menu && window.matchMedia('(min-width: 900px)').matches) tl.to(menu, { autoAlpha: 0, x: -40, duration: 0.4, ease: CURVA.inOut }, 0.05);
+    return Promise.race([
+      new Promise((ok) => tl.call(ok, null, 0.45)),
+      new Promise((ok) => setTimeout(ok, 650)),
+    ]);
+  },
+
+  /**
+   * Login después de cerrar sesión: las dos piezas vuelven desde fuera de la
+   * pantalla (750 ms, out-cúbico), la tarjeta sube y termina con un micro-rebote.
+   */
+  entradaLogin({ tarjeta, piezaA, piezaB, extras = [] }) {
+    if (!listo()) return;
+    const tl = gsap.timeline();
+    // Si el navegador no pinta fotogramas, se salta al final: la tarjeta nunca queda invisible.
+    setTimeout(() => { if (tl.progress() < 1) tl.progress(1); }, 1600);
+    tl
+      .fromTo(piezaA, { x: '75vw', y: '-85vh' }, { x: 0, y: 0, duration: 0.75, ease: CURVA.salida }, 0)
+      .fromTo(piezaB, { x: '-75vw', y: '85vh' }, { x: 0, y: 0, duration: 0.75, ease: CURVA.salida }, 0)
+      .fromTo(tarjeta, { autoAlpha: 0, y: 28, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.5, ease: CURVA.salida }, 0.25)
+      .to(tarjeta, { keyframes: { scale: [1, 1.02, 0.995, 1] }, duration: 0.36, ease: 'none' }, 0.75)
+      .fromTo(extras, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 }, 0.55)
+      .set([piezaA, piezaB, tarjeta, ...extras], { clearProps: 'transform,opacity,visibility' });
+  },
+
+  /** Quita los estilos que dejó una animación (p. ej. el shell tras salidaSesion). */
+  limpiar(elementos) {
+    if (!gsap) return;
+    const els = elementos.filter(Boolean);
+    gsap.killTweensOf(els);
+    gsap.set(els, { clearProps: 'opacity,visibility,transform' });
+  },
+
   /** Entrada del panel tras el login: barra superior y navegación con 120 ms de retraso. */
   // El menú lateral solo se anima donde está a la vista (escritorio): en
   // móvil vive fuera de la pantalla y un transform lo dejaría visible.

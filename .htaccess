@@ -1,0 +1,8 @@
+# La app no tiene build ni nombres con hash: sin esto el navegador puede
+# seguir usando módulos JS o CSS viejos después de una actualización.
+# "no-cache" obliga a revalidar (respuesta 304 si no cambió), así que sigue siendo rápido.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|mjs|css|html)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>

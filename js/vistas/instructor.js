@@ -7,7 +7,7 @@ import { toast, abrirModal } from '../ui/avisos.js';
 import { chipAsistencia, cargando, tarjetaError, encabezado } from '../ui/componentes.js';
 import { estadoVentana, formatearDuracion, fechaIso } from '../reglas.js';
 import { api } from '../api/contratos.js';
-import { estado } from '../estado.js';
+import { estado, usuarioAsistencia } from '../estado.js';
 import { CONFIG } from '../config.js';
 
 const TEXTO_VENTANA = {
@@ -15,7 +15,7 @@ const TEXTO_VENTANA = {
 };
 
 export async function render(raiz, { alSalir }) {
-  const usuario = estado.usuario;
+  const usuario = usuarioAsistencia();
   const lista = h('div', { class: 'clases' }, cargando());
   const resumen = h('div', { class: 'stat-grid', 'data-anim': '' });
   raiz.append(
@@ -39,7 +39,7 @@ export async function render(raiz, { alSalir }) {
     pintarResumen();
     tarjetas.clear();
     vaciar(lista, sesiones.length ? sesiones.map((s) => { const t = tarjetaClase(s); tarjetas.set(s.id, t); return t.el; })
-      : h('div', { class: 'card empty-state' }, 'No tienes clases programadas para hoy.'));
+      : h('div', { class: 'card empty-state' }, h('strong', {}, 'No hay asistencias registradas'), h('p', {}, 'No tienes clases programadas para hoy.')));
     anim.lista(lista.children, { autoAlpha: 0, y: 16 });
   }
 

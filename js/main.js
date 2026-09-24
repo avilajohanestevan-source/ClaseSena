@@ -9,7 +9,7 @@ import { tarjetaError, cargando } from './ui/componentes.js';
 import { crearShell } from './ui/drawer.js';
 import { crearBandeja } from './ui/bandeja.js';
 import { aplicarPreferencias, movimientoReducido } from './ui/preferencias.js';
-import { estado, escuchar, cerrarSesion, restaurarSesion } from './estado.js';
+import { estado, escuchar, cerrarSesion, restaurarSesion, alCerrarSesion } from './estado.js';
 import { alVencerSesion } from './api/cliente.js';
 import { apiAmb } from './api/ambientes.js';
 import { ETIQUETA_ROL } from './reglas.js';
@@ -56,6 +56,15 @@ document.getElementById('app').replaceChildren(shell.el);
 let limpiezas = [];
 let navegacion = 0;
 let vieneDeLogin = false;
+let vieneDeSalida = false;
+
+// Cierre de sesión con animación (inversa a la del ingreso). El login la completa
+// trayendo de vuelta las piezas del fondo (anim.entradaLogin).
+alCerrarSesion(async () => {
+  vieneDeSalida = true;
+  shell.cerrar({ devolverFoco: false });
+  await anim.salidaSesion({ contenido, barra: shell.el.querySelector('.barra'), menu: shell.el.querySelector('.drawer') });
+});
 
 // Ripple sutil en todos los botones (520 ms, out-cúbico; ver css/movil.css).
 document.addEventListener('pointerdown', (e) => {
@@ -125,12 +134,22 @@ async function navegar() {
   try {
     const modulo = await r.vista();
     if (id !== navegacion) return;
-    vaciar(raiz);
-    await modulo.render(raiz, { params: new URLSearchParams(query), alSalir: (fn) => limpiezas.push(fn) });
+    // Contenedor propio por navegación: si el usuario cambia de sección antes de
+    // que termine esta vista, lo que siga pintando queda en un nodo ya retirado.
+    const vista = h('div', { class: 'vista' });
+    vaciar(raiz, vista);
+    const desdeSalida = clave === 'login' && vieneDeSalida;
+    if (desdeSalida) {
+      vieneDeSalida = false;
+      anim.limpiar([contenido, shell.el.querySelector('.barra'), shell.el.querySelector('.drawer')]);
+    }
+    await modulo.render(vista, { params: new URLSearchParams(query), alSalir: (fn) => limpiezas.push(fn), desdeSalida });
+    if (desdeSalida) toast('info', 'Sesión cerrada', 'Hasta pronto.');
   } catch (e) {
     console.error(e);
     if (id !== navegacion) return;
-    if (e.status === 401) { await cerrarSesion({ avisarServidor: false }); return; }
+    // Solo un 401 del backend real cierra la sesión; los de asistencia (simulada) no.
+    if (e.status === 401 && e.origen !== 'asistencia') { await cerrarSesion({ avisarServidor: false }); return; }
     vaciar(raiz, tarjetaError(e, navegar));
   }
   window.scrollTo({ top: 0 });

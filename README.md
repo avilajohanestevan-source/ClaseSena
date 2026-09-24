@@ -22,6 +22,11 @@ de formación, más el módulo de **asistencia a clases** que ya existía.
    Sin consola: en phpMyAdmin importa `db/schema.sql` y luego `db/seed.sql`.
 3. Abre `http://localhost/sena-ambientes/index.html`.
 
+Si después de actualizar aparece un error como *"does not provide an export named…"*,
+el navegador guardó una versión vieja de algún archivo: recarga con
+**Ctrl + F5** una vez. El `.htaccess` de la raíz ya obliga a revalidar JS, CSS
+y HTML, así que no debería repetirse.
+
 La conexión está en `api/config.php` (por defecto `root` sin contraseña,
 igual que sena-php). La cámara solo funciona en `localhost` o con HTTPS;
 desde el celular por la IP de la red local usa las alternativas: subir una
@@ -83,6 +88,9 @@ Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
   86 vw), 320 ms, out-cúbico) con un velo. También se abre deslizando desde
   el borde izquierdo y se cierra deslizando a la izquierda, tocando el velo,
   con Escape o al elegir una sección.
+- Al **cerrar sesión** el panel se desvanece y el menú sale por la izquierda;
+  en el login las dos piezas del fondo regresan y la tarjeta sube con un
+  micro-rebote (inverso de la animación de ingreso).
 - Ítems según el rol, indicador animado de la sección actual, insignias
   (inspecciones por recibir o en curso), foco atrapado mientras está abierto
   y áreas táctiles de 44 px.

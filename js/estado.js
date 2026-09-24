@@ -11,6 +11,9 @@ const oyentes = new Map();
 
 export const estado = {
   usuario: null,
+  // Usuario de la sesión simulada de asistencia (js/api/mock): sus ids son
+  // los que entienden los módulos de clases, semáforo y P004. null si no hay.
+  usuarioAsistencia: null,
   catalogos: null,
   // Último QR generado en esta pestaña: en modo demostración el aprendiz
   // puede "escanearlo" sin cámara.
@@ -35,14 +38,15 @@ function guardar(sesion) {
 }
 
 /**
- * @param {{token:string, usuario:object, tokenMock?:string|null}} sesion
- *   token: backend real; tokenMock: servidor simulado de asistencia (opcional).
+ * @param {{token:string, usuario:object, tokenMock?:string|null, usuarioMock?:object|null}} sesion
+ *   token/usuario: backend real; tokenMock/usuarioMock: servidor simulado de asistencia (opcional).
  */
-export function iniciarSesion({ token, usuario, tokenMock = null }) {
+export function iniciarSesion({ token, usuario, tokenMock = null, usuarioMock = null }) {
   usarTokenAmbientes(token);
   usarToken(tokenMock);
   estado.usuario = usuario;
-  guardar({ token, usuario, tokenMock });
+  estado.usuarioAsistencia = tokenMock ? usuarioMock : null;
+  guardar({ token, usuario, tokenMock, usuarioMock: estado.usuarioAsistencia });
   emitir('sesion', usuario);
 }
 
@@ -53,6 +57,7 @@ export async function restaurarSesion() {
   if (!sesion?.token) return false;
   usarTokenAmbientes(sesion.token);
   usarToken(sesion.tokenMock);
+  estado.usuarioAsistencia = sesion.tokenMock ? sesion.usuarioMock || null : null;
   try {
     estado.usuario = await apiAmb.yo();
     guardar({ ...sesion, usuario: estado.usuario });
@@ -74,13 +79,19 @@ export function actualizarUsuario(usuario) {
   emitir('usuario', usuario);
 }
 
+// Lo registra main.js: la animación de salida corre mientras se avisa al servidor.
+let antesDeSalir = null;
+export function alCerrarSesion(fn) { antesDeSalir = fn; }
+
+/** avisarServidor=false cuando la sesión ya venció (sin animación ni logout remoto). */
 export async function cerrarSesion({ avisarServidor = true } = {}) {
   if (avisarServidor) {
-    await Promise.allSettled([apiAmb.logout(), api.logout()]);
+    await Promise.allSettled([apiAmb.logout(), api.logout(), antesDeSalir?.()]);
   }
   usarTokenAmbientes(null);
   usarToken(null);
   estado.usuario = null;
+  estado.usuarioAsistencia = null;
   estado.catalogos = null;
   guardar(null);
   emitir('sesion', null);
@@ -89,4 +100,19 @@ export async function cerrarSesion({ avisarServidor = true } = {}) {
 export async function catalogos() {
   estado.catalogos ||= await api.catalogos();
   return estado.catalogos;
+}
+
+/**
+ * Usuario para los módulos de asistencia (datos simulados). Sin sesión de
+ * asistencia lanza un error con origen 'asistencia' para que la vista
+ * muestre "No hay asistencias registradas" en lugar de un error técnico.
+ */
+export function usuarioAsistencia() {
+  if (!estado.usuarioAsistencia) {
+    const e = new Error('No hay asistencias registradas por el momento.');
+    e.origen = 'asistencia';
+    e.codigo = 'SIN_ASISTENCIA';
+    throw e;
+  }
+  return { ...estado.usuarioAsistencia, nombre: estado.usuario?.nombre || estado.usuarioAsistencia.nombre };
 }

@@ -176,3 +176,6 @@ body[data-vista="login"] .shell{ display:block; }
   .content{ padding:0 !important; }
   .card{ box-shadow:none !important; }
 }
+
+/* Contenedor de cada vista (main.js): no agrega caja propia. */
+.vista{ display:contents; }

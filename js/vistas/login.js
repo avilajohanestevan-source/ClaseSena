@@ -28,7 +28,7 @@ const DEMO_ASISTENCIA = { instructor: '1010101010', administrativo: '2020202020'
 
 const TIPOS_DOCUMENTO = [['CC', 'Cédula de ciudadanía'], ['TI', 'Tarjeta de identidad'], ['CE', 'Cédula de extranjería'], ['PPT', 'Permiso por protección temporal']];
 
-export function render(raiz) {
+export function render(raiz, { desdeSalida = false } = {}) {
   let rol = 'instructor';
 
   /* --- campos --- */
@@ -102,6 +102,8 @@ export function render(raiz) {
       h('div', { class: 'login-escena' }, piezaA, piezaB, linea, aro, tarjeta)),
     h('footer', { class: 'login-pie' }, '© SENA · Ministerio del Trabajo')));
 
+  // Después de cerrar sesión las piezas regresan desde fuera de la pantalla.
+  if (desdeSalida) anim.entradaLogin({ tarjeta, piezaA, piezaB, extras: [linea, aro] });
   if (window.matchMedia('(pointer: fine)').matches) identificacion.focus();
 
   // Parallax suave de las piezas con el puntero (solo escritorio, respeta "reducir movimiento").
@@ -144,11 +146,11 @@ export function render(raiz) {
     enviar.classList.add('login-enviar--ok');
     enviar.replaceChildren(icono('check'), h('span', {}, `¡Hola, ${respuesta.usuario.nombre.split(' ')[0]}!`));
     await anim.salidaLogin({ tarjeta, piezaA, piezaB, extras: [linea, aro] });
-    let tokenMock = null;
+    let tokenMock = null, usuarioMock = null;
     if (DEMO_ASISTENCIA[rol]) {
-      try { tokenMock = (await api.login({ identificacion: DEMO_ASISTENCIA[rol], password: PASSWORD_PRUEBA, rol })).token; } catch { /* asistencia no disponible */ }
+      try { ({ token: tokenMock, usuario: usuarioMock } = await api.login({ identificacion: DEMO_ASISTENCIA[rol], password: PASSWORD_PRUEBA, rol })); } catch { /* asistencia no disponible */ }
     }
-    iniciarSesion({ token: respuesta.token, usuario: respuesta.usuario, tokenMock });
+    iniciarSesion({ token: respuesta.token, usuario: respuesta.usuario, tokenMock, usuarioMock });
   }
 
   function demo() {

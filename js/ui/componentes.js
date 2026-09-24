@@ -92,7 +92,7 @@ export function tablaAsistencias({ columnasAprendiz = true, porPagina = 20 } = {
       completa && h('td', {}, r.ambiente),
       h('td', {}, r.hora ? formato.hora(r.hora) : '—'),
       h('td', {}, chipAsistencia(r.estado)),
-    )) : h('tr', {}, h('td', { colspan: 8, class: 'empty-state' }, 'No hay registros con esos filtros.')));
+    )) : h('tr', {}, h('td', { colspan: 8, class: 'empty-state' }, 'No hay asistencias registradas con esos filtros.')));
     vaciar(pie,
       h('span', { class: 'text-muted' }, `${registros.length} registros · página ${pagina + 1} de ${total}`),
       h('div', { class: 'paginacion-botones' },
@@ -141,7 +141,18 @@ export function cargando(texto = 'Cargando…') {
 }
 
 export function tarjetaError(error, reintentar) {
-  return h('div', { class: 'banner error' }, error.message || 'Ocurrió un error.',
+  // Los módulos de asistencia aún no tienen backend: si fallan (sin sesión
+  // simulada, sin datos), se muestra un estado vacío en lugar del error técnico.
+  if (error?.origen === 'asistencia') {
+    return h('div', { class: 'card vacio-estado' },
+      h('span', { class: 'vacio-icono', 'aria-hidden': 'true' }, icono('historial')),
+      h('strong', {}, 'No hay asistencias registradas'),
+      h('p', {}, 'Cuando haya clases con registro de asistencia aparecerán aquí.'),
+      reintentar && h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: reintentar }, icono('reintentar'), 'Reintentar'));
+  }
+  // Error que no viene de la API (p. ej. un módulo que no cargó): mensaje entendible.
+  const mensaje = error?.status !== undefined ? error.message : 'No se pudo cargar esta sección. Recarga la página e inténtalo de nuevo.';
+  return h('div', { class: 'banner error' }, mensaje || 'Ocurrió un error.',
     reintentar && h('button', { class: 'btn btn-outline btn-sm', type: 'button', style: { marginLeft: '12px' }, onclick: reintentar }, icono('reintentar'), 'Reintentar'));
 }
 

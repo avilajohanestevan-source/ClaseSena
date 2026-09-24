@@ -8,7 +8,7 @@ import { crearEscaner } from '../ui/escaner.js';
 import { badgeSemaforo, cargando, tarjetaError, encabezado, tablaAsistencias, filtroFechas, exportMock, COLUMNAS_ASISTENCIA } from '../ui/componentes.js';
 import { estadoVentana, formatearDuracion, leerQr, prevalidarEscaneo, fechaIso } from '../reglas.js';
 import { api } from '../api/contratos.js';
-import { estado } from '../estado.js';
+import { estado, usuarioAsistencia } from '../estado.js';
 import { CONFIG } from '../config.js';
 
 const MENSAJE_BLOQUEO = {
@@ -19,7 +19,7 @@ const MENSAJE_BLOQUEO = {
 };
 
 export async function render(raiz, { alSalir }) {
-  const usuario = estado.usuario;
+  const usuario = usuarioAsistencia();
   const panelClase = h('div', { class: 'card clase-aprendiz', 'data-anim': '' }, cargando());
   const resultado = h('div', { class: 'resultado-zona', 'aria-live': 'polite' });
   const historial = h('div', { class: 'card', 'data-anim': '' }, cargando());
@@ -60,7 +60,7 @@ export async function render(raiz, { alSalir }) {
     } catch (e) { vaciar(panelClase, tarjetaError(e, cargarClase)); return; }
     ultimoEstado = null;
     if (!sesion) {
-      vaciar(panelClase, h('div', { class: 'empty-state' }, 'No tienes clases programadas hoy.'));
+      vaciar(panelClase, h('div', { class: 'empty-state' }, h('strong', {}, 'No hay asistencias registradas'), h('p', {}, 'No tienes clases programadas hoy.')));
       escaner.bloquear(MENSAJE_BLOQUEO.ninguna);
       return;
     }

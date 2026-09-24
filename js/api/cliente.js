@@ -8,10 +8,13 @@ import { CONFIG } from '../config.js';
 import { responder } from './mock/servidor.js';
 
 export class ErrorApi extends Error {
-  constructor(status, mensaje, codigo) {
+  constructor(status, mensaje, codigo, origen = 'ambientes') {
     super(mensaje);
     this.status = status;
     this.codigo = codigo;
+    // 'ambientes' (backend real) o 'asistencia' (módulo simulado): un 401 de
+    // asistencia no debe cerrar la sesión real.
+    this.origen = origen;
   }
 }
 
@@ -61,8 +64,13 @@ export async function pedir(metodo, ruta, datos) {
     const [min, max] = CONFIG.latenciaMock;
     await new Promise((r) => setTimeout(r, min + Math.random() * (max - min)));
     const { status, cuerpo } = responder({ metodo, ruta, query: conQuery ? datos : {}, cuerpo: conQuery ? null : datos, token });
-    if (status >= 400) throw new ErrorApi(status, cuerpo.mensaje, cuerpo.codigo);
+    if (status >= 400) throw new ErrorApi(status, cuerpo.mensaje, cuerpo.codigo, 'asistencia');
     return structuredClone(cuerpo);
   }
-  return porFetch(CONFIG.apiBase, metodo, ruta, datos, token);
+  try {
+    return await porFetch(CONFIG.apiBase, metodo, ruta, datos, token);
+  } catch (e) {
+    e.origen = 'asistencia';
+    throw e;
+  }
 }

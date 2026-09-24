@@ -7,7 +7,7 @@ import { toast, confirmar } from '../ui/avisos.js';
 import { cargando, tarjetaError, encabezado, exportMock } from '../ui/componentes.js';
 import { parsearCsv, validarRegistrosP004, ESTADOS_P004, CAMPOS_P004 } from '../reglas.js';
 import { api } from '../api/contratos.js';
-import { estado } from '../estado.js';
+import { usuarioAsistencia } from '../estado.js';
 
 const CLASE_ESTADO = {
   'EN FORMACION': 'in', CONDICIONADO: 'out', APLAZADO: 'out', TRASLADADO: 'azul',
@@ -22,7 +22,7 @@ const EJEMPLO_CSV = `documento;nombre;ficha;programa;estado
 1000999111;Sin Estado;2758432;ADSO;VACACIONES`;
 
 export async function render(raiz) {
-  const usuario = estado.usuario;
+  const usuario = usuarioAsistencia();
   let registros = [], pendientes = null, filtroTexto = '', filtroEstado = '';
 
   /* --- importación --- */
