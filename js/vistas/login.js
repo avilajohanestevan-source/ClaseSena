@@ -88,7 +88,7 @@ export function render(raiz, { desdeSalida = false } = {}) {
   const aro = h('span', { class: 'login-pieza login-pieza--aro', 'aria-hidden': 'true' });
 
   raiz.append(h('div', { class: 'login' },
-    h('div', { class: 'login-fondo', 'aria-hidden': 'true' }, h('img', { src: 'img/fondo/trazos-fondo.svg', alt: '' })),
+    h('div', { class: 'login-fondo', 'aria-hidden': 'true' }, h('img', { src: 'img/fondo/textura-principal.svg', alt: '' })),
     h('header', { class: 'login-cabecera' },
       h('img', { class: 'login-logo', src: 'img/sena-logo-verde.png', alt: 'SENA' }),
       h('div', { class: 'login-marca' }, h('strong', {}, 'Asistencia y ambientes'), h('span', {}, 'Servicio Nacional de Aprendizaje'))),

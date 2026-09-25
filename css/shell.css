@@ -48,7 +48,11 @@ body:not([data-vista="login"])::before{
   padding-top:max(16px, env(safe-area-inset-top));
 }
 .drawer-logo{ width:40px; height:40px; object-fit:contain; flex-shrink:0; }
-.drawer-marca{ display:grid; line-height:1.2; min-width:0; flex:1; }
+/* Línea delgada entre el logo y el nombre del sistema (manual de identidad). */
+.drawer-marca{
+  display:grid; align-content:center; align-self:stretch; line-height:1.2; min-width:0; flex:1;
+  padding-left:10px; border-left:1px solid var(--color-text-muted);
+}
 .drawer-marca strong{ font-family:var(--font-display); font-size:16px; color:var(--color-heading); }
 .drawer-marca span{ font-size:var(--fs-xs); color:var(--color-text-muted); white-space:nowrap; }
 .drawer-cerrar{
