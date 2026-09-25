@@ -24,6 +24,20 @@ body[data-vista="login"] .shell{ display:block; }
 .shell-principal{ min-width:0; display:flex; flex-direction:column; min-height:100vh; min-height:100dvh; }
 .shell-principal > .content{ flex:1 0 auto; }
 
+/* Fondo del panel: el cuarto inferior del símbolo SENA (brazo y piernas,
+   img/fondo/patas-sena.svg) prolongado sobre toda el área de contenido. El
+   brazo corre justo debajo de la barra superior y las piernas bajan en
+   diagonal hasta el borde inferior. Reemplaza al logo de la esquina. */
+body:not([data-vista="login"])::before{
+  top:var(--barra-alto); left:0; right:0; bottom:0; width:auto; aspect-ratio:auto;
+  background:url("../img/fondo/patas-sena.svg") left top / cover no-repeat;
+  opacity:.05;
+}
+@media (min-width:900px){
+  body:not([data-vista="login"])::before{ left:var(--menu-ancho); transition:left 320ms var(--ease-out-cubic); }
+  body[data-menu="riel"]:not([data-vista="login"])::before{ left:var(--menu-riel); }
+}
+
 /* ================= Menú lateral ================= */
 .drawer{
   display:flex; flex-direction:column; background:var(--color-surface);

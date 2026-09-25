@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Cuarto inferior del símbolo SENA (brazo, pierna izquierda y la "V" central)
+     en las coordenadas del logo de 1000×1000 (img/sena-logo-verde.png), con las
+     piernas prolongadas en su mismo ángulo (60°) para que crucen todo el fondo.
+     El viewBox recorta desde el brazo: el brazo queda arriba, de borde a borde. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 447 560 420" preserveAspectRatio="xMinYMin slice">
+  <g fill="#39A900">
+    <!-- Brazo izquierdo + pierna izquierda (forma de "7") -->
+    <path d="M-2000 447 L460 447 L-667 2400 L-757 2400 L305 553 Q318 520 290 520 L-2000 520 Z"/>
+    <!-- "V" central: pierna izquierda (paralela a la anterior) y pierna derecha -->
+    <path d="M500 522 L1584 2400 L1494 2400 L515 700 Q500 686 485 700 L-496 2400 L-584 2400 Z"/>
+  </g>
+</svg>

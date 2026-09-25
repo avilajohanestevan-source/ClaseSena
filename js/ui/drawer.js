@@ -64,6 +64,8 @@ export function crearShell({ contenido, alSalir }) {
   function aplicar() {
     const escritorio = mq.matches;
     el.dataset.modo = escritorio ? (riel ? 'riel' : 'fijo') : (abierto ? 'abierto' : 'cerrado');
+    // También en <body>: el fondo (body::before) se corre con el ancho del menú.
+    document.body.dataset.menu = el.dataset.modo;
     hamburguesa.setAttribute('aria-expanded', String(escritorio ? !riel : abierto));
     hamburguesa.setAttribute('aria-label', escritorio ? (riel ? 'Expandir menú' : 'Plegar menú') : (abierto ? 'Cerrar menú' : 'Abrir menú'));
     // En móvil, lo que no está a la vista no debe recibir foco.
