@@ -1,8 +1,7 @@
-// Genera las texturas del manual de identidad SENA para el fondo del login:
-//  · img/fondo/textura-principal.svg  → haces de líneas finas que ondulan
-//    (cada haz interpola entre dos curvas, lo que da el efecto de cinta).
-//  · img/fondo/textura-secundaria.svg → mosaico de arcos enlazados (Truchet),
-//    que se repite sin cortes como fondo.
+// Genera la textura principal del manual de identidad SENA para el fondo
+// del login (diseño "Manual SENA"): img/fondo/textura-principal.svg, haces de
+// líneas finas que ondulan (cada haz interpola entre dos curvas, lo que da el
+// efecto de cinta). La textura secundaria no se usa: recarga el ingreso.
 //   node scripts/generar-texturas.mjs
 import { writeFileSync } from 'node:fs';
 
@@ -37,27 +36,4 @@ writeFileSync(destino('textura-principal.svg'), `<svg xmlns="http://www.w3.org/2
 </svg>
 `);
 
-/* ---------- textura secundaria ---------- */
-
-const CELDA = 32;
-const LADO = 8; // 8×8 celdas: mosaico de 256 px que se repite sin cortes
-let semilla = 7;
-const azar = () => ((semilla = (semilla * 1103515245 + 12345) % 2147483648) / 2147483648);
-const arcos = [];
-for (let fila = 0; fila < LADO; fila++) {
-  for (let col = 0; col < LADO; col++) {
-    const x = col * CELDA, y = fila * CELDA, m = CELDA / 2;
-    // Dos cuartos de círculo que unen los puntos medios de los lados: todas las
-    // celdas encajan entre sí, y al repetir el mosaico también.
-    arcos.push(azar() < 0.5
-      ? `M${x + m} ${y}A${m} ${m} 0 0 1 ${x} ${y + m}M${x + CELDA} ${y + m}A${m} ${m} 0 0 0 ${x + m} ${y + CELDA}`
-      : `M${x + m} ${y}A${m} ${m} 0 0 0 ${x + CELDA} ${y + m}M${x} ${y + m}A${m} ${m} 0 0 1 ${x + m} ${y + CELDA}`);
-  }
-}
-const tam = CELDA * LADO;
-writeFileSync(destino('textura-secundaria.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${tam} ${tam}" width="${tam}" height="${tam}">
-  <!-- Textura secundaria del manual de identidad SENA (arcos enlazados). Generada con scripts/generar-texturas.mjs -->
-  <path fill="none" stroke="#1F2421" stroke-opacity=".03" stroke-width="7" stroke-linecap="round" d="${arcos.join('')}"/>
-</svg>
-`);
-console.log('✓ img/fondo/textura-principal.svg y textura-secundaria.svg');
+console.log('✓ img/fondo/textura-principal.svg');

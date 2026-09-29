@@ -9,8 +9,9 @@
 // el dispositivo):
 //  · "clasico": texturas del prototipo (trazos finos y retícula de puntos),
 //    piezas verde y azul.
-//  · "manual": texturas del manual de identidad SENA, línea entre logo y
-//    nombre, y solo la paleta principal (verde #39A900 y blanco).
+//  · "manual": textura principal del manual de identidad SENA (ondas de
+//    líneas finas), línea entre logo y nombre y paleta principal (verde
+//    #39A900 y blanco). Las dos piezas conservan sus colores originales.
 import { h, icono, errorCampo } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { crearSelectorRol } from '../ui/selector-rol.js';
@@ -25,7 +26,7 @@ import { PASSWORD_PRUEBA } from '../api/mock/datos.js';
 const CLAVE_DISENO = 'sena-ambientes.diseno-login';
 const DISENOS = {
   clasico: { etiqueta: 'Clásico', fondo: 'img/fondo/trazos-fondo.svg', piezaA: 'img/fondo/pildora-verde.svg', piezaB: 'img/fondo/pildora-azul.svg' },
-  manual: { etiqueta: 'Manual SENA', fondo: 'img/fondo/textura-principal.svg', piezaA: 'img/fondo/pildora-verde-manual.svg', piezaB: 'img/fondo/pildora-blanca-manual.svg' },
+  manual: { etiqueta: 'Manual SENA', fondo: 'img/fondo/textura-principal.svg', piezaA: 'img/fondo/pildora-verde.svg', piezaB: 'img/fondo/pildora-azul.svg' },
 };
 function disenoGuardado() {
   try { return DISENOS[localStorage.getItem(CLAVE_DISENO)] ? localStorage.getItem(CLAVE_DISENO) : 'clasico'; } catch { return 'clasico'; }
