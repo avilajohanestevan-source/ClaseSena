@@ -4,15 +4,32 @@
 // mensajes para cada error de la API (401, 403, 423, red). Al validar,
 // la tarjeta hace un micro-rebote y las piezas salen de la pantalla antes
 // de pasar al panel (ver anim.salidaLogin).
+//
+// Dos diseños que se alternan con el botón de la cabecera (se recuerda en
+// el dispositivo):
+//  · "clasico": texturas del prototipo (trazos finos y retícula de puntos),
+//    piezas verde y azul.
+//  · "manual": texturas del manual de identidad SENA, línea entre logo y
+//    nombre, y solo la paleta principal (verde #39A900 y blanco).
 import { h, icono, errorCampo } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { crearSelectorRol } from '../ui/selector-rol.js';
+import { movimientoReducido } from '../ui/preferencias.js';
 import { ROLES, validarLogin } from '../reglas.js';
 import { api } from '../api/contratos.js';
 import { apiAmb } from '../api/ambientes.js';
 import { iniciarSesion } from '../estado.js';
 import { CONFIG } from '../config.js';
 import { PASSWORD_PRUEBA } from '../api/mock/datos.js';
+
+const CLAVE_DISENO = 'sena-ambientes.diseno-login';
+const DISENOS = {
+  clasico: { etiqueta: 'Clásico', fondo: 'img/fondo/trazos-fondo.svg', piezaA: 'img/fondo/pildora-verde.svg', piezaB: 'img/fondo/pildora-azul.svg' },
+  manual: { etiqueta: 'Manual SENA', fondo: 'img/fondo/textura-principal.svg', piezaA: 'img/fondo/pildora-verde-manual.svg', piezaB: 'img/fondo/pildora-blanca-manual.svg' },
+};
+function disenoGuardado() {
+  try { return DISENOS[localStorage.getItem(CLAVE_DISENO)] ? localStorage.getItem(CLAVE_DISENO) : 'clasico'; } catch { return 'clasico'; }
+}
 
 // Usuarios de db/seed.sql (contraseña Sena2026*), para la demostración.
 const USUARIOS_DEMO = [
@@ -82,19 +99,46 @@ export function render(raiz, { desdeSalida = false } = {}) {
     h('p', { class: 'login-sub' }, 'Elige tu rol e ingresa con tu documento.'),
     form,
     CONFIG.mostrarUsuariosDemo && demo());
-  const piezaA = pieza('a', 'img/fondo/pildora-verde.svg');
-  const piezaB = pieza('b', 'img/fondo/pildora-azul.svg');
+  let diseno = disenoGuardado();
+  const piezaA = pieza('a', DISENOS[diseno].piezaA);
+  const piezaB = pieza('b', DISENOS[diseno].piezaB);
+  const fondo = h('img', { src: DISENOS[diseno].fondo, alt: '' });
+
+  /* --- alternar diseño: segmentado con indicador que se desliza --- */
+  const opcionesDiseno = Object.entries(DISENOS).map(([clave, d]) => h('button', {
+    class: 'diseno-opcion', type: 'button', 'aria-pressed': String(clave === diseno), onclick: () => cambiarDiseno(clave),
+  }, d.etiqueta));
+  const alternador = h('div', { class: 'diseno-alternar', role: 'group', 'aria-label': 'Diseño de la página' },
+    h('span', { class: 'diseno-indicador', 'aria-hidden': 'true' }), opcionesDiseno);
   const linea = h('span', { class: 'login-pieza login-pieza--linea', 'aria-hidden': 'true' });
   const aro = h('span', { class: 'login-pieza login-pieza--aro', 'aria-hidden': 'true' });
 
-  raiz.append(h('div', { class: 'login' },
-    h('div', { class: 'login-fondo', 'aria-hidden': 'true' }, h('img', { src: 'img/fondo/textura-principal.svg', alt: '' })),
+  const pagina = h('div', { class: 'login', 'data-diseno': diseno },
+    h('div', { class: 'login-fondo', 'aria-hidden': 'true' }, fondo),
     h('header', { class: 'login-cabecera' },
       h('img', { class: 'login-logo', src: 'img/sena-logo-verde.png', alt: 'SENA' }),
-      h('div', { class: 'login-marca' }, h('strong', {}, 'Asistencia y ambientes'), h('span', {}, 'Servicio Nacional de Aprendizaje'))),
+      h('div', { class: 'login-marca' }, h('strong', {}, 'Asistencia y ambientes'), h('span', {}, 'Servicio Nacional de Aprendizaje')),
+      alternador),
     h('div', { class: 'login-centro' },
       h('div', { class: 'login-escena' }, piezaA, piezaB, linea, aro, tarjeta)),
-    h('footer', { class: 'login-pie' }, '© SENA · Ministerio del Trabajo')));
+    h('footer', { class: 'login-pie' }, '© SENA · Ministerio del Trabajo'));
+  raiz.append(pagina);
+
+  function cambiarDiseno(clave) {
+    if (clave === diseno) return;
+    diseno = clave;
+    try { localStorage.setItem(CLAVE_DISENO, clave); } catch { /* sin almacenamiento: solo esta vez */ }
+    opcionesDiseno.forEach((b, i) => b.setAttribute('aria-pressed', String(Object.keys(DISENOS)[i] === clave)));
+    const aplicar = () => {
+      pagina.dataset.diseno = clave;
+      fondo.src = DISENOS[clave].fondo;
+      piezaA.querySelector('img').src = DISENOS[clave].piezaA;
+      piezaB.querySelector('img').src = DISENOS[clave].piezaB;
+    };
+    // Fundido entre los dos diseños (View Transitions si el navegador lo permite).
+    if (document.startViewTransition && !movimientoReducido()) document.startViewTransition(aplicar);
+    else aplicar();
+  }
 
   // Después de cerrar sesión las piezas regresan desde fuera de la pantalla.
   if (desdeSalida) anim.entradaLogin({ tarjeta, piezaA, piezaB, extras: [linea, aro] });

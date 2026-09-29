@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
   <!-- Textura principal del manual de identidad SENA (sobre fondo blanco). Generada con scripts/generar-texturas.mjs -->
-  <g fill="none" stroke="#00304D" stroke-opacity=".11" stroke-width=".7">
+  <g fill="none" stroke="#1F2421" stroke-opacity=".1" stroke-width=".7">
     <path d="M-60 560C380 300 820 900 1660 420"/>
     <path d="M-60 560.1C380 300.2 820.1 899.8 1660 420.1"/>
     <path d="M-60 560.3C380.1 300.9 820.2 899.2 1660 420.3"/>

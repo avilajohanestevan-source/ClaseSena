@@ -192,6 +192,18 @@ para limpiar.
 
 ## Diseño
 
+El login tiene **dos diseños** que se alternan con el botón *Clásico / Manual
+SENA* de la esquina superior (se recuerda en cada dispositivo):
+
+- **Clásico:** trazos finos y retícula de puntos del prototipo, piezas verde
+  y azul.
+- **Manual SENA:** texturas del manual de identidad (principal: haces de
+  líneas finas; secundaria: arcos enlazados, generadas con
+  `node scripts/generar-texturas.mjs`), línea delgada entre el logo y el
+  nombre del sistema, y **solo la paleta principal**: verde institucional
+  `#39A900` y blanco (con transparencias del mismo verde) y neutros para el
+  texto. La paleta secundaria queda para otros usos.
+
 Mobile-first, fondo blanco y colores, logo y tipografías del manual de
 identidad SENA. Tokens en `css/tokens.css` (fuente: `diseno/tokens.json`) y
 guía de handoff en `diseno/guia.html` (estados de componentes, tiempos de

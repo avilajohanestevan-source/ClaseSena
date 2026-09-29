@@ -31,7 +31,7 @@ const trazos = HACES.flatMap(({ lineas, a, b }) => Array.from({ length: lineas }
 
 writeFileSync(destino('textura-principal.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
   <!-- Textura principal del manual de identidad SENA (sobre fondo blanco). Generada con scripts/generar-texturas.mjs -->
-  <g fill="none" stroke="#00304D" stroke-opacity=".11" stroke-width=".7">
+  <g fill="none" stroke="#1F2421" stroke-opacity=".1" stroke-width=".7">
     ${trazos.join('\n    ')}
   </g>
 </svg>
@@ -57,7 +57,7 @@ for (let fila = 0; fila < LADO; fila++) {
 const tam = CELDA * LADO;
 writeFileSync(destino('textura-secundaria.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${tam} ${tam}" width="${tam}" height="${tam}">
   <!-- Textura secundaria del manual de identidad SENA (arcos enlazados). Generada con scripts/generar-texturas.mjs -->
-  <path fill="none" stroke="#00304D" stroke-opacity=".028" stroke-width="7" stroke-linecap="round" d="${arcos.join('')}"/>
+  <path fill="none" stroke="#1F2421" stroke-opacity=".03" stroke-width="7" stroke-linecap="round" d="${arcos.join('')}"/>
 </svg>
 `);
 console.log('✓ img/fondo/textura-principal.svg y textura-secundaria.svg');
