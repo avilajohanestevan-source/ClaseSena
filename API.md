@@ -152,81 +152,115 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 
 | Tabla | Contenido |
 |---|---|
-| `users` | documento, tipo, nombre, contacto, `rol` (instructor, administrativo, portero, aprendiz), ficha, `password_hash` |
+| `users` | documento, tipo, nombre, contacto, `rol` (instructor, administrativo, portero, aprendiz), `area` de los administrativos (`coordinacion`, `administrativo`, `inventario`), ficha, `password_hash` |
 | `api_tokens` | sesiones |
-| `environments` | `codigo` (107…), nombre, bloque, capacidad, `portero_id` asignado, activo |
-| `inventory_items` | ítems por ambiente; `codigo` único (AMB107-003, SILLA-107-04, un EAN…) va en el QR `SENA-INV:<codigo>` y en el código de barras; estado |
-| `item_history` | trazabilidad de cada ítem: `registro`, `carga_masiva`, `escaneo`, `edicion`, `etiqueta`, `dano`, `dano_retirado`, con usuario, detalle y revisión |
-| `inspections` | `environment_id`, `instructor_id` (revisa y recibe), `portero_id` (entrega), estado, resultado, `qr_token`, checklist (JSON), observaciones, `iniciada_en`, `confirmada_en`, `qr_generado_en`, `recibida_en`, nombres de quien entregó y recibió |
-| `inspection_items` | daño reportado: `inspection_id` → `inventory_item_id` o, si es del salón, `ubicacion` (pared, techo…) sin ítem; tipo, severidad, comentario, foto |
-| `notifications` | `revision_lista` (al portero: genera el QR), `entrega_recibida` (al portero), `dano_reportado` / `dano_grave` (a coordinación cuando se recibe un ambiente con daños) |
+| `especialidades_ambiente` | Cocina, Laboratorio, Audiovisual, Axo, Sistemas, Aula convencional… (`nombre`, `descripcion`, `activo`) |
+| `environments` | `codigo` (107…), nombre, bloque, **`capacidad_aprendices`** (antes `capacidad` en puestos), **`especialidad_id`**, `portero_id` asignado, activo |
+| `inventory_categories` | Inmuebles, Mobiliario, Electrodomésticos, Equipos Informáticos, Periféricos, Audiovisual, Redes, Laboratorio, Herramientas, Utensilios de cocina, Seguridad |
+| `item_families` | familias de ítems por ambiente: `codigo` (FAM107-PC01, va en el QR `SENA-FAM:<codigo>`), `tipo` (PC, Estación de cocina…), `nombre` |
+| `inventory_items` | ítems por ambiente; `codigo` único (código de barras), **`qr_value`** único (contenido del QR; por defecto `SENA-INV:<codigo>`), `category_id`, `family_id`, estado (`operativo`, `danado`, `en_reparacion`, `fuera_servicio`, `baja` = inactivo), `ultimo_escaneo_en` |
+| `item_history` | trazabilidad de cada ítem: `registro`, `carga_masiva`, `escaneo`, `traslado`, `edicion`, `etiqueta`, `familia`, `dano`, `dano_retirado`, `novedad`, `novedad_resuelta`, `estado`, con usuario, detalle, revisión y novedad |
+| `inspections` | `environment_id`, `instructor_id` (revisa y recibe), `portero_id` (entrega), estado, resultado, `qr_token`, checklist (JSON), **`items_ok`** (ítems marcados OK), **`estado_salon`** (JSON guardado al recibir), observaciones, horas de cada paso, nombres de quien entregó y recibió |
+| `inspection_items` | novedad reportada: `inspection_id` → `inventory_item_id`, **`family_id`** (familia completa) o `ubicacion` del salón; **`naturaleza`** (`permanente`, `temporal`, `limpieza`), tipo, severidad, comentario, foto, `persistent_issue_id` |
+| `persistent_issues` | novedades permanentes: ambiente, ítem / familia / ubicación, tipo, severidad, descripción, foto, `estado` (`activa`, `resuelta`), quién la reportó y en qué revisión, `resuelta_por`, `resuelta_en`, `resolucion` |
+| `notifications` | `revision_lista` (al portero: genera el QR), `entrega_recibida` (al portero), `dano_reportado` / `dano_grave` (resumen a coordinación, administrativo e inventario), `novedad_permanente` y `novedad_resuelta` (con `persistent_issue_id`) |
 
 ## Sesión y perfil
 
 | Método | Ruta | Rol | Cuerpo → respuesta |
 |---|---|---|---|
-| POST | `/auth/login` | — | `{tipoDocumento?, identificacion, password, rol}` → `{token, usuario}` |
+| POST | `/auth/login` | — | `{tipoDocumento?, identificacion, password, rol}` → `{token, usuario}` (`usuario.area` en administrativos) |
 | POST | `/auth/logout` | todos | → `204` |
 | GET | `/me` | todos | → `usuario` |
 | PATCH | `/me` | todos | `{nombre, email?, telefono?}` → `usuario` |
 | POST | `/me/password` | todos | `{actual, nueva}` → `204` (cierra las otras sesiones) |
 | GET | `/users?rol=` | administrativo | → `usuario[]` |
 
+## Catálogos
+
+| Método | Ruta | Rol | Notas |
+|---|---|---|---|
+| GET | `/specialties?todos=1` | todos | Especialidades activas (`todos=1`: también las inactivas, administrativo). `[{id, nombre, descripcion, activo, enUso}]` |
+| POST / PATCH / DELETE | `/specialties`, `/specialties/{id}` | administrativo | `{nombre, descripcion?, activo?}`. Nombre repetido → `409 DUPLICADO`; borrar una en uso → `409 EN_USO` (se desactiva) |
+| GET | `/inventory/categories?todos=1` | personal | Categorías del inventario, mismo formato |
+| POST / PATCH / DELETE | `/inventory/categories`, `/inventory/categories/{id}` | administrativo | Igual que las especialidades |
+
 ## Ambientes e inventario
 
 | Método | Ruta | Rol | Notas |
 |---|---|---|---|
-| GET | `/environments?asignados=1` | todos | Con portero, conteo de ítems y última inspección. `asignados` filtra los del portero |
-| GET/PATCH/DELETE | `/environments/{id}` | GET todos; resto administrativo | DELETE → `409 EN_USO` si tiene inventario o inspecciones |
-| POST | `/environments` | administrativo | `{codigo, nombre, bloque?, capacidad?, porteroId?, activo?}` |
-| GET | `/environments/{id}/items` | personal | Ítems del ambiente |
-| GET | `/items/by-code/{codigo}` | personal | Para el escáner; acepta el código solo o `SENA-INV:<codigo>` |
-| POST | `/items` | administrativo | `{ambienteId, codigo?, nombre, categoria, serial?, estado?}`; sin código se genera el consecutivo |
-| POST | `/items/scan` | administrativo | Registro con lector: `{codigo, ambienteId, nombre, categoria}` → `{item, creado, otroAmbiente}`. Si el código existe no lo duplica |
-| POST | `/items/import` | administrativo | Carga masiva: `{nombre: "x.xlsx", archivo: data URL, simular}` → `{total, nuevos, actualizados, sinCambios, errores:[{fila, mensaje}], filas}`. Excel/ODS/CSV con PhpSpreadsheet (sin él, solo CSV). Con `simular` no guarda |
-| GET | `/items/export?ambienteId` | administrativo | Inventario en .xlsx con las columnas de la carga |
-| POST | `/items/labels` | personal | `{ids, motivo?}` registra la impresión o reimpresión de pegatinas en la trazabilidad |
+| GET | `/environments?asignados=1&especialidadId=` | todos | Con portero, especialidad, `capacidadAprendices`, conteo de ítems, familias, `novedadesActivas` y última inspección |
+| GET/PATCH/DELETE | `/environments/{id}` | GET todos; resto administrativo | DELETE → `409 EN_USO` si tiene inventario, familias o inspecciones |
+| POST | `/environments` | administrativo | `{codigo, nombre, bloque?, capacidad_aprendices?, especialidad_id?, porteroId?, activo?}`. Acepta también camelCase (`capacidadAprendices`, `especialidadId`) y la especialidad por nombre (`especialidad: "Cocina"`). Capacidad de 1 a 500 |
+| GET | `/environments/{id}/items?familiaId=` | personal | Ítems del ambiente |
+| GET | `/items/by-code/{codigo}` | personal | Acepta el código, `SENA-INV:<codigo>` o el `qr_value` del ítem |
+| GET | `/inventory/lookup?codigo=` | personal | Lo que se leyó con la cámara o el lector → `{tipo:'item', item}` o `{tipo:'familia', familia}` (con componentes) |
+| POST | `/items` | administrativo | `{ambienteId, codigo?, qr?, nombre, categoriaId \| categoria, familiaId?, serial?, estado?}`; sin código se genera el consecutivo; sin `qr`, `SENA-INV:<codigo>` |
+| POST | `/items/scan` | administrativo | Registro con lector: `{codigo (lo leído), ambienteId, nombre, categoriaId \| categoria, familiaId?}` → `{item, creado, actualizado, cambios, otroAmbiente, movidoDesde}`. **Crea** el ítem si no existe (si lo leído no es un código, se genera el consecutivo y lo leído queda como `qr_value`) o lo **actualiza**: lo traslada al ambiente elegido, lo asigna a la familia y anota la hora del escaneo. Pegatina de familia → `422 ES_FAMILIA` |
+| POST | `/inventory/import` (alias `/items/import`) | administrativo | Carga masiva con PhpSpreadsheet. JSON `{nombre: "x.xlsx", archivo: data URL, simular}` o `multipart/form-data` (`archivo`, `simular=1`) → `{total, nuevos, actualizados, sinCambios, familiasNuevas, errores:[{fila, mensaje}], filas}`. Columnas: `ambiente, codigo, nombre, categoria, serial, estado, familia, familia_nombre, familia_tipo, qr`. La categoría debe existir; una familia que no existe se crea; `qr` llena `qr_value`. Con `simular` no guarda |
+| GET | `/inventory/export?ambienteId` (alias `/items/export`) | administrativo | Inventario en .xlsx con las columnas de la carga |
+| POST | `/inventory/labels` (alias `/items/labels`) | personal | Reimpresión de pegatinas: `{ids?, familiaIds?, ambienteId?, motivo?}` → `{registradas, etiquetas:[{tipo, id, codigo, qr, nombre, ambiente, detalle, reimpresion}]}`. Queda en la trazabilidad (impresa o reimpresa) |
 | GET | `/items/{id}/history` | personal | Trazabilidad del ítem |
-| PATCH/DELETE | `/items/{id}` | administrativo | PATCH deja la edición en la trazabilidad. DELETE → `409 EN_USO` si tiene daños reportados |
+| PATCH/DELETE | `/items/{id}` | administrativo | PATCH `{nombre, categoriaId, serial?, estado, familiaId?, qr?}` deja la edición en la trazabilidad. DELETE → `409 EN_USO` si tiene novedades |
+| GET | `/inventory/families?ambienteId` | personal | Familias con sus componentes: `{id, codigo, qr: "SENA-FAM:…", tipo, nombre, componentesTotal, componentesConNovedad, novedadActivaId, componentes}` |
+| GET | `/inventory/families/{id}` | personal | Una familia |
+| POST | `/inventory/families` | administrativo | `{ambienteId, tipo, nombre, codigo?, itemIds}`; sin código se genera (FAM107-PC05). Los ítems deben ser del mismo ambiente (`422 OTRO_AMBIENTE`) |
+| PATCH / DELETE | `/inventory/families/{id}` | administrativo | PATCH `{tipo, nombre, itemIds?}` deja exactamente esos componentes. DELETE deja los componentes sueltos; con novedades → `409 EN_USO` |
 
 ## Inspecciones (entrega del ambiente)
 
-El instructor revisa el salón al entrar (checklist y daños con foto); el
-portero genera un QR de entrega y el instructor lo escanea para confirmar
-que recibe el ambiente.
+El instructor revisa el salón al entrar (checklist, ítems y novedades con
+foto); el portero genera un QR de entrega y el instructor lo escanea para
+confirmar que recibe el ambiente.
 
 ```
 en_curso ──confirm (instructor termina)──▶ pendiente_recepcion ──qr (portero genera el QR)──▶ pendiente_recepcion + qrGeneradoEn
-         ──el instructor escanea el QR──▶ recibida
+         ──el instructor escanea el QR──▶ recibida (+ estado_salon, persistent_issues, avisos)
 en_curso | pendiente_recepcion ──cancel (instructor)──▶ cancelada
 ```
 
+**"Todo está bien"** es un atajo de la pantalla: marca el checklist y todos
+los ítems revisables como OK *en la interfaz* (`marcarTodoBien` en
+`js/reglas.js`). No llama a la API, no termina la revisión ni escanea
+ningún QR. El envío es siempre `confirm`, que el instructor pulsa aparte. El
+antiguo `{todoBien: true}` ya no existe: sin checklist completo → `422`.
+
 `instructor_id` = quien revisa y recibe; `portero_id` = quien entrega
 (genera el QR). El texto del QR (`qr`) solo lo reciben el portero y el
-administrativo, y solo mientras la entrega está pendiente: el instructor
-tiene que escanearlo en el celular del portero.
+administrativo, y solo mientras la entrega está pendiente.
 
 | Método | Ruta | Rol | Notas |
 |---|---|---|---|
-| GET | `/inspections` | personal | Filtros: `estado, resultado, ambienteId, instructorId, desde, hasta, asignados`. El instructor solo ve las suyas; con `asignados=1` el portero ve las que entregó y las de sus ambientes |
+| GET | `/inspections` | personal | Filtros: `estado, resultado, ambienteId, instructorId, desde, hasta, asignados` |
 | POST | `/inspections` | instructor | `{ambienteId}` inicia la revisión. Si ya tiene una abierta en ese ambiente la devuelve; si es de otro instructor → `409 EN_CURSO` |
-| GET | `/inspections/{id}` | personal | Detalle: checklist, inventario (con `reportado`), `reportes`, `entrega` y `recibe` (`{nombre, fecha}`) |
+| GET | `/inspections/{id}` | personal | Detalle: checklist, `inventario` (con `reportado`, `reportadoPorFamilia`, `novedadActivaId`), `familias` (con `itemIds`, `reportado`), `novedadesActivas` del ambiente, `reportes`, `itemsOk`, `estadoSalon`, `entrega` y `recibe` |
 | GET | `/inspections/by-qr/{token}` | portero, administrativo | Consulta por el QR `SENA-INSP:<token>` |
-| PATCH | `/inspections/{id}/checklist` | instructor dueño | `{checklist:[{clave, ok}], observaciones}` (guardado automático) |
-| POST | `/inspections/{id}/items` | instructor dueño | `{itemId \| codigo, tipoDano, severidad, comentario, foto}` crea `inspection_items` y deja el ítem `danado` en el inventario (y en su trazabilidad). Daño del salón: `{ubicacion: pared\|techo\|piso\|puerta\|ventana\|electrica\|estructura\|otro, …}` sin ítem. La foto (data URL JPG/PNG/WebP, ≤ 3 MB) es la evidencia y siempre es obligatoria |
-| DELETE | `/inspections/{id}/items/{reporteId}` | instructor dueño | Quita el reporte y restaura el estado del ítem |
-| POST | `/inspections/{id}/confirm` | instructor dueño | `{checklist, observaciones?}` termina la revisión; `{todoBien: true}` marca todo el ambiente bien sin checklist (solo si no hay daños). Checklist completo; observaciones obligatorias si hay novedad. Notifica al portero del ambiente (o a todos si no tiene) |
+| PATCH | `/inspections/{id}/checklist` | instructor dueño | `{checklist:[{clave, ok}], observaciones}` (guardado automático de lo que el instructor marca a mano) |
+| POST | `/inspections/{id}/items` | instructor dueño | Novedad con foto: `{itemId \| familiaId \| codigo (lo escaneado: ítem o familia) \| ubicacion, naturaleza?, tipoDano, severidad, comentario, foto}`. `naturaleza` ∈ `permanente \| temporal \| limpieza` (sin ella: `suciedad` → limpieza, lo demás → permanente). Solo la permanente deja el ítem (o todos los componentes de la familia) `danado`. Un componente y su familia no se reportan a la vez (`409 DUPLICADO`). La foto (data URL JPG/PNG/WebP, ≤ 3 MB) siempre es obligatoria |
+| DELETE | `/inspections/{id}/items/{reporteId}` | instructor dueño | Quita el reporte y restaura el estado de los ítems |
+| POST | `/inspections/{id}/confirm` | instructor dueño | `{checklist, observaciones?, itemsOk?}` termina la revisión. Checklist completo; observaciones obligatorias si hay novedad; `itemsOk` deben ser del ambiente (los que tienen novedad se descartan). Notifica al portero del ambiente (o a todos si no tiene) |
 | POST | `/inspections/{id}/qr` | portero | Genera (o renueva) el QR de entrega; guarda `portero_id`. Antes de que el instructor termine → `409` |
-| POST | `/inspections/by-qr/{token}/receive` | instructor | Sin cuerpo. → `recibida` con la hora; notifica al portero y, si hay daños o novedades, a los administrativos (coordinación). QR de otro instructor → `403`; QR viejo o inexistente → `404` |
+| POST | `/inspections/by-qr/{token}/receive` | instructor | Sin cuerpo. → `recibida`; guarda `estado_salon` (ítems por estado, marcados OK, novedades por naturaleza, novedades activas). Cada novedad permanente abre una `persistent_issue` (o se suma a la activa del mismo ítem o familia). Avisa al portero y, si hay novedades, a coordinación, administrativo e inventario. QR de otro instructor → `403`; QR viejo o inexistente → `404` |
 | POST | `/inspections/{id}/cancel` | instructor dueño | Mientras no haya recibido el ambiente. Deshace los reportes |
 
 `tipoDano` ∈ `rotura | no_funciona | faltante | suciedad | otro`;
 `severidad` ∈ `leve | moderada | grave`.
 
+## Novedades permanentes e historial
+
+| Método | Ruta | Rol | Notas |
+|---|---|---|---|
+| GET | `/persistent-issues?estado=activa\|resuelta&ambienteId` | personal | `[{id, estado, ambiente, objetivo:{tipo: item\|familia\|salon, id, codigo, nombre}, titulo, itemEstado, tipoDano, severidad, descripcion, foto, reportadaPor, inspeccionId, creadaEn, resueltaPor, resueltaEn, resolucion, reportes}]` |
+| GET | `/persistent-issues/{id}` | personal | + `items` afectados con su estado y `historial` de revisiones que la reportaron |
+| POST | `/persistent-issues` | administrativo | Sin revisión: `{ambienteId?, itemId \| familiaId \| codigo \| ubicacion, tipoDano, severidad, descripcion, foto?, estadoItem?}` (`estadoItem` por defecto `danado`). Si el ítem o la familia ya tiene una activa → `409 DUPLICADO`. Avisa a los demás administrativos |
+| PATCH | `/persistent-issues/{id}` | administrativo | `{estadoItem?: danado\|en_reparacion\|fuera_servicio\|baja, severidad?, descripcion?}`: p. ej. dejar el ítem **fuera de servicio** o **de baja (inactivo)** mientras siga activa |
+| POST | `/persistent-issues/{id}/resolve` | administrativo | `{resolucion, estadoItem?}` (por defecto `operativo`; los de baja no cambian). Avisa a coordinación, administrativo e inventario y a quien la reportó |
+| GET | `/issues?ambienteId&itemId&naturaleza&estado&desde&hasta` | administrativo | Historial completo: `[{origen, id, inspeccionId, novedadId, ambiente, objetivo, itemEstado, naturaleza, tipoDano, severidad, comentario, foto, usuario, fecha, estado, resueltaEn, resueltaPor, resolucion}]`. `estado` ∈ `en_revision \| activa \| resuelta \| cerrada` (temporales y limpieza se cierran al recibir el ambiente). Con `itemId` incluye las novedades de su familia |
+
 ## Notificaciones y reportes
 
 | Método | Ruta | Rol | Notas |
 |---|---|---|---|
-| GET | `/inbox` | todos | `{sinLeer, notificaciones:[{id, tipo, titulo, detalle, inspeccionId, ambiente, leida, fecha}]}` |
+| GET | `/inbox` | todos | `{sinLeer, notificaciones:[{id, tipo, titulo, detalle, inspeccionId, novedadId, ambiente, leida, fecha}]}` |
 | POST | `/inbox/{id}/read`, `/inbox/read-all` | todos | → `204` |
-| GET | `/reports?desde&hasta&ambienteId&instructorId` | administrativo | `{resumen, porAmbiente, danos}` |
+| GET | `/reports?desde&hasta&ambienteId&instructorId` | administrativo | `{resumen, porAmbiente, danos}`; cada novedad trae `naturaleza`, `familiaId`, `novedadId` y `novedadEstado` |

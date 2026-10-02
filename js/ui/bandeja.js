@@ -6,11 +6,14 @@ import { h, icono, vaciar, formato } from './dom.js';
 import { anim } from './anim.js';
 import { toast, abrirModal } from './avisos.js';
 import { apiAmb } from '../api/ambientes.js';
-import { emitir } from '../estado.js';
+import { emitir, estado } from '../estado.js';
 import { CONFIG } from '../config.js';
 import { preferencia } from './preferencias.js';
 
-const ICONO = { revision_lista: 'qr', entrega_recibida: 'check', dano_reportado: 'herramienta', dano_grave: 'alerta' };
+const ICONO = {
+  revision_lista: 'qr', entrega_recibida: 'check', dano_reportado: 'herramienta', dano_grave: 'alerta',
+  novedad_permanente: 'reloj', novedad_resuelta: 'check',
+};
 
 export function crearBandeja() {
   let vistos = null, lista = [], sinLeer = 0, sondeo = null;
@@ -32,7 +35,7 @@ export function crearBandeja() {
     vistos = new Set(lista.map((n) => n.id));
     if (nuevas.length) {
       const n = nuevas[0];
-      toast(n.tipo === 'entrega_recibida' ? 'exito' : 'aviso', n.titulo, n.detalle, 7000);
+      toast(['entrega_recibida', 'novedad_resuelta'].includes(n.tipo) ? 'exito' : 'aviso', n.titulo, n.detalle, 7000);
       // El navegador solo permite vibrar si el usuario ya interactuó con la página.
       if (preferencia('vibrar') && navigator.userActivation?.hasBeenActive) navigator.vibrate?.([80, 60, 80]);
       emitir('bandeja', nuevas);
@@ -48,7 +51,9 @@ export function crearBandeja() {
           onclick: async () => {
             cerrar();
             if (!n.leida) { n.leida = true; apiAmb.leerNotificacion(n.id).then(consultar).catch(() => {}); }
-            if (n.inspeccionId) location.hash = `#/planilla?id=${n.inspeccionId}`;
+            // Novedades permanentes: los administrativos van a la novedad; el resto, a la planilla.
+            if (n.novedadId && estado.usuario?.rol === 'administrativo') location.hash = `#/novedades?id=${n.novedadId}`;
+            else if (n.inspeccionId) location.hash = `#/planilla?id=${n.inspeccionId}`;
           },
         },
           h('span', { class: 'bandeja-icono' }, icono(ICONO[n.tipo] || 'campana')),

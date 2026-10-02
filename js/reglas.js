@@ -230,10 +230,39 @@ export const ESTADOS_ITEM = {
   operativo: ['Operativo', 'in'],
   danado: ['Dañado', 'error'],
   en_reparacion: ['En reparación', 'out'],
-  baja: ['De baja', 'neutro'],
+  fuera_servicio: ['Fuera de servicio', 'error'],
+  baja: ['De baja (inactivo)', 'neutro'],
 };
 
+/**
+ * Naturaleza de una novedad (mismas claves que el backend):
+ * las permanentes quedan activas hasta que un administrativo las resuelve;
+ * las temporales y de limpieza solo quedan en el historial.
+ */
+export const NATURALEZAS = [
+  { clave: 'permanente', etiqueta: 'Permanente', ayuda: 'Daño que sigue hasta que lo arreglen (aire dañado, video beam sin lámpara).' },
+  { clave: 'temporal', etiqueta: 'Temporal', ayuda: 'Incidencia de hoy que no requiere reparación (cable suelto, equipo desconectado).' },
+  { clave: 'limpieza', etiqueta: 'Limpieza', ayuda: 'Suciedad, desorden o basura.' },
+];
+
+/** Sin elegir: la suciedad es de limpieza; lo demás, permanente (igual que el backend). */
+export function naturalezaPorDefecto(tipoDano) {
+  return tipoDano === 'suciedad' ? 'limpieza' : 'permanente';
+}
+
+/** [etiqueta, clase de .status-chip] de una novedad en el historial. */
+export const ESTADOS_NOVEDAD = {
+  en_revision: ['En revisión', 'azul'],
+  activa: ['Activa', 'error'],
+  resuelta: ['Resuelta', 'in'],
+  cerrada: ['Cerrada', 'neutro'],
+};
+
+/** Área de los administrativos (todos reciben los avisos de novedades). */
+export const ETIQUETA_AREA = { coordinacion: 'Coordinación', administrativo: 'Administrativo', inventario: 'Inventario' };
+
 export const PREFIJO_QR_ITEM = 'SENA-INV:';
+export const PREFIJO_QR_FAMILIA = 'SENA-FAM:';
 export const PREFIJO_QR_INSPECCION = 'SENA-INSP:';
 
 /**
@@ -260,10 +289,11 @@ export function leerQrInspeccion(texto) {
 }
 
 /** Mismas reglas que el backend (api/modulos/inspecciones.php → rutaReportarDano). */
-export function validarReporteDano({ itemId, ubicacion, tipoDano, severidad, comentario, foto }) {
+export function validarReporteDano({ itemId, familiaId, ubicacion, naturaleza, tipoDano, severidad, comentario, foto }) {
   const errores = {};
-  // Un daño es de un ítem del inventario o del salón (pared, techo…).
-  if (!itemId && !UBICACIONES.some((u) => u.clave === ubicacion)) errores.itemId = 'Escanea el ítem dañado o elige dónde está el daño.';
+  // Una novedad es de un ítem, de una familia completa o del salón (pared, techo…).
+  if (!itemId && !familiaId && !UBICACIONES.some((u) => u.clave === ubicacion)) errores.itemId = 'Escanea el ítem o la familia, o elige dónde está el daño.';
+  if (naturaleza !== undefined && !NATURALEZAS.some((n) => n.clave === naturaleza)) errores.naturaleza = 'Indica si la novedad es permanente, temporal o de limpieza.';
   if (!TIPOS_DANO.some((t) => t.clave === tipoDano)) errores.tipoDano = 'Elige el tipo de daño.';
   if (!PRIORIDADES.some((p) => p.clave === severidad)) errores.severidad = 'Elige la severidad.';
   const texto = String(comentario ?? '').trim();
@@ -283,6 +313,29 @@ export function progresoChecklist(checklist = []) {
 /** 'ok' solo si el checklist está todo bien y no hay daños reportados. */
 export function resultadoInspeccion({ checklist = [], reportes = [] }) {
   return reportes.length || progresoChecklist(checklist).novedades ? 'con_danos' : 'ok';
+}
+
+/**
+ * Ítems que se pueden marcar OK en la revisión: todos los del ambiente menos
+ * los que tienen una novedad en esta revisión (sueltos o por su familia), los
+ * que ya tienen una novedad permanente activa y los que están fuera de
+ * servicio o de baja.
+ */
+export function itemsRevisables(inventario = []) {
+  return inventario.filter((i) => !i.reportado && !i.novedadActivaId && !['fuera_servicio', 'baja'].includes(i.estado));
+}
+
+/**
+ * Atajo "Todo está bien": devuelve el checklist con todo en "Bien" y el
+ * conjunto de ítems OK. Es una función pura: no envía nada ni termina la
+ * revisión; eso lo hace el instructor con "Terminar revisión".
+ * Los puntos ya marcados con novedad se respetan.
+ */
+export function marcarTodoBien(checklist = [], inventario = []) {
+  return {
+    checklist: checklist.map((c) => ({ ...c, ok: c.ok === false ? false : true })),
+    itemsOk: new Set(itemsRevisables(inventario).map((i) => i.id)),
+  };
 }
 
 /** { instructor: 'Instructor', portero: 'Portero', … } */

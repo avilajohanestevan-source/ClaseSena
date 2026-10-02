@@ -1,6 +1,8 @@
 // Planilla de entrega del ambiente: documento imprimible con datos,
-// checklist, inventario, daños con foto, quién revisó y recibió
-// (instructor) y quién entregó (portero). Arriba, según el momento:
+// checklist, estado del salón al recibirlo, novedades con foto (permanentes,
+// temporales o de limpieza), novedades permanentes activas, inventario con
+// los ítems marcados OK, quién revisó y recibió (instructor) y quién entregó
+// (portero). Arriba, según el momento:
 //  · Portero, revisión terminada sin QR: resumen y "Generar QR de entrega".
 //  · Portero con el QR generado: QR grande; se consulta cada pocos segundos
 //    y, cuando el instructor lo escanea, cambia a "Ambiente entregado".
@@ -10,7 +12,7 @@ import { h, icono, vaciar, vibrar } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { toast, confirmar } from '../ui/avisos.js';
 import { escanearEntrega } from '../ui/recibir.js';
-import { chipInspeccion, chipResultado, chipItem, chipSeveridad, etiquetaTipoDano, fecha, qr } from '../ui/ambientes-ui.js';
+import { chipInspeccion, chipResultado, chipItem, chipSeveridad, chipNaturaleza, etiquetaTipoDano, fecha, qr } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado, emitir, escuchar } from '../estado.js';
 
@@ -69,24 +71,45 @@ export async function render(raiz, { params, alSalir }) {
               : h('span', { class: 'status-chip neutro' }, 'Sin revisar')))),
         d.observaciones && h('p', { class: 'planilla-obs' }, h('strong', {}, 'Observaciones: '), d.observaciones)),
 
+      d.estadoSalon && h('section', { class: 'planilla-seccion' },
+        h('h3', {}, 'Estado del salón al recibirlo'),
+        h('dl', { class: 'planilla-datos planilla-salon' },
+          dato('Ítems marcados OK', `${d.estadoSalon.items.marcadosOk} de ${d.estadoSalon.items.total}`),
+          dato('Operativos', String(d.estadoSalon.items.operativos)),
+          dato('Dañados / en reparación', `${d.estadoSalon.items.danados} / ${d.estadoSalon.items.enReparacion}`),
+          dato('Fuera de servicio', String(d.estadoSalon.items.fueraServicio)),
+          dato('Novedades de esta revisión', `${d.estadoSalon.reportes.total} (permanentes: ${d.estadoSalon.reportes.permanentes} · temporales: ${d.estadoSalon.reportes.temporales} · limpieza: ${d.estadoSalon.reportes.limpieza})`),
+          dato('Novedades permanentes activas', String(d.estadoSalon.novedadesActivas)))),
+
       h('section', { class: 'planilla-seccion' },
-        h('h3', {}, `Daños reportados (${d.reportes.length})`),
+        h('h3', {}, `Novedades reportadas (${d.reportes.length})`),
         d.reportes.length ? h('div', { class: 'planilla-danos' }, d.reportes.map((r) => h('figure', { class: 'planilla-dano' },
-          r.foto ? h('img', { src: r.foto, alt: `Foto del daño en ${r.nombre}`, loading: 'lazy' }) : h('span', { class: 'reporte-foto--vacia', 'aria-hidden': 'true' }, icono('camara')),
+          r.foto ? h('img', { src: r.foto, alt: `Foto de la novedad en ${r.nombre}`, loading: 'lazy' }) : h('span', { class: 'reporte-foto--vacia', 'aria-hidden': 'true' }, icono('camara')),
           h('figcaption', {},
-            h('strong', {}, r.itemId ? `${r.nombre} · ${r.codigo}` : `Salón · ${r.nombre}`),
-            h('span', { class: 'reporte-chips' }, h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(r.tipoDano)), chipSeveridad(r.severidad)),
+            h('strong', {}, r.itemId || r.familiaId ? `${r.nombre} · ${r.codigo}` : `Salón · ${r.nombre}`),
+            h('span', { class: 'reporte-chips' }, chipNaturaleza(r.naturaleza), h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(r.tipoDano)), chipSeveridad(r.severidad)),
             h('span', {}, r.comentario),
-            h('span', { class: 'text-muted' }, `Reportado ${fecha.corta(r.reportadoEn)}`)))))
-          : h('p', { class: 'text-muted' }, 'Sin daños reportados.')),
+            h('span', { class: 'text-muted' }, `Reportado ${fecha.corta(r.reportadoEn)}`),
+            r.novedadId && (u.rol === 'administrativo'
+              ? h('a', { class: 'table-link no-imprimir', href: `#/novedades?id=${r.novedadId}` }, `Novedad permanente #${r.novedadId}`)
+              : h('span', { class: 'text-muted' }, `Novedad permanente #${r.novedadId}`))))))
+          : h('p', { class: 'text-muted' }, 'Sin novedades reportadas.')),
+
+      d.novedadesActivas.length ? h('section', { class: 'planilla-seccion' },
+        h('h3', {}, `Novedades permanentes activas del ambiente (${d.novedadesActivas.length})`),
+        h('ul', { class: 'insp-activas-lista' }, d.novedadesActivas.map((n) => h('li', {},
+          h('strong', {}, n.titulo), h('span', {}, n.descripcion),
+          h('span', { class: 'reporte-chips' }, chipSeveridad(n.severidad), n.itemEstado && chipItem(n.itemEstado), h('span', { class: 'text-muted' }, `desde ${fecha.corta(n.creadaEn)}`)))))) : null,
 
       h('section', { class: 'planilla-seccion' },
         h('h3', {}, `Inventario del ambiente (${d.inventario.length})`),
         h('div', { class: 'table-wrap' }, h('table', {},
-          h('thead', {}, h('tr', {}, h('th', {}, 'Código'), h('th', {}, 'Ítem'), h('th', {}, 'Categoría'), h('th', {}, 'Estado actual'), h('th', {}, 'En esta revisión'))),
+          h('thead', {}, h('tr', {}, h('th', {}, 'Código'), h('th', {}, 'Ítem'), h('th', {}, 'Categoría'), h('th', {}, 'Familia'), h('th', {}, 'Estado actual'), h('th', {}, 'En esta revisión'))),
           h('tbody', {}, d.inventario.map((it) => h('tr', {},
-            h('td', { class: 'mono' }, it.codigo), h('td', {}, it.nombre), h('td', {}, it.categoria), h('td', {}, chipItem(it.estado)),
-            h('td', {}, it.reportado ? h('span', { class: 'status-chip error' }, 'Daño reportado') : 'Sin novedad'))))))),
+            h('td', { class: 'mono' }, it.codigo), h('td', {}, it.nombre), h('td', {}, it.categoria), h('td', { class: 'mono' }, it.familia?.codigo || '—'), h('td', {}, chipItem(it.estado)),
+            h('td', {}, it.reportado ? h('span', { class: 'status-chip error' }, it.reportadoPorFamilia ? 'Novedad (familia)' : 'Novedad reportada')
+              : d.itemsOk.includes(it.id) ? h('span', { class: 'status-chip in' }, icono('check'), 'OK')
+                : d.estado === 'en_curso' ? 'Sin revisar' : h('span', { class: 'text-muted' }, 'Sin marcar')))))))),
 
       h('section', { class: 'planilla-firmas' },
         constancia('Entrega · portero', d.entrega, d.portero?.nombre || d.ambiente.portero, 'Generó el QR de entrega', 'Aún no genera el QR'),
@@ -165,10 +188,10 @@ export async function render(raiz, { params, alSalir }) {
     const texto = aviso === 'recibida'
       ? [h('strong', {}, `Recibiste el ambiente ${d.ambiente.codigo}`),
         h('span', {}, `Entregado por ${d.portero.nombre} · ${fecha.hora(d.recibidaEn)}`),
-        h('span', {}, d.resultado === 'con_danos' ? 'Con novedades: se avisó a coordinación y el inventario ya está actualizado.' : 'En buen estado, sin novedades.')]
+        h('span', {}, d.resultado === 'con_danos' ? 'Con novedades: se avisó a coordinación, administrativo e inventario; las permanentes quedan activas hasta que las resuelvan.' : 'En buen estado, sin novedades.')]
       : [h('strong', {}, `Ambiente ${d.ambiente.codigo} entregado`),
         h('span', {}, `${d.instructor.nombre} lo recibió a las ${fecha.hora(d.recibidaEn)}`),
-        d.resultado === 'con_danos' && h('span', {}, 'Coordinación recibió el aviso de los daños.')];
+        d.resultado === 'con_danos' && h('span', {}, 'Coordinación, administrativo e inventario recibieron el aviso de las novedades.')];
     return h('section', { class: `resultado ${d.resultado === 'con_danos' ? 'resultado--tarde' : 'resultado--aceptado'} entrega-aviso no-imprimir`, role: 'status' },
       icono_, h('div', { class: 'resultado-texto' }, texto));
   }

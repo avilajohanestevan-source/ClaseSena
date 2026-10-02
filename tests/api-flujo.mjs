@@ -29,9 +29,11 @@ test('flujo completo: el instructor revisa y reporta daños, el portero genera e
   const admin = await ingresar('2020202020', 'administrativo');
   const usuarios = (await pedir('GET', '/users', { token: admin.token })).datos;
   const cuenta = (rol) => usuarios.filter((u) => u.rol === rol).length;
-  assert.deepEqual([cuenta('instructor'), cuenta('portero'), cuenta('administrativo'), cuenta('aprendiz')], [3, 2, 1, 3]);
+  // Administrativos: administrativo, coordinación e inventario
+  assert.deepEqual([cuenta('instructor'), cuenta('portero'), cuenta('administrativo'), cuenta('aprendiz')], [3, 2, 3, 3]);
+  assert.deepEqual(usuarios.filter((u) => u.rol === 'administrativo').map((u) => u.area).sort(), ['administrativo', 'coordinacion', 'inventario']);
   const ambientes = (await pedir('GET', '/environments', { token: admin.token })).datos;
-  for (const codigo of ['107', '108', '109']) {
+  for (const codigo of ['107', '108', '109', '110', '111']) {
     const a = ambientes.find((x) => x.codigo === codigo);
     assert.ok(a, `falta el ambiente ${codigo}`);
     assert.ok((await pedir('GET', `/environments/${a.id}/items`, { token: admin.token })).datos.length >= 10);
@@ -95,6 +97,11 @@ test('flujo completo: el instructor revisa y reporta daños, el portero genera e
   assert.ok(final.iniciadaEn && final.confirmadaEn && final.qrGeneradoEn && final.recibidaEn);
   assert.equal(final.entrega.nombre, 'Martha Lucía Peña');
   assert.equal(final.recibe.nombre, 'Diana Marcela Ruiz');
+  // Al escanear el QR queda el estado del salón y el daño (permanente por defecto) abre una novedad permanente
+  assert.equal(final.estadoSalon.reportes.total, 1);
+  assert.equal(final.estadoSalon.resultado, 'con_danos');
+  assert.ok(final.reportes[0].novedadId);
+  assert.equal(final.reportes[0].naturaleza, 'permanente');
 
   // Notificaciones: al portero (recibido) y a coordinación (daños)
   const bPortero2 = (await pedir('GET', '/inbox', { token: portero.token })).datos;

@@ -41,10 +41,13 @@ function rutaReporte(): never
     );
 
     $danos = filas(
-        "SELECT d.*, it.codigo, it.nombre AS item, it.estado AS estado_actual, e.codigo AS ambiente, u.nombre AS instructor, p.nombre AS portero, s.id AS inspeccion
+        "SELECT d.*, COALESCE(it.codigo, f.codigo) AS codigo, COALESCE(it.nombre, CONCAT('Familia ', f.tipo, ' · ', f.nombre)) AS item,
+                it.estado AS estado_actual, e.codigo AS ambiente, u.nombre AS instructor, p.nombre AS portero, s.id AS inspeccion, n.estado AS novedad_estado
          FROM inspection_items d
          JOIN inspections s ON s.id = d.inspection_id
          LEFT JOIN inventory_items it ON it.id = d.inventory_item_id
+         LEFT JOIN item_families f ON f.id = d.family_id
+         LEFT JOIN persistent_issues n ON n.id = d.persistent_issue_id
          JOIN environments e ON e.id = s.environment_id
          JOIN users u ON u.id = s.instructor_id
          LEFT JOIN users p ON p.id = s.portero_id
@@ -75,6 +78,10 @@ function rutaReporte(): never
             // Daño del salón (sin ítem): se muestra la ubicación.
             'item' => $d['item'] ?? ('Salón · ' . UBICACIONES[$d['ubicacion']]),
             'ubicacion' => $d['ubicacion'],
+            'familiaId' => $d['family_id'] !== null ? (int) $d['family_id'] : null,
+            'naturaleza' => $d['naturaleza'],
+            'novedadId' => $d['persistent_issue_id'] !== null ? (int) $d['persistent_issue_id'] : null,
+            'novedadEstado' => $d['novedad_estado'],
             'estadoActual' => $d['estado_actual'],
             'tipoDano' => $d['tipo_dano'],
             'severidad' => $d['severidad'],

@@ -9,10 +9,13 @@
 
 require __DIR__ . '/lib/base.php';
 require __DIR__ . '/modulos/auth.php';
+require __DIR__ . '/modulos/catalogos.php';
 require __DIR__ . '/modulos/ambientes.php';
 require __DIR__ . '/modulos/inventario.php';
+require __DIR__ . '/modulos/familias.php';
 require __DIR__ . '/modulos/carga.php';
 require __DIR__ . '/modulos/inspecciones.php';
+require __DIR__ . '/modulos/novedades.php';
 require __DIR__ . '/modulos/notificaciones.php';
 require __DIR__ . '/modulos/reportes.php';
 
@@ -28,6 +31,11 @@ $RUTAS = [
     ['POST',   '#^/me/password$#',                       'rutaCambiarPassword'],
     ['GET',    '#^/users$#',                             'rutaUsuarios'],
 
+    ['GET',    '#^/specialties$#',                       'rutaEspecialidades'],
+    ['POST',   '#^/specialties$#',                       'rutaCrearEspecialidad'],
+    ['PATCH',  '#^/specialties/(\d+)$#',                 'rutaEditarEspecialidad'],
+    ['DELETE', '#^/specialties/(\d+)$#',                 'rutaBorrarEspecialidad'],
+
     ['GET',    '#^/environments$#',                      'rutaAmbientes'],
     ['POST',   '#^/environments$#',                      'rutaCrearAmbiente'],
     ['GET',    '#^/environments/(\d+)$#',                'rutaAmbiente'],
@@ -35,12 +43,26 @@ $RUTAS = [
     ['DELETE', '#^/environments/(\d+)$#',                'rutaBorrarAmbiente'],
     ['GET',    '#^/environments/(\d+)/items$#',          'rutaItemsAmbiente'],
 
-    ['GET',    '#^/items/by-code/([A-Za-z0-9\-:%]+)$#',  'rutaItemPorCodigo'],
+    ['GET',    '#^/inventory/categories$#',              'rutaCategorias'],
+    ['POST',   '#^/inventory/categories$#',              'rutaCrearCategoria'],
+    ['PATCH',  '#^/inventory/categories/(\d+)$#',        'rutaEditarCategoria'],
+    ['DELETE', '#^/inventory/categories/(\d+)$#',        'rutaBorrarCategoria'],
+    ['GET',    '#^/inventory/families$#',                'rutaFamilias'],
+    ['POST',   '#^/inventory/families$#',                'rutaCrearFamilia'],
+    ['GET',    '#^/inventory/families/(\d+)$#',          'rutaFamilia'],
+    ['PATCH',  '#^/inventory/families/(\d+)$#',          'rutaEditarFamilia'],
+    ['DELETE', '#^/inventory/families/(\d+)$#',          'rutaBorrarFamilia'],
+    ['GET',    '#^/inventory/lookup$#',                  'rutaBuscarEscaneado'],
+    ['POST',   '#^/inventory/import$#',                  'rutaCargaMasiva'],
+    ['GET',    '#^/inventory/export$#',                  'rutaExportarInventario'],
+    ['POST',   '#^/inventory/labels$#',                  'rutaEtiquetasImpresas'],
+
+    ['GET',    '#^/items/by-code/([^/]+)$#',             'rutaItemPorCodigo'],
     ['POST',   '#^/items$#',                             'rutaCrearItem'],
     ['POST',   '#^/items/scan$#',                        'rutaRegistrarPorEscaneo'],
-    ['POST',   '#^/items/import$#',                      'rutaCargaMasiva'],
-    ['GET',    '#^/items/export$#',                      'rutaExportarInventario'],
-    ['POST',   '#^/items/labels$#',                      'rutaEtiquetasImpresas'],
+    ['POST',   '#^/items/import$#',                      'rutaCargaMasiva'],        // alias de /inventory/import
+    ['GET',    '#^/items/export$#',                      'rutaExportarInventario'], // alias de /inventory/export
+    ['POST',   '#^/items/labels$#',                      'rutaEtiquetasImpresas'],  // alias de /inventory/labels
     ['GET',    '#^/items/(\d+)/history$#',               'rutaHistorialItem'],
     ['PATCH',  '#^/items/(\d+)$#',                       'rutaEditarItem'],
     ['DELETE', '#^/items/(\d+)$#',                       'rutaBorrarItem'],
@@ -56,6 +78,13 @@ $RUTAS = [
     ['POST',   '#^/inspections/(\d+)/qr$#',              'rutaGenerarQr'],
     ['POST',   '#^/inspections/by-qr/([A-Z0-9]{16})/receive$#', 'rutaRecibirPorQr'],
     ['POST',   '#^/inspections/(\d+)/cancel$#',          'rutaCancelarInspeccion'],
+
+    ['GET',    '#^/persistent-issues$#',                 'rutaNovedades'],
+    ['POST',   '#^/persistent-issues$#',                 'rutaCrearNovedad'],
+    ['GET',    '#^/persistent-issues/(\d+)$#',           'rutaNovedad'],
+    ['PATCH',  '#^/persistent-issues/(\d+)$#',           'rutaEditarNovedad'],
+    ['POST',   '#^/persistent-issues/(\d+)/resolve$#',   'rutaResolverNovedad'],
+    ['GET',    '#^/issues$#',                            'rutaHistorialNovedades'],
 
     ['GET',    '#^/inbox$#',                             'rutaBandeja'],
     ['POST',   '#^/inbox/read-all$#',                    'rutaLeerTodas'],

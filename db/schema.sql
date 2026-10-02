@@ -4,23 +4,30 @@
 --
 -- Flujo que modela (entrega del ambiente al instructor):
 --   el instructor revisa el salón al entrar           → inspections (en_curso, instructor_id)
---   escanea los ítems dañados y deja foto              → inspection_items → inventory_items (estado 'danado')
---   o reporta un daño del salón sin ítem (pared, techo) → inspection_items (ubicacion, sin inventory_item_id)
---   termina la revisión                                → inspections (pendiente_recepcion) + notifications al portero
+--   "Todo está bien" es solo un atajo de la pantalla: marca checklist e ítems como OK sin enviar nada
+--   escanea el ítem o la familia con novedad y deja foto → inspection_items (naturaleza permanente|temporal|limpieza)
+--   o reporta un daño del salón sin ítem (pared, techo) → inspection_items (ubicacion, sin ítem ni familia)
+--   termina la revisión                                → inspections (pendiente_recepcion, items_ok) + notifications al portero
 --   el portero genera el QR de entrega                 → inspections (portero_id, qr_token nuevo, qr_generado_en)
---   el instructor escanea el QR y confirma que recibe  → inspections (recibida, recibida_en)
---                                                        + notifications al portero y, si hay daños, a coordinación
+--   el instructor escanea el QR y confirma que recibe  → inspections (recibida, recibida_en, estado_salon)
+--                                                        + persistent_issues por cada novedad permanente
+--                                                        + notifications al portero y a coordinación, administrativo e inventario
+--   un administrativo marca la novedad resuelta        → persistent_issues (resuelta) + ítems de nuevo operativos
 --
--- Inventario: cada ítem tiene un código único que va en su QR (SENA-INV:<codigo>)
--- y en su código de barras (Code 128). Se carga uno a uno, escaneando o con
--- carga masiva desde Excel/CSV (PhpSpreadsheet). item_history guarda la
--- trazabilidad de cada ítem: registro, carga, etiqueta impresa, daños, cambios.
+-- Inventario: cada ítem tiene un código único y un qr_value (lo que lleva su
+-- QR; por defecto SENA-INV:<codigo>) y su código de barras (Code 128 del
+-- código). Los ítems se agrupan en categorías (inventory_categories) y,
+-- opcionalmente, en familias (item_families: Familia PC = monitor + CPU +
+-- teclado + mouse) con su propio QR SENA-FAM:<codigo>. Se cargan uno a uno,
+-- escaneando o con carga masiva desde Excel/CSV (PhpSpreadsheet).
+-- item_history guarda la trazabilidad de cada ítem.
 
 CREATE DATABASE IF NOT EXISTS sena_ambientes CHARACTER SET utf8mb4 COLLATE utf8mb4_spanish_ci;
 USE sena_ambientes;
 
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS item_history, notifications, inspection_items, inspections, inventory_items, environments, api_tokens, users;
+DROP TABLE IF EXISTS item_history, notifications, inspection_items, persistent_issues, inspections, inventory_items,
+                     item_families, inventory_categories, environments, especialidades_ambiente, api_tokens, users;
 SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE users (
@@ -31,6 +38,7 @@ CREATE TABLE users (
   email           VARCHAR(160) NULL,
   telefono        VARCHAR(20)  NULL,
   rol             ENUM('instructor','administrativo','portero','aprendiz') NOT NULL,
+  area            ENUM('coordinacion','administrativo','inventario') NULL, -- solo administrativos: a qué dependencia pertenece
   ficha           VARCHAR(12)  NULL,              -- solo aprendices
   password_hash   VARCHAR(255) NOT NULL,
   activo          TINYINT(1)   NOT NULL DEFAULT 1,
@@ -47,32 +55,77 @@ CREATE TABLE api_tokens (
   CONSTRAINT fk_tokens_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- Especialidad de cada ambiente: Cocina, Laboratorio, Audiovisual, Axo…
+CREATE TABLE especialidades_ambiente (
+  id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nombre       VARCHAR(60)  NOT NULL,
+  descripcion  VARCHAR(200) NULL,
+  activo       TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_especialidad_nombre (nombre)
+) ENGINE=InnoDB;
+
 CREATE TABLE environments (
-  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  codigo      VARCHAR(10)  NOT NULL,              -- número visible: 107, 108…
-  nombre      VARCHAR(120) NOT NULL,
-  bloque      VARCHAR(60)  NULL,
-  capacidad   SMALLINT UNSIGNED NULL,
-  portero_id  INT UNSIGNED NULL,                  -- portero asignado (recibe las notificaciones)
-  activo      TINYINT(1)   NOT NULL DEFAULT 1,
-  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id                    INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  codigo                VARCHAR(10)  NOT NULL,      -- número visible: 107, 108…
+  nombre                VARCHAR(120) NOT NULL,
+  bloque                VARCHAR(60)  NULL,
+  capacidad_aprendices  SMALLINT UNSIGNED NULL,     -- cuántos aprendices caben (antes "capacidad" en puestos)
+  especialidad_id       INT UNSIGNED NULL,
+  portero_id            INT UNSIGNED NULL,          -- portero asignado (recibe las notificaciones)
+  activo                TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_environments_codigo (codigo),
-  CONSTRAINT fk_env_portero FOREIGN KEY (portero_id) REFERENCES users(id) ON DELETE SET NULL
+  CONSTRAINT fk_env_especialidad FOREIGN KEY (especialidad_id) REFERENCES especialidades_ambiente(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_env_portero      FOREIGN KEY (portero_id)      REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Categorías del inventario: Inmuebles, Mobiliario, Electrodomésticos, Equipos Informáticos, Periféricos…
+CREATE TABLE inventory_categories (
+  id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nombre       VARCHAR(60)  NOT NULL,
+  descripcion  VARCHAR(200) NULL,
+  activo       TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_categoria_nombre (nombre)
+) ENGINE=InnoDB;
+
+-- Familias de ítems: un conjunto que se revisa y se reporta junto (Familia PC = monitor + CPU + teclado + mouse).
+-- Se puede reportar la familia completa o un componente suelto.
+CREATE TABLE item_families (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  environment_id  INT UNSIGNED NOT NULL,
+  codigo          VARCHAR(40)  NOT NULL,           -- FAM107-PC01: va en el QR (SENA-FAM:<codigo>) y en el código de barras
+  tipo            VARCHAR(40)  NOT NULL,           -- PC, Estación de cocina, Kit de grabación…
+  nombre          VARCHAR(120) NOT NULL,           -- "PC puesto 1"
+  created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_families_codigo (codigo),
+  KEY ix_families_env (environment_id),
+  CONSTRAINT fk_fam_env FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE inventory_items (
-  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  environment_id  INT UNSIGNED NOT NULL,
-  codigo          VARCHAR(40)  NOT NULL,           -- va en el QR (SENA-INV:<codigo>) y en el código de barras de la etiqueta
-  nombre          VARCHAR(120) NOT NULL,
-  categoria       VARCHAR(40)  NOT NULL,
-  serial          VARCHAR(60)  NULL,
-  estado          ENUM('operativo','danado','en_reparacion','baja') NOT NULL DEFAULT 'operativo',
-  created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  environment_id     INT UNSIGNED NOT NULL,
+  codigo             VARCHAR(40)  NOT NULL,        -- va en el código de barras de la pegatina
+  qr_value           VARCHAR(120) NOT NULL,        -- contenido del QR de la pegatina (por defecto SENA-INV:<codigo>)
+  nombre             VARCHAR(120) NOT NULL,
+  category_id        INT UNSIGNED NOT NULL,
+  family_id          INT UNSIGNED NULL,            -- familia a la que pertenece (NULL = ítem suelto)
+  serial             VARCHAR(60)  NULL,
+  -- fuera_servicio: daño permanente, no se usa mientras la novedad siga activa; baja: inactivo, retirado del inventario
+  estado             ENUM('operativo','danado','en_reparacion','fuera_servicio','baja') NOT NULL DEFAULT 'operativo',
+  ultimo_escaneo_en  DATETIME     NULL,            -- última vez que se escaneó su pegatina en el registro con lector
+  created_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_items_codigo (codigo),
+  UNIQUE KEY uq_items_qr (qr_value),
   KEY ix_items_env (environment_id),
-  CONSTRAINT fk_items_env FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE RESTRICT
+  KEY ix_items_familia (family_id),
+  CONSTRAINT fk_items_env       FOREIGN KEY (environment_id) REFERENCES environments(id)          ON DELETE RESTRICT,
+  CONSTRAINT fk_items_categoria FOREIGN KEY (category_id)    REFERENCES inventory_categories(id)  ON DELETE RESTRICT,
+  CONSTRAINT fk_items_familia   FOREIGN KEY (family_id)      REFERENCES item_families(id)         ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE inspections (
@@ -84,6 +137,8 @@ CREATE TABLE inspections (
   resultado                ENUM('ok','con_danos') NULL,
   qr_token                 CHAR(16)     NOT NULL,   -- QR de la entrega: SENA-INSP:<qr_token> (se regenera al confirmar)
   checklist                JSON         NULL,       -- [{clave, etiqueta, ok}]
+  items_ok                 JSON         NULL,       -- ids de los ítems que el instructor marcó OK al terminar la revisión
+  estado_salon             JSON         NULL,       -- foto del estado del salón al recibirlo (conteos, reportes, novedades activas)
   observaciones            VARCHAR(500) NULL,
   iniciada_en              DATETIME     NOT NULL,
   confirmada_en            DATETIME     NULL,       -- el instructor termina la revisión
@@ -101,50 +156,96 @@ CREATE TABLE inspections (
   CONSTRAINT fk_insp_portero    FOREIGN KEY (portero_id)     REFERENCES users(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
--- Cada daño reportado en una revisión: vinculado a un ítem del inventario o,
--- si es del salón (pared, techo, piso…), solo al ambiente con su ubicación.
-CREATE TABLE inspection_items (
+-- Novedades permanentes (aire acondicionado dañado, video beam sin lámpara…):
+-- siguen activas, revisión tras revisión, hasta que un administrativo las marca resueltas.
+CREATE TABLE persistent_issues (
   id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  inspection_id      INT UNSIGNED NOT NULL,
-  inventory_item_id  INT UNSIGNED NULL,             -- NULL = daño del salón, sin ítem
-  ubicacion          ENUM('pared','techo','piso','puerta','ventana','electrica','estructura','otro') NULL,
+  environment_id     INT UNSIGNED NOT NULL,
+  inventory_item_id  INT UNSIGNED NULL,             -- ítem afectado, o
+  family_id          INT UNSIGNED NULL,             -- la familia completa, o
+  ubicacion          ENUM('pared','techo','piso','puerta','ventana','electrica','estructura','otro') NULL, -- el salón
   tipo_dano          ENUM('rotura','no_funciona','faltante','suciedad','otro') NOT NULL,
   severidad          ENUM('leve','moderada','grave') NOT NULL,
-  comentario         VARCHAR(500) NOT NULL,
-  foto               VARCHAR(160) NULL,             -- evidencia: ruta relativa en uploads/danos/ (obligatoria desde la app)
-  estado_item_anterior ENUM('operativo','danado','en_reparacion','baja') NOT NULL DEFAULT 'operativo', -- para deshacer el reporte
-  reportado_en       DATETIME     NOT NULL,
+  descripcion        VARCHAR(500) NOT NULL,
+  foto               VARCHAR(160) NULL,             -- evidencia con la que se abrió
+  estado             ENUM('activa','resuelta') NOT NULL DEFAULT 'activa',
+  reportada_por      INT UNSIGNED NULL,
+  inspection_id      INT UNSIGNED NULL,             -- revisión en la que se reportó (NULL = registrada por un administrativo)
+  creada_en          DATETIME     NOT NULL,
+  resuelta_por       INT UNSIGNED NULL,
+  resuelta_en        DATETIME     NULL,
+  resolucion         VARCHAR(500) NULL,
+  KEY ix_pi_estado (estado, environment_id),
+  KEY ix_pi_item (inventory_item_id, estado),
+  KEY ix_pi_familia (family_id, estado),
+  CONSTRAINT fk_pi_env       FOREIGN KEY (environment_id)    REFERENCES environments(id)    ON DELETE RESTRICT,
+  CONSTRAINT fk_pi_item      FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_pi_familia   FOREIGN KEY (family_id)         REFERENCES item_families(id)   ON DELETE RESTRICT,
+  CONSTRAINT fk_pi_reporta   FOREIGN KEY (reportada_por)     REFERENCES users(id)           ON DELETE SET NULL,
+  CONSTRAINT fk_pi_insp      FOREIGN KEY (inspection_id)     REFERENCES inspections(id)     ON DELETE SET NULL,
+  CONSTRAINT fk_pi_resuelve  FOREIGN KEY (resuelta_por)      REFERENCES users(id)           ON DELETE SET NULL,
+  CONSTRAINT ck_pi_objetivo CHECK (inventory_item_id IS NOT NULL OR family_id IS NOT NULL OR ubicacion IS NOT NULL)
+) ENGINE=InnoDB;
+
+-- Cada novedad reportada en una revisión: de un ítem del inventario, de una
+-- familia completa o, si es del salón (pared, techo, piso…), solo del ambiente
+-- con su ubicación. naturaleza distingue lo permanente (va a persistent_issues
+-- al recibir el ambiente) de las incidencias temporales y de limpieza.
+CREATE TABLE inspection_items (
+  id                   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  inspection_id        INT UNSIGNED NOT NULL,
+  inventory_item_id    INT UNSIGNED NULL,           -- ítem suelto o componente de una familia
+  family_id            INT UNSIGNED NULL,           -- familia completa (todos sus componentes)
+  ubicacion            ENUM('pared','techo','piso','puerta','ventana','electrica','estructura','otro') NULL,
+  naturaleza           ENUM('permanente','temporal','limpieza') NOT NULL DEFAULT 'permanente',
+  tipo_dano            ENUM('rotura','no_funciona','faltante','suciedad','otro') NOT NULL,
+  severidad            ENUM('leve','moderada','grave') NOT NULL,
+  comentario           VARCHAR(500) NOT NULL,
+  foto                 VARCHAR(160) NULL,           -- evidencia: ruta relativa en uploads/danos/ (obligatoria desde la app)
+  estado_item_anterior ENUM('operativo','danado','en_reparacion','fuera_servicio','baja') NOT NULL DEFAULT 'operativo', -- para deshacer el reporte
+  estados_anteriores   JSON         NULL,           -- reporte de familia: {"<itemId>": "<estado>"} de cada componente
+  persistent_issue_id  INT UNSIGNED NULL,           -- novedad permanente que abrió o a la que se sumó al recibir el ambiente
+  reportado_en         DATETIME     NOT NULL,
   UNIQUE KEY uq_insp_item (inspection_id, inventory_item_id),
-  CONSTRAINT fk_ii_insp FOREIGN KEY (inspection_id)     REFERENCES inspections(id) ON DELETE CASCADE,
-  CONSTRAINT fk_ii_item FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON DELETE RESTRICT,
-  CONSTRAINT ck_ii_objetivo CHECK (inventory_item_id IS NOT NULL OR ubicacion IS NOT NULL)
+  UNIQUE KEY uq_insp_familia (inspection_id, family_id),
+  KEY ix_ii_issue (persistent_issue_id),
+  CONSTRAINT fk_ii_insp    FOREIGN KEY (inspection_id)       REFERENCES inspections(id)       ON DELETE CASCADE,
+  CONSTRAINT fk_ii_item    FOREIGN KEY (inventory_item_id)   REFERENCES inventory_items(id)   ON DELETE RESTRICT,
+  CONSTRAINT fk_ii_familia FOREIGN KEY (family_id)           REFERENCES item_families(id)     ON DELETE RESTRICT,
+  CONSTRAINT fk_ii_issue   FOREIGN KEY (persistent_issue_id) REFERENCES persistent_issues(id) ON DELETE SET NULL,
+  CONSTRAINT ck_ii_objetivo CHECK (inventory_item_id IS NOT NULL OR family_id IS NOT NULL OR ubicacion IS NOT NULL)
 ) ENGINE=InnoDB;
 
 -- Trazabilidad de cada ítem del inventario.
 CREATE TABLE item_history (
-  id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  inventory_item_id  INT UNSIGNED NOT NULL,
-  user_id            INT UNSIGNED NULL,             -- NULL = proceso automático (instalación, carga por consola)
-  accion             ENUM('registro','carga_masiva','escaneo','edicion','etiqueta','dano','dano_retirado') NOT NULL,
-  detalle            VARCHAR(300) NOT NULL,
-  inspection_id      INT UNSIGNED NULL,
-  created_at         DATETIME     NOT NULL,
+  id                   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  inventory_item_id    INT UNSIGNED NOT NULL,
+  user_id              INT UNSIGNED NULL,           -- NULL = proceso automático (instalación, carga por consola)
+  accion               ENUM('registro','carga_masiva','escaneo','traslado','edicion','etiqueta','familia',
+                            'dano','dano_retirado','novedad','novedad_resuelta','estado') NOT NULL,
+  detalle              VARCHAR(300) NOT NULL,
+  inspection_id        INT UNSIGNED NULL,
+  persistent_issue_id  INT UNSIGNED NULL,
+  created_at           DATETIME     NOT NULL,
   KEY ix_hist_item (inventory_item_id, created_at),
-  CONSTRAINT fk_hist_item FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON DELETE CASCADE,
-  CONSTRAINT fk_hist_user FOREIGN KEY (user_id)           REFERENCES users(id) ON DELETE SET NULL,
-  CONSTRAINT fk_hist_insp FOREIGN KEY (inspection_id)     REFERENCES inspections(id) ON DELETE SET NULL
+  CONSTRAINT fk_hist_item  FOREIGN KEY (inventory_item_id)   REFERENCES inventory_items(id)   ON DELETE CASCADE,
+  CONSTRAINT fk_hist_user  FOREIGN KEY (user_id)             REFERENCES users(id)             ON DELETE SET NULL,
+  CONSTRAINT fk_hist_insp  FOREIGN KEY (inspection_id)       REFERENCES inspections(id)       ON DELETE SET NULL,
+  CONSTRAINT fk_hist_issue FOREIGN KEY (persistent_issue_id) REFERENCES persistent_issues(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE notifications (
-  id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id        INT UNSIGNED NOT NULL,
-  tipo           ENUM('revision_lista','entrega_recibida','dano_reportado','dano_grave') NOT NULL,
-  titulo         VARCHAR(160) NOT NULL,
-  detalle        VARCHAR(300) NOT NULL,
-  inspection_id  INT UNSIGNED NULL,
-  leida          TINYINT(1)   NOT NULL DEFAULT 0,
-  created_at     DATETIME     NOT NULL,
+  id                   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id              INT UNSIGNED NOT NULL,
+  tipo                 ENUM('revision_lista','entrega_recibida','dano_reportado','dano_grave','novedad_permanente','novedad_resuelta') NOT NULL,
+  titulo               VARCHAR(160) NOT NULL,
+  detalle              VARCHAR(300) NOT NULL,
+  inspection_id        INT UNSIGNED NULL,
+  persistent_issue_id  INT UNSIGNED NULL,
+  leida                TINYINT(1)   NOT NULL DEFAULT 0,
+  created_at           DATETIME     NOT NULL,
   KEY ix_notif_user (user_id, leida),
-  CONSTRAINT fk_notif_user FOREIGN KEY (user_id)       REFERENCES users(id) ON DELETE CASCADE,
-  CONSTRAINT fk_notif_insp FOREIGN KEY (inspection_id) REFERENCES inspections(id) ON DELETE CASCADE
+  CONSTRAINT fk_notif_user  FOREIGN KEY (user_id)             REFERENCES users(id)             ON DELETE CASCADE,
+  CONSTRAINT fk_notif_insp  FOREIGN KEY (inspection_id)       REFERENCES inspections(id)       ON DELETE CASCADE,
+  CONSTRAINT fk_notif_issue FOREIGN KEY (persistent_issue_id) REFERENCES persistent_issues(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

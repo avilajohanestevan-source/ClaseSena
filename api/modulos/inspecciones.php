@@ -2,17 +2,22 @@
 /**
  * Entrega de ambientes.
  *
- *   1. El instructor revisa el salón al entrar: checklist y, si hay daños,
- *      escanea el ítem y deja foto como evidencia          → en_curso
- *   2. Termina la revisión; se avisa al portero              → pendiente_recepcion
+ *   1. El instructor revisa el salón al entrar: checklist e ítems. "Todo está
+ *      bien" es un atajo de la pantalla que marca todo OK sin enviar nada.
+ *      Si hay novedades escanea el ítem o la familia y deja foto  → en_curso
+ *   2. Termina la revisión (checklist + ítems OK); se avisa al portero → pendiente_recepcion
  *   3. El portero genera el QR de entrega                    → pendiente_recepcion + qr_generado_en
- *   4. El instructor escanea el QR y confirma la recepción   → recibida
+ *   4. El instructor escanea el QR y confirma la recepción   → recibida + estado_salon
  *   en_curso | pendiente_recepcion ──cancel (instructor)──▶ cancelada
  *
  * instructor_id = quien revisa y recibe; portero_id = quien genera el QR
- * (entrega). Cada daño es una fila de inspection_items vinculada a
- * inventory_items; el ítem pasa a "danado" mientras el reporte exista. Al
- * recibir un ambiente con daños se avisa a coordinación (administrativos).
+ * (entrega). Cada novedad es una fila de inspection_items vinculada a un ítem,
+ * a una familia completa o, si es del salón, a su ubicación. Su naturaleza:
+ *   · permanente (aire dañado, video beam sin lámpara): el ítem (o todos los
+ *     componentes de la familia) pasa a "danado" y, al recibir el ambiente,
+ *     queda en persistent_issues hasta que un administrativo la resuelva
+ *     (modulos/novedades.php), con aviso a coordinación, administrativo e inventario;
+ *   · temporal o limpieza: queda en el historial y no cambia el inventario.
  */
 
 const CHECKLIST = [
@@ -27,6 +32,7 @@ const CHECKLIST = [
 ];
 const TIPOS_DANO = ['rotura', 'no_funciona', 'faltante', 'suciedad', 'otro'];
 const SEVERIDADES = ['leve', 'moderada', 'grave'];
+const NATURALEZAS = ['permanente' => 'permanente', 'temporal' => 'temporal', 'limpieza' => 'de limpieza'];
 /** Daños del salón que no son ítems del inventario. */
 const UBICACIONES = [
     'pared' => 'Pared', 'techo' => 'Techo', 'piso' => 'Piso', 'puerta' => 'Puerta', 'ventana' => 'Ventana',
@@ -102,33 +108,55 @@ function detalleInspeccion(array $s): array
 {
     $id = (int) $s['id'];
     $danos = filas(
-        'SELECT d.*, it.codigo, it.nombre, it.categoria FROM inspection_items d
-         LEFT JOIN inventory_items it ON it.id = d.inventory_item_id WHERE d.inspection_id = ? ORDER BY d.reportado_en',
+        'SELECT d.*, it.codigo, it.nombre, c.nombre AS categoria, f.codigo AS familia_codigo, f.nombre AS familia_nombre, f.tipo AS familia_tipo
+         FROM inspection_items d
+         LEFT JOIN inventory_items it ON it.id = d.inventory_item_id
+         LEFT JOIN inventory_categories c ON c.id = it.category_id
+         LEFT JOIN item_families f ON f.id = d.family_id
+         WHERE d.inspection_id = ? ORDER BY d.reportado_en',
         [$id]
     );
-    $reportados = array_column($danos, 'inventory_item_id');
+    $reportados = array_map('intval', array_filter(array_column($danos, 'inventory_item_id')));
+    $familiasReportadas = array_map('intval', array_filter(array_column($danos, 'family_id')));
     $inventario = filas(SQL_ITEMS . ' WHERE i.environment_id = ? ORDER BY i.codigo', [(int) $s['environment_id']]);
+    $familias = filas(SQL_FAMILIAS . ' WHERE f.environment_id = ? ORDER BY f.codigo', [(int) $s['environment_id']]);
     return resumenInspeccion($s) + [
         'checklist' => $s['checklist'] ? json_decode($s['checklist'], true) : checklistVacio(),
         'observaciones' => $s['observaciones'],
+        // Ítems que el instructor marcó OK al terminar (el atajo "Todo está bien" los marca todos en la pantalla).
+        'itemsOk' => array_map('intval', json_decode($s['items_ok'] ?? '[]', true) ?: []),
+        // Foto del estado del salón al recibirlo (null hasta que se recibe).
+        'estadoSalon' => $s['estado_salon'] ? json_decode($s['estado_salon'], true) : null,
         // Constancias: el portero al generar el QR (entrega) y el instructor al escanearlo (recibe).
         'entrega' => $s['qr_generado_en'] ? ['nombre' => $s['firma_portero_nombre'], 'fecha' => iso($s['qr_generado_en'])] : null,
         'recibe' => $s['recibida_en'] ? ['nombre' => $s['firma_instructor_nombre'], 'fecha' => iso($s['recibida_en'])] : null,
         'reportes' => array_map(fn($d) => [
             'id' => (int) $d['id'],
             'itemId' => $d['inventory_item_id'] !== null ? (int) $d['inventory_item_id'] : null,
+            'familiaId' => $d['family_id'] !== null ? (int) $d['family_id'] : null,
             'ubicacion' => $d['ubicacion'],
-            'codigo' => $d['codigo'],
-            // Sin ítem: el nombre es la ubicación en el salón.
-            'nombre' => $d['nombre'] ?? UBICACIONES[$d['ubicacion']] ?? 'Salón',
-            'categoria' => $d['categoria'] ?? 'Salón',
+            'codigo' => $d['codigo'] ?? $d['familia_codigo'],
+            // Familia: su nombre; sin ítem ni familia: la ubicación en el salón.
+            'nombre' => $d['nombre'] ?? ($d['family_id'] ? "Familia {$d['familia_tipo']} · {$d['familia_nombre']}" : (UBICACIONES[$d['ubicacion']] ?? 'Salón')),
+            'categoria' => $d['categoria'] ?? ($d['family_id'] ? 'Familia completa' : 'Salón'),
+            'naturaleza' => $d['naturaleza'],
             'tipoDano' => $d['tipo_dano'],
             'severidad' => $d['severidad'],
             'comentario' => $d['comentario'],
             'foto' => $d['foto'],
+            'novedadId' => $d['persistent_issue_id'] !== null ? (int) $d['persistent_issue_id'] : null,
             'reportadoEn' => iso($d['reportado_en']),
         ], $danos),
-        'inventario' => array_map(fn($i) => itemPublico($i) + ['reportado' => in_array($i['id'], $reportados)], $inventario),
+        'inventario' => array_map(fn($i) => itemPublico($i) + [
+            'reportado' => in_array((int) $i['id'], $reportados, true) || ($i['family_id'] !== null && in_array((int) $i['family_id'], $familiasReportadas, true)),
+            'reportadoPorFamilia' => $i['family_id'] !== null && in_array((int) $i['family_id'], $familiasReportadas, true),
+        ], $inventario),
+        'familias' => array_map(fn($f) => familiaPublica($f) + [
+            'itemIds' => array_map('intval', array_column(array_filter($inventario, fn($i) => (int) $i['family_id'] === (int) $f['id']), 'id')),
+            'reportado' => in_array((int) $f['id'], $familiasReportadas, true),
+        ], $familias),
+        // Novedades permanentes que el ambiente ya tiene abiertas: no hace falta volver a reportarlas.
+        'novedadesActivas' => array_map('novedadPublica', filas(SQL_NOVEDADES . " WHERE n.environment_id = ? AND n.estado = 'activa' ORDER BY n.creada_en", [(int) $s['environment_id']])),
     ];
 }
 
@@ -232,48 +260,85 @@ function rutaGuardarChecklist(int $id): never
     responder(detalleInspeccion(buscarInspeccion($id)));
 }
 
-/** POST /inspections/{id}/items: reporte de daño de un ítem del inventario del ambiente. */
+/** Sin naturaleza explícita: la suciedad es de limpieza; lo demás (rotura, no funciona, faltante…), permanente. */
+function naturalezaPorDefecto(string $tipoDano): string
+{
+    return $tipoDano === 'suciedad' ? 'limpieza' : 'permanente';
+}
+
+/** Una novedad permanente deja el ítem "danado", salvo que ya esté de baja, fuera de servicio o en reparación. */
+const SQL_MARCAR_DANADO = "UPDATE inventory_items SET estado = 'danado' WHERE id = ? AND estado NOT IN ('baja', 'fuera_servicio', 'en_reparacion')";
+
+/**
+ * POST /inspections/{id}/items: novedad de un ítem, de una familia completa o del salón.
+ *   {itemId | familiaId | codigo (lo que se escaneó: ítem o familia) | ubicacion,
+ *    naturaleza?, tipoDano, severidad, comentario, foto}
+ * Un componente y su familia no se reportan a la vez en la misma revisión.
+ */
 function rutaReportarDano(int $id): never
 {
     $s = inspeccionEditable($id);
     $u = usuario();
-    $d = cuerpo();
-    $item = null;
-    $ubicacion = null;
-    if (!empty($d['itemId'])) $item = fila(SQL_ITEMS . ' WHERE i.id = ?', [(int) $d['itemId']]);
-    elseif (!empty($d['codigo'])) {
-        $codigo = normalizarCodigo((string) $d['codigo']);
-        $item = $codigo ? fila(SQL_ITEMS . ' WHERE i.codigo = ?', [$codigo]) : null;
+    $d = conAlias(cuerpo(), 'familiaId', 'familia_id');
+    $item = $familia = $ubicacion = null;
+    if (!empty($d['itemId'])) {
+        $item = fila(SQL_ITEMS . ' WHERE i.id = ?', [(int) $d['itemId']]) ?? fallar(404, 'El ítem no existe en el inventario.', 'NO_ENCONTRADO');
+    } elseif (!empty($d['familiaId'])) {
+        $familia = fila(SQL_FAMILIAS . ' WHERE f.id = ?', [(int) $d['familiaId']]) ?? fallar(404, 'La familia no existe.', 'NO_ENCONTRADO');
+    } elseif (!empty($d['codigo'])) {
+        $l = leerCodigoEscaneado((string) $d['codigo']) ?? fallar(404, 'El código no corresponde a ningún ítem ni familia del inventario.', 'NO_ENCONTRADO');
+        if ($l['tipo'] === 'item') $item = $l['fila']; else $familia = $l['fila'];
     } else {
         // Daño del salón que no es un ítem del inventario (pared, techo, piso…): va asociado al ambiente.
         $ubicacion = opcion($d, 'ubicacion', array_keys(UBICACIONES), true, 'dónde está el daño');
     }
-    if (!$ubicacion) {
-        if (!$item) fallar(404, 'El ítem no existe en el inventario.', 'NO_ENCONTRADO');
-        if ((int) $item['environment_id'] !== (int) $s['environment_id']) {
-            fallar(422, "El ítem {$item['codigo']} pertenece al ambiente {$item['ambiente_codigo']}, no al {$s['amb_codigo']}.", 'OTRO_AMBIENTE');
-        }
+    $objetivo = $item ?? $familia;
+    if ($objetivo && (int) $objetivo['environment_id'] !== (int) $s['environment_id']) {
+        fallar(422, ($item ? "El ítem" : "La familia") . " {$objetivo['codigo']} pertenece al ambiente {$objetivo['ambiente_codigo']}, no al {$s['amb_codigo']}.", 'OTRO_AMBIENTE');
+    }
+    if ($item) {
         if (fila('SELECT id FROM inspection_items WHERE inspection_id = ? AND inventory_item_id = ?', [$id, (int) $item['id']])) {
-            fallar(409, "Ya reportaste un daño para {$item['codigo']} en esta revisión.", 'DUPLICADO');
+            fallar(409, "Ya reportaste una novedad para {$item['codigo']} en esta revisión.", 'DUPLICADO');
         }
+        if ($item['family_id'] && fila('SELECT id FROM inspection_items WHERE inspection_id = ? AND family_id = ?', [$id, (int) $item['family_id']])) {
+            fallar(409, "Ya reportaste la familia completa {$item['familia_codigo']}, que incluye {$item['codigo']}.", 'DUPLICADO');
+        }
+    }
+    if ($familia) {
+        if (fila('SELECT id FROM inspection_items WHERE inspection_id = ? AND family_id = ?', [$id, (int) $familia['id']])) {
+            fallar(409, "Ya reportaste la familia {$familia['codigo']} en esta revisión.", 'DUPLICADO');
+        }
+        $sueltos = array_column(filas('SELECT it.codigo FROM inspection_items d JOIN inventory_items it ON it.id = d.inventory_item_id
+                                       WHERE d.inspection_id = ? AND it.family_id = ?', [$id, (int) $familia['id']]), 'codigo');
+        if ($sueltos) fallar(409, 'Ya reportaste componentes de esta familia (' . implode(', ', $sueltos) . '). Quita esos reportes para reportar la familia completa.', 'DUPLICADO');
+        if (!(int) $familia['componentes']) fallar(422, "La familia {$familia['codigo']} no tiene componentes.", 'VALIDACION');
     }
     $tipo = opcion($d, 'tipoDano', TIPOS_DANO, true, 'el tipo de daño');
     $severidad = opcion($d, 'severidad', SEVERIDADES, true, 'la severidad');
+    $naturaleza = opcion($d, 'naturaleza', array_keys(NATURALEZAS), false, 'si la novedad es permanente, temporal o de limpieza') ?? naturalezaPorDefecto($tipo);
     $comentario = texto($d, 'comentario', 500, true, 'el comentario');
     if (mb_strlen($comentario) < 10) fallar(422, 'Describe el daño con al menos 10 caracteres.', 'VALIDACION');
     // La foto es la evidencia del daño: siempre obligatoria.
     if (empty($d['foto'])) fallar(422, 'Toma una foto del daño como evidencia.', 'VALIDACION');
     $foto = guardarFoto((string) $d['foto']);
 
+    $componentes = $familia ? filas('SELECT id, estado FROM inventory_items WHERE family_id = ?', [(int) $familia['id']]) : [];
+    $permanente = $naturaleza === 'permanente';
+    $resumen = 'Novedad ' . NATURALEZAS[$naturaleza] . " en la revisión del ambiente {$s['amb_codigo']}: " . str_replace('_', ' ', $tipo) . " ($severidad)";
     db()->begin_transaction();
     insertar(
-        'INSERT INTO inspection_items (inspection_id, inventory_item_id, ubicacion, tipo_dano, severidad, comentario, foto, estado_item_anterior, reportado_en)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-        [$id, $item ? (int) $item['id'] : null, $ubicacion, $tipo, $severidad, $comentario, $foto, $item['estado'] ?? 'operativo']
+        'INSERT INTO inspection_items (inspection_id, inventory_item_id, family_id, ubicacion, naturaleza, tipo_dano, severidad, comentario, foto,
+                                       estado_item_anterior, estados_anteriores, reportado_en)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+        [$id, $item ? (int) $item['id'] : null, $familia ? (int) $familia['id'] : null, $ubicacion, $naturaleza, $tipo, $severidad, $comentario, $foto,
+         $item['estado'] ?? 'operativo', $familia ? json_encode(array_column($componentes, 'estado', 'id')) : null]
     );
-    if ($item) {
-        consulta("UPDATE inventory_items SET estado = 'danado' WHERE id = ? AND estado <> 'baja'", [(int) $item['id']]);
-        historial((int) $item['id'], 'dano', "Daño reportado en la revisión del ambiente {$s['amb_codigo']}: " . str_replace('_', ' ', $tipo) . " ($severidad). Pasa a Dañado.", (int) $u['id'], $id);
+    $marcados = [];
+    if ($item) $marcados[] = ['id' => (int) $item['id'], 'detalle' => $resumen];
+    foreach ($componentes as $c) $marcados[] = ['id' => (int) $c['id'], 'detalle' => "$resumen · reportada a la familia completa {$familia['codigo']}"];
+    foreach ($marcados as $m) {
+        if ($permanente) consulta(SQL_MARCAR_DANADO, [$m['id']]);
+        historial($m['id'], 'dano', $m['detalle'] . ($permanente ? '. Pasa a Dañado.' : '. El inventario no cambia.'), (int) $u['id'], $id);
     }
     db()->commit();
     responder(detalleInspeccion(buscarInspeccion($id)), 201);
@@ -281,9 +346,14 @@ function rutaReportarDano(int $id): never
 
 function deshacerReporte(array $r, ?int $usuarioId): void
 {
-    if ($r['inventory_item_id']) {
-        consulta('UPDATE inventory_items SET estado = ? WHERE id = ?', [$r['estado_item_anterior'], (int) $r['inventory_item_id']]);
-        historial((int) $r['inventory_item_id'], 'dano_retirado', 'Se retiró el reporte de daño; vuelve a ' . ETIQUETA_ESTADO[$r['estado_item_anterior']], $usuarioId, (int) $r['inspection_id']);
+    // Solo las permanentes cambiaron el estado del inventario: esas se restauran.
+    $restaurar = $r['naturaleza'] === 'permanente';
+    $previos = $r['inventory_item_id'] ? [(int) $r['inventory_item_id'] => $r['estado_item_anterior']] : [];
+    if ($r['family_id']) $previos += json_decode($r['estados_anteriores'] ?? '{}', true) ?: [];
+    foreach ($previos as $itemId => $estado) {
+        if ($restaurar) consulta('UPDATE inventory_items SET estado = ? WHERE id = ?', [$estado, (int) $itemId]);
+        historial((int) $itemId, 'dano_retirado', 'Se retiró el reporte de novedad' . ($r['family_id'] ? ' de la familia' : '')
+            . ($restaurar ? '; vuelve a ' . ETIQUETA_ESTADO[$estado] : ''), $usuarioId, (int) $r['inspection_id']);
     }
     if ($r['foto'] && is_file(__DIR__ . '/../../' . $r['foto'])) @unlink(__DIR__ . '/../../' . $r['foto']);
     consulta('DELETE FROM inspection_items WHERE id = ?', [(int) $r['id']]);
@@ -302,29 +372,37 @@ function rutaQuitarDano(int $id, int $reporteId): never
 
 
 /**
- * POST /inspections/{id}/confirm {checklist, observaciones} | {todoBien: true}
+ * POST /inspections/{id}/confirm {checklist, observaciones?, itemsOk?}
  * El instructor termina la revisión: queda esperando el QR del portero, a
  * quien se avisa (el asignado al ambiente o, si no hay, todos los porteros).
- * "Todo está bien" marca el ambiente completo sin revisar punto por punto.
+ * itemsOk son los ítems que marcó OK; el botón "Todo está bien" de la app
+ * solo los marca en la pantalla: el envío es siempre este paso, explícito.
  */
 function rutaConfirmarInspeccion(int $id): never
 {
     $s = inspeccionEditable($id);
     $d = cuerpo();
-    if (!empty($d['todoBien'])) {
-        if ((int) $s['danos']) fallar(422, 'Reportaste daños en esta revisión: no se puede marcar "todo está bien".', 'VALIDACION');
-        $d['checklist'] = array_map(fn($c) => ['clave' => $c[0], 'ok' => true], CHECKLIST);
-    }
     $checklist = checklistRecibido($d['checklist'] ?? null, true);
     $observaciones = texto($d, 'observaciones', 500, false, 'las observaciones');
     $conNovedad = in_array(false, array_column($checklist, 'ok'), true);
     if ($conNovedad && !$observaciones) fallar(422, 'Describe en observaciones la novedad marcada en el checklist.', 'VALIDACION');
     $resultado = ((int) $s['danos'] > 0 || $conNovedad) ? 'con_danos' : 'ok';
 
+    // Ítems OK: deben ser del ambiente; los que tienen una novedad en esta revisión no cuentan como OK.
+    $itemsOk = listaIds($d['itemsOk'] ?? [], 5000);
+    if ($itemsOk) {
+        $delAmbiente = array_map('intval', array_column(filas('SELECT id FROM inventory_items WHERE environment_id = ? AND id IN (' . marcas(count($itemsOk)) . ')',
+            [(int) $s['environment_id'], ...$itemsOk]), 'id'));
+        if (count($delAmbiente) !== count($itemsOk)) fallar(422, 'Algunos ítems marcados OK no son de este ambiente.', 'VALIDACION');
+        $conNovedadIds = array_map('intval', array_column(filas(
+            'SELECT it.id FROM inspection_items d JOIN inventory_items it ON it.id = d.inventory_item_id OR it.family_id = d.family_id WHERE d.inspection_id = ?', [$id]), 'id'));
+        $itemsOk = array_values(array_diff($itemsOk, $conNovedadIds));
+    }
+
     db()->begin_transaction();
     consulta(
-        "UPDATE inspections SET estado = 'pendiente_recepcion', resultado = ?, checklist = ?, observaciones = ?, confirmada_en = NOW() WHERE id = ?",
-        [$resultado, json_encode($checklist, JSON_UNESCAPED_UNICODE), $observaciones, $id]
+        "UPDATE inspections SET estado = 'pendiente_recepcion', resultado = ?, checklist = ?, observaciones = ?, items_ok = ?, confirmada_en = NOW() WHERE id = ?",
+        [$resultado, json_encode($checklist, JSON_UNESCAPED_UNICODE), $observaciones, json_encode($itemsOk), $id]
     );
     $porteros = $s['amb_portero_id']
         ? [(int) $s['amb_portero_id']]
@@ -355,8 +433,9 @@ function rutaGenerarQr(int $id): never
 /**
  * POST /inspections/by-qr/{token}/receive: el instructor escanea el QR del
  * portero y confirma que recibió el ambiente. Queda guardado quién entregó
- * (portero_id), quién recibió (instructor_id), las horas y el estado de los
- * ítems; si hay daños o novedades se avisa a coordinación.
+ * (portero_id), quién recibió (instructor_id), las horas, el estado del salón
+ * (estado_salon) y sus reportes. Cada novedad permanente abre (o se suma a)
+ * una persistent_issue y se avisa a coordinación, administrativo e inventario.
  */
 function rutaRecibirPorQr(string $token): never
 {
@@ -378,26 +457,68 @@ function rutaRecibirPorQr(string $token): never
     );
     consulta("UPDATE notifications SET leida = 1 WHERE inspection_id = ? AND tipo = 'revision_lista'", [$id]);
     notificar((int) $s['portero_id'], 'entrega_recibida', "{$u['nombre']} recibió el ambiente {$s['amb_codigo']}",
-        'Escaneó el QR de entrega' . ((int) $s['danos'] ? " · {$s['danos']} daño(s) registrado(s)" : ' · sin novedades'), $id);
+        'Escaneó el QR de entrega' . ((int) $s['danos'] ? " · {$s['danos']} novedad(es) registrada(s)" : ' · sin novedades'), $id);
+    // Novedades permanentes: abren una persistent_issue (o se suman a la que ya estaba activa) y avisan.
+    $permanentes = registrarNovedadesPermanentes($s, $u);
     if ($s['resultado'] === 'con_danos') {
-        // Para coordinación e inventario: qué ítems pasaron a "Dañado" y qué daños son del salón.
-        $reportes = filas('SELECT d.ubicacion, it.codigo FROM inspection_items d LEFT JOIN inventory_items it ON it.id = d.inventory_item_id WHERE d.inspection_id = ?', [$id]);
-        $codigos = array_filter(array_column($reportes, 'codigo'));
-        $salon = array_map(fn($r) => mb_strtolower(UBICACIONES[$r['ubicacion']]), array_filter($reportes, fn($r) => !$r['codigo']));
+        // Resumen para coordinación, administrativo e inventario: qué pasó a "Dañado", qué es del salón y qué fue temporal.
+        $reportes = filas('SELECT d.ubicacion, d.naturaleza, COALESCE(it.codigo, f.codigo) codigo FROM inspection_items d
+                           LEFT JOIN inventory_items it ON it.id = d.inventory_item_id LEFT JOIN item_families f ON f.id = d.family_id
+                           WHERE d.inspection_id = ?', [$id]);
+        $codigos = array_column(array_filter($reportes, fn($r) => $r['codigo'] && $r['naturaleza'] === 'permanente'), 'codigo');
+        $salon = array_map(fn($r) => mb_strtolower(UBICACIONES[$r['ubicacion']]), array_filter($reportes, fn($r) => $r['ubicacion']));
+        $temporales = count(array_filter($reportes, fn($r) => $r['naturaleza'] !== 'permanente'));
         $partes = array_filter([
             $codigos ? 'Inventario: ' . implode(', ', $codigos) . (count($codigos) === 1 ? ' pasa' : ' pasan') . ' a Dañado' : null,
             $salon ? count($salon) . ' daño(s) del salón (' . implode(', ', array_unique($salon)) . ')' : null,
+            $permanentes['nuevas'] ? count($permanentes['nuevas']) . ' novedad(es) permanente(s) nueva(s)' : null,
+            $temporales ? "$temporales incidencia(s) temporal(es) o de limpieza" : null,
             !$reportes ? 'Novedades en el checklist' : null,
             (int) $s['danos_graves'] ? "{$s['danos_graves']} grave(s)" : null,
         ]);
-        $detalle = "Recibió {$u['nombre']} · entregó {$s['portero_nombre']} · " . implode(' · ', $partes);
-        foreach (filas("SELECT id FROM users WHERE rol = 'administrativo' AND activo = 1") as $a) {
-            notificar((int) $a['id'], (int) $s['danos_graves'] ? 'dano_grave' : 'dano_reportado',
-                "Novedades en el ambiente {$s['amb_codigo']}", $detalle, $id);
-        }
+        notificarAdministrativos((int) $s['danos_graves'] ? 'dano_grave' : 'dano_reportado', "Novedades en el ambiente {$s['amb_codigo']}",
+            "Recibió {$u['nombre']} · entregó {$s['portero_nombre']} · " . implode(' · ', $partes), $id);
     }
+    consulta('UPDATE inspections SET estado_salon = ? WHERE id = ?', [json_encode(estadoSalon($s), JSON_UNESCAPED_UNICODE), $id]);
     db()->commit();
     responder(detalleInspeccion(buscarInspeccion($id)));
+}
+
+/**
+ * Lo que queda guardado del salón al recibirlo: cómo estaba el inventario,
+ * qué marcó OK el instructor, qué novedades reportó y cuántas permanentes
+ * siguen activas en el ambiente.
+ */
+function estadoSalon(array $s): array
+{
+    $amb = (int) $s['environment_id'];
+    $inv = fila("SELECT COUNT(*) total, SUM(estado = 'operativo') operativos, SUM(estado = 'danado') danados,
+                        SUM(estado = 'en_reparacion') en_reparacion, SUM(estado = 'fuera_servicio') fuera_servicio
+                 FROM inventory_items WHERE environment_id = ? AND estado <> 'baja'", [$amb]);
+    $reportes = filas('SELECT id, naturaleza, persistent_issue_id FROM inspection_items WHERE inspection_id = ?', [(int) $s['id']]);
+    $porNaturaleza = array_count_values(array_column($reportes, 'naturaleza'));
+    $checklist = json_decode($s['checklist'] ?? '[]', true) ?: [];
+    return [
+        'resultado' => $s['resultado'],
+        'checklistConNovedad' => count(array_filter($checklist, fn($c) => ($c['ok'] ?? null) === false)),
+        'items' => [
+            'total' => (int) $inv['total'],
+            'operativos' => (int) $inv['operativos'],
+            'danados' => (int) $inv['danados'],
+            'enReparacion' => (int) $inv['en_reparacion'],
+            'fueraServicio' => (int) $inv['fuera_servicio'],
+            'marcadosOk' => count(json_decode($s['items_ok'] ?? '[]', true) ?: []),
+        ],
+        'reportes' => [
+            'total' => count($reportes),
+            'permanentes' => $porNaturaleza['permanente'] ?? 0,
+            'temporales' => $porNaturaleza['temporal'] ?? 0,
+            'limpieza' => $porNaturaleza['limpieza'] ?? 0,
+            'ids' => array_map('intval', array_column($reportes, 'id')),
+        ],
+        'novedadesActivas' => (int) fila("SELECT COUNT(*) n FROM persistent_issues WHERE environment_id = ? AND estado = 'activa'", [$amb])['n'],
+        'registradoEn' => date(DATE_ATOM),
+    ];
 }
 
 /** POST /inspections/{id}/cancel: el instructor cancela su revisión mientras no haya recibido el ambiente. */

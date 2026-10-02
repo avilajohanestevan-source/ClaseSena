@@ -6,7 +6,9 @@ function rutaBandeja(): never
     $u = usuario();
     $lista = filas(
         'SELECT n.*, e.codigo AS ambiente FROM notifications n
-         LEFT JOIN inspections s ON s.id = n.inspection_id LEFT JOIN environments e ON e.id = s.environment_id
+         LEFT JOIN inspections s ON s.id = n.inspection_id
+         LEFT JOIN persistent_issues pi ON pi.id = n.persistent_issue_id
+         LEFT JOIN environments e ON e.id = COALESCE(s.environment_id, pi.environment_id)
          WHERE n.user_id = ? ORDER BY n.created_at DESC, n.id DESC LIMIT 40',
         [(int) $u['id']]
     );
@@ -19,6 +21,7 @@ function rutaBandeja(): never
             'titulo' => $n['titulo'],
             'detalle' => $n['detalle'],
             'inspeccionId' => $n['inspection_id'] !== null ? (int) $n['inspection_id'] : null,
+            'novedadId' => $n['persistent_issue_id'] !== null ? (int) $n['persistent_issue_id'] : null,
             'ambiente' => $n['ambiente'],
             'leida' => (bool) $n['leida'],
             'fecha' => iso($n['created_at']),

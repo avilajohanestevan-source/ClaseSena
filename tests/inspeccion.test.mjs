@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validarLogin, leerQrItem, leerQrInspeccion, validarReporteDano, progresoChecklist, resultadoInspeccion,
+  marcarTodoBien, itemsRevisables, naturalezaPorDefecto, ESTADOS_ITEM,
 } from '../js/reglas.js';
 
 test('login: acepta el rol portero', () => {
@@ -45,4 +46,32 @@ test('checklist: progreso, novedades y resultado', () => {
   assert.equal(resultadoInspeccion({ checklist: [{ ok: true }, { ok: true }], reportes: [] }), 'ok');
   assert.equal(resultadoInspeccion({ checklist: [{ ok: true }], reportes: [{ id: 1 }] }), 'con_danos');
   assert.equal(resultadoInspeccion({ checklist: [{ ok: false }], reportes: [] }), 'con_danos');
+});
+
+test('reporte de una familia completa y naturaleza de la novedad', () => {
+  const base = { tipoDano: 'no_funciona', severidad: 'grave', comentario: 'El PC del puesto 3 no enciende', foto: 'data:image/jpeg;base64,xx' };
+  assert.deepEqual(validarReporteDano({ ...base, familiaId: 7, naturaleza: 'permanente' }), {});
+  assert.ok(validarReporteDano({ ...base, familiaId: 7, naturaleza: 'para siempre' }).naturaleza);
+  assert.ok(validarReporteDano({ ...base, familiaId: 7, naturaleza: '' }).naturaleza, 'en la app la naturaleza es obligatoria');
+  assert.deepEqual(validarReporteDano({ ...base, itemId: 3 }), {}, 'sin naturaleza (API) se usa la de por defecto');
+  assert.equal(naturalezaPorDefecto('suciedad'), 'limpieza');
+  assert.equal(naturalezaPorDefecto('rotura'), 'permanente');
+  assert.equal(naturalezaPorDefecto('no_funciona'), 'permanente');
+});
+
+test('"Todo está bien" solo marca en la pantalla: checklist e ítems revisables', () => {
+  const checklist = [{ clave: 'aseo', ok: null }, { clave: 'luces', ok: false }, { clave: 'equipos', ok: true }];
+  const inventario = [
+    { id: 1, estado: 'operativo', reportado: false, novedadActivaId: null },
+    { id: 2, estado: 'danado', reportado: true, novedadActivaId: null },         // novedad en esta revisión
+    { id: 3, estado: 'fuera_servicio', reportado: false, novedadActivaId: 9 },   // novedad permanente activa
+    { id: 4, estado: 'baja', reportado: false, novedadActivaId: null },
+    { id: 5, estado: 'en_reparacion', reportado: false, novedadActivaId: null },
+  ];
+  assert.deepEqual(itemsRevisables(inventario).map((i) => i.id), [1, 5]);
+  const r = marcarTodoBien(checklist, inventario);
+  assert.deepEqual(r.checklist.map((c) => c.ok), [true, false, true], 'respeta la novedad que el instructor ya marcó');
+  assert.deepEqual([...r.itemsOk], [1, 5]);
+  assert.deepEqual(checklist.map((c) => c.ok), [null, false, true], 'no modifica el checklist original (es pura)');
+  assert.equal(ESTADOS_ITEM.fuera_servicio[0], 'Fuera de servicio');
 });

@@ -89,6 +89,33 @@ function cuerpo(): array
     return $datos;
 }
 
+/**
+ * Copia en $d[$campo] el primer alias presente (p. ej. capacidad_aprendices →
+ * capacidadAprendices): la API responde en camelCase y acepta ambos al recibir.
+ */
+function conAlias(array $d, string $campo, string ...$alias): array
+{
+    if (array_key_exists($campo, $d)) return $d;
+    foreach ($alias as $a) {
+        if (array_key_exists($a, $d)) { $d[$campo] = $d[$a]; break; }
+    }
+    return $d;
+}
+
+/** Lista de ids enteros positivos sin repetir (o [] si no viene). */
+function listaIds($v, int $max = 500): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', is_array($v) ? $v : []), fn($n) => $n > 0)));
+    if (count($ids) > $max) fallar(422, "Se admiten máximo $max elementos.", 'VALIDACION');
+    return $ids;
+}
+
+/** Marcas (?, ?, ?) para un IN con $n valores. */
+function marcas(int $n): string
+{
+    return implode(',', array_fill(0, max(1, $n), '?'));
+}
+
 /** Texto obligatorio/opcional recortado, con largo máximo. */
 function texto(array $d, string $campo, int $max, bool $obligatorio = true, string $nombre = ''): ?string
 {
@@ -167,6 +194,8 @@ function usuarioPublico(array $u): array
         'email' => $u['email'],
         'telefono' => $u['telefono'],
         'rol' => $u['rol'],
+        // Administrativos: coordinacion | administrativo | inventario (todos reciben los avisos de novedades).
+        'area' => $u['area'] ?? null,
         'ficha' => $u['ficha'],
     ];
 }
@@ -199,10 +228,21 @@ function guardarFoto(string $dataUrl): string
     return CARPETA_FOTOS . '/' . $nombre;
 }
 
-function notificar(int $userId, string $tipo, string $titulo, string $detalle, ?int $inspeccionId): void
+function notificar(int $userId, string $tipo, string $titulo, string $detalle, ?int $inspeccionId, ?int $novedadId = null): void
 {
     insertar(
-        'INSERT INTO notifications (user_id, tipo, titulo, detalle, inspection_id, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-        [$userId, $tipo, mb_substr($titulo, 0, 160), mb_substr($detalle, 0, 300), $inspeccionId]
+        'INSERT INTO notifications (user_id, tipo, titulo, detalle, inspection_id, persistent_issue_id, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
+        [$userId, $tipo, mb_substr($titulo, 0, 160), mb_substr($detalle, 0, 300), $inspeccionId, $novedadId]
     );
+}
+
+/**
+ * Avisa a coordinación, administrativo e inventario: todos los usuarios con
+ * rol administrativo, sea cual sea su área. Devuelve a cuántos se avisó.
+ */
+function notificarAdministrativos(string $tipo, string $titulo, string $detalle, ?int $inspeccionId, ?int $novedadId = null, int $excepto = 0): int
+{
+    $ids = array_column(filas("SELECT id FROM users WHERE rol = 'administrativo' AND activo = 1 AND id <> ?", [$excepto]), 'id');
+    foreach ($ids as $id) notificar((int) $id, $tipo, $titulo, $detalle, $inspeccionId, $novedadId);
+    return count($ids);
 }

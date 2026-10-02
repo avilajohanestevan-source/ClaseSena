@@ -38,13 +38,15 @@ try {
     $excel = __DIR__ . '/inventario-prueba.xlsx';
     if (is_file(__DIR__ . '/../api/vendor/autoload.php')) {
         require __DIR__ . '/../api/lib/base.php';
+        require __DIR__ . '/../api/modulos/catalogos.php';
         require __DIR__ . '/../api/modulos/ambientes.php';
         require __DIR__ . '/../api/modulos/inventario.php';
+        require __DIR__ . '/../api/modulos/familias.php';
         require __DIR__ . '/../api/modulos/carga.php';
         $r = importarInventario(leerHojaInventario($excel, basename($excel)), null, false, basename($excel));
-        printf("✓ inventario-prueba.xlsx: %d nuevos, %d actualizados, %d sin cambios, %d con error
+        printf("✓ inventario-prueba.xlsx: %d nuevos, %d actualizados, %d sin cambios, %d familias nuevas, %d con error
 ",
-            $r['nuevos'], $r['actualizados'], $r['sinCambios'], count($r['errores']));
+            $r['nuevos'], $r['actualizados'], $r['sinCambios'], $r['familiasNuevas'], count($r['errores']));
         foreach ($r['errores'] as $e) echo "  fila {$e['fila']}: {$e['mensaje']}
 ";
     } else {
@@ -58,10 +60,11 @@ try {
     $conn->select_db(DB_NAME);
     $conteos = $conn->query(
         "SELECT (SELECT COUNT(*) FROM users) usuarios, (SELECT COUNT(*) FROM environments) ambientes,
-                (SELECT COUNT(*) FROM inventory_items) items, (SELECT COUNT(*) FROM inspections) inspecciones"
+                (SELECT COUNT(*) FROM inventory_items) items, (SELECT COUNT(*) FROM item_families) familias,
+                (SELECT COUNT(*) FROM inspections) inspecciones, (SELECT COUNT(*) FROM persistent_issues WHERE estado = 'activa') novedades"
     )->fetch_assoc();
-    printf("Base %s lista: %d usuarios, %d ambientes, %d ítems, %d inspecciones.\n",
-        DB_NAME, $conteos['usuarios'], $conteos['ambientes'], $conteos['items'], $conteos['inspecciones']);
+    printf("Base %s lista: %d usuarios, %d ambientes, %d ítems, %d familias, %d inspecciones, %d novedades permanentes activas.\n",
+        DB_NAME, $conteos['usuarios'], $conteos['ambientes'], $conteos['items'], $conteos['familias'], $conteos['inspecciones'], $conteos['novedades']);
     echo "Contraseña de todos los usuarios de prueba: Sena2026*\n";
 } catch (mysqli_sql_exception $e) {
     fwrite(STDERR, "Error: " . $e->getMessage() . "\n¿Está encendido MySQL en el panel de XAMPP?\n");

@@ -478,6 +478,98 @@ button.accion-grande{ width:100%; border:0; font:inherit; text-align:left; curso
 .insp-inventario .adm-buscar{ margin-bottom:10px; }
 .insp-inventario .inv-lista{ max-height:60vh; overflow-y:auto; }
 
+/* ================= Cambios administrativos: especialidades, familias, novedades ================= */
+.amb-especialidad{ margin-top:0; align-self:start; }
+
+/* Selector segmentado (Ítems / Familias, Activas / Historial) */
+.segmentos{ display:inline-flex; flex-wrap:wrap; gap:4px; padding:4px; border-radius:var(--r-pill); background:var(--color-surface-muted); }
+.segmento{
+  display:inline-flex; align-items:center; gap:6px; min-height:40px; padding:0 14px; border:0; border-radius:var(--r-pill); background:none;
+  font:600 13.5px var(--font-ui); color:var(--color-text-muted); cursor:pointer; transition:all var(--dur-micro-2) var(--ease-standard);
+}
+.segmento .icon{ width:16px; height:16px; }
+.segmento[aria-selected="true"]{ background:var(--color-surface); color:var(--color-primary); box-shadow:var(--sh-1); }
+.segmento:focus-visible{ outline:none; box-shadow:0 0 0 3px var(--color-focus); }
+.inv-herramientas .segmentos{ margin-right:auto; }
+
+/* Inventario: familia del ítem, estado con novedad y filas de familia */
+.inv-familia{ display:inline-flex; align-items:center; gap:3px; margin-left:8px; color:var(--c-azul-700); letter-spacing:.02em; }
+.inv-familia .icon{ width:12px; height:12px; }
+.inv-fila-estado{ display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
+.inv-fila-estado .status-chip{ margin-top:0; }
+.inv-categoria .icon{ width:13px; height:13px; vertical-align:-2px; }
+.fam-fila{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 10px; align-items:center; padding:10px 12px; border:1px solid var(--color-border); border-radius:14px; }
+.fam-fila .inv-fila-acciones{ grid-column:1 / -1; }
+.fam-componentes{ grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:6px; list-style:none; margin:0; padding:0; }
+.fam-componente{ padding:3px 10px; border-radius:var(--r-pill); background:var(--c-verde-50); color:var(--c-verde-800); font-size:12.5px; }
+.fam-componente--danado, .fam-componente--fuera_servicio{ background:var(--c-rojo-50); color:var(--c-rojo-700); }
+.fam-componente--en_reparacion{ background:var(--c-oro-50); color:var(--c-oro-800); }
+.fam-componente--baja{ background:var(--color-surface-muted); color:var(--color-text-muted); text-decoration:line-through; }
+@media (min-width:640px){
+  .fam-fila{ grid-template-columns:minmax(0,1fr) auto auto; }
+  .fam-fila .inv-fila-acciones{ grid-column:auto; }
+}
+.fam-elegir{ list-style:none; margin:8px 0 0; padding:0; max-height:280px; overflow-y:auto; display:grid; gap:4px; border:1px solid var(--color-border); border-radius:12px; padding:8px; }
+.fam-elegir .check-linea{ margin:0; min-height:var(--hit-min); }
+
+/* Catálogos (especialidades y categorías) */
+.catalogo-nuevo{ display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin-bottom:14px; }
+@media (min-width:560px){ .catalogo-nuevo{ grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto; align-items:start; } }
+.catalogo-lista{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.catalogo-fila{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; padding:10px 12px; border:1px solid var(--color-border); border-radius:14px; }
+.catalogo-fila--inactiva{ background:var(--color-surface-muted); }
+.catalogo-fila--inactiva strong{ color:var(--color-text-muted); }
+.catalogo-datos{ display:grid; gap:2px; min-width:0; flex:1; }
+.catalogo-datos strong{ color:var(--color-heading); }
+.catalogo-datos span{ font-size:13px; }
+.catalogo-datos--editando{ grid-template-columns:minmax(0,1fr); gap:6px; }
+.catalogo-acciones{ display:flex; flex-wrap:wrap; gap:6px; }
+
+/* Revisión: "Todo está bien" solo marca en la pantalla */
+.todo-bien:disabled{ cursor:default; transform:none; }
+.todo-bien--hecho{ border-color:var(--color-brand); background:var(--c-verde-100); }
+.todo-bien--hecho > .icon:last-child{ visibility:hidden; }
+.todo-bien-pie{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 12px; margin-top:8px; }
+.todo-bien-pie:has(.todo-bien-aviso:empty):has(.todo-bien-deshacer[hidden]){ display:none; }
+.todo-bien-aviso{ margin:0; font-size:13.5px; color:var(--c-verde-800); font-weight:600; flex:1; min-width:200px; }
+.todo-bien-aviso:empty{ display:none; }
+.inv-fila--ok{ background:var(--c-verde-50); border-color:var(--c-verde-200); }
+.insp-activas{ margin-top:16px; border-left:4px solid var(--c-oro-400); }
+.insp-activas[hidden]{ display:none; }
+.insp-activas .bloque-titulo{ display:flex; align-items:center; gap:6px; }
+.insp-activas > p{ margin:0 0 10px; font-size:13.5px; }
+.insp-activas-lista{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.insp-activas-lista li{ display:grid; gap:2px; padding:10px 12px; border-radius:12px; background:var(--c-oro-50); }
+.insp-activas-lista strong{ color:var(--color-heading); font-size:14.5px; }
+.insp-activas-lista span{ font-size:13.5px; }
+.insp-subtitulo{ margin:14px 0 8px; font:700 13px var(--font-ui); letter-spacing:.06em; text-transform:uppercase; color:var(--color-text-muted); }
+.insp-familias .inv-fila-datos strong{ display:flex; align-items:center; gap:4px; }
+.insp-familias .inv-fila-datos .icon{ width:16px; height:16px; color:var(--c-azul-700); }
+.familia-elegir{ display:grid; gap:10px; }
+.familia-completa{ margin:0; }
+.familia-completa .todo-bien-icono{ background:var(--c-azul-900); }
+.familia-completa:disabled{ opacity:.6; cursor:not-allowed; }
+.naturaleza--permanente{ --c:var(--c-oro-800); }
+.naturaleza--temporal{ --c:var(--c-azul-700); }
+.naturaleza--limpieza{ --c:var(--c-verde-700); }
+
+/* Novedades (coordinación, administrativo e inventario) */
+.novedades-lista{ display:grid; gap:12px; }
+.novedad{ display:grid; grid-template-columns:72px minmax(0,1fr); gap:12px; align-items:start; border-left:4px solid var(--c-oro-400); }
+.novedad--grave{ border-left-color:var(--color-danger); }
+.novedad--leve{ border-left-color:var(--c-n-400); }
+.novedad .reporte-datos p{ margin:4px 0; }
+.novedad-acciones{ grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+.novedad-detalle{ display:grid; gap:12px; }
+.novedad-detalle > p{ margin:0; }
+.novedad-miniatura{ width:48px; height:48px; border-radius:8px; object-fit:cover; display:block; }
+.tabla-novedades td{ vertical-align:top; }
+.tabla-novedades .reporte-chips{ margin:0 0 4px; }
+.boton-enlace{ border:0; background:none; padding:0; font:inherit; cursor:pointer; }
+.filtros-extra{ display:contents; }
+.filtros-extra[hidden]{ display:none; }
+.planilla-salon{ margin-top:0; }
+
 @media print{
   .etiquetas{ grid-template-columns:repeat(3, 1fr); gap:8px; }
   .etiqueta{ break-inside:avoid; border-style:solid; }

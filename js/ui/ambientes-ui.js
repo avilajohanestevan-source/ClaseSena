@@ -1,7 +1,7 @@
 // Piezas de interfaz compartidas por las vistas de entrega y revisión de
 // ambientes: chips de estado, QR, tiempo relativo y estados vacíos.
 import { h, icono } from './dom.js';
-import { ESTADOS_INSPECCION, ESTADOS_ITEM, TIPOS_DANO, PRIORIDADES } from '../reglas.js';
+import { ESTADOS_INSPECCION, ESTADOS_ITEM, ESTADOS_NOVEDAD, TIPOS_DANO, PRIORIDADES, NATURALEZAS } from '../reglas.js';
 import { svgCode128 } from './codigo128.js';
 
 export function chipInspeccion(estado) {
@@ -27,6 +27,20 @@ export function chipSeveridad(severidad) {
 }
 
 export const etiquetaTipoDano = (clave) => TIPOS_DANO.find((t) => t.clave === clave)?.etiqueta || clave;
+
+/** Permanente (queda activa hasta que la resuelvan), temporal o de limpieza. */
+export function chipNaturaleza(naturaleza) {
+  const n = NATURALEZAS.find((x) => x.clave === naturaleza);
+  if (!n) return null;
+  return h('span', { class: `status-chip ${naturaleza === 'permanente' ? 'out' : 'neutro'}` },
+    naturaleza === 'permanente' && icono('reloj'), n.etiqueta);
+}
+
+/** Estado de una novedad: en revisión, activa, resuelta o cerrada. */
+export function chipNovedad(estado) {
+  const [texto, clase] = ESTADOS_NOVEDAD[estado] || [estado, 'neutro'];
+  return h('span', { class: `status-chip ${clase}` }, texto);
+}
 
 const fmtHora = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit' });
 const fmtDia = new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -117,5 +131,10 @@ export function pegatina(it) {
     h('div', { class: 'etiqueta-codigos' }, qr(it.qr, 96, `QR de ${it.nombre}`), codigoBarras(it.codigo, `Código de barras de ${it.nombre}`)),
     h('figcaption', {},
       h('strong', {}, it.nombre),
-      h('span', {}, `SENA · Ambiente ${it.ambiente} · ${it.categoria}`)));
+      h('span', {}, `SENA · Ambiente ${it.ambiente} · ${it.detalle || it.categoria}`)));
+}
+
+/** Pegatina de una familia: QR "SENA-FAM:<código>" + código de barras del código. */
+export function pegatinaFamilia(f) {
+  return pegatina({ ...f, nombre: `${f.nombre} (familia)`, detalle: `Familia ${f.tipo} · ${f.componentesTotal} componente(s)` });
 }

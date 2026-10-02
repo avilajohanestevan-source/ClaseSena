@@ -5,7 +5,7 @@ import { h, anexar, icono, vaciar, descargar } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { toast } from '../ui/avisos.js';
 import { cargando, tarjetaError } from '../ui/componentes.js';
-import { cabecera, chipInspeccion, chipResultado, chipSeveridad, chipItem, etiquetaTipoDano, fecha, vacio } from '../ui/ambientes-ui.js';
+import { cabecera, chipInspeccion, chipResultado, chipSeveridad, chipItem, chipNaturaleza, chipNovedad, etiquetaTipoDano, fecha, vacio } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { fechaIso, ESTADOS_INSPECCION } from '../reglas.js';
 
@@ -60,16 +60,17 @@ export async function render(raiz) {
           h('span', { class: 'barras-cifra' }, `${a.inspecciones} · ${a.danos} daños`)))),
         h('p', { class: 'leyenda' }, h('span', { class: 'leyenda-tramo' }), 'Inspecciones', h('span', { class: 'leyenda-tramo leyenda-tramo--danos' }), 'Con novedades')),
       h('section', { class: 'card' },
-        h('h3', { class: 'bloque-titulo' }, `Daños reportados (${rep.danos.length})`),
+        h('h3', { class: 'bloque-titulo' }, `Novedades reportadas (${rep.danos.length})`),
         rep.danos.length ? h('div', { class: 'table-wrap' }, h('table', {},
-          h('thead', {}, h('tr', {}, ['Fecha', 'Ambiente', 'Ítem', 'Tipo', 'Severidad', 'Comentario', 'Estado actual', 'Reportó', 'Entregó', ''].map((t) => h('th', {}, t)))),
+          h('thead', {}, h('tr', {}, ['Fecha', 'Ambiente', 'Ítem', 'Naturaleza', 'Tipo', 'Severidad', 'Comentario', 'Estado actual', 'Reportó', 'Entregó', ''].map((t) => h('th', {}, t)))),
           h('tbody', {}, rep.danos.map((x) => h('tr', {},
             h('td', { class: 'celda-fecha' }, fecha.corta(x.reportadoEn)), h('td', {}, x.ambiente),
             h('td', {}, h('strong', {}, x.item), x.codigo && h('div', { class: 'celda-detalle mono' }, x.codigo)),
+            h('td', {}, chipNaturaleza(x.naturaleza), x.novedadEstado && h('div', { class: 'celda-detalle' }, chipNovedad(x.novedadEstado))),
             h('td', {}, etiquetaTipoDano(x.tipoDano)), h('td', {}, chipSeveridad(x.severidad)),
-            h('td', { class: 'celda-larga' }, x.comentario), h('td', {}, x.estadoActual ? chipItem(x.estadoActual) : 'Salón'), h('td', {}, x.instructor), h('td', {}, x.portero || '—'),
+            h('td', { class: 'celda-larga' }, x.comentario), h('td', {}, x.estadoActual ? chipItem(x.estadoActual) : x.familiaId ? 'Familia' : 'Salón'), h('td', {}, x.instructor), h('td', {}, x.portero || '—'),
             h('td', {}, h('a', { class: 'table-link', href: `#/planilla?id=${x.inspeccionId}` }, 'Planilla')))))))
-          : vacio('Sin daños en el periodo', '', 'check')),
+          : vacio('Sin novedades en el periodo', '', 'check')),
       h('section', { class: 'card' },
         h('h3', { class: 'bloque-titulo' }, `Inspecciones (${inspecciones.length})`),
         inspecciones.length ? h('div', { class: 'table-wrap' }, h('table', {},
@@ -87,11 +88,11 @@ export async function render(raiz) {
 
   function exportar(tipo) {
     const filas = tipo === 'danos'
-      ? rep?.danos.map((x) => [x.reportadoEn, x.ambiente, x.codigo || '', x.item, etiquetaTipoDano(x.tipoDano), x.severidad, x.comentario, x.estadoActual || 'salón', x.instructor, x.portero || '', x.inspeccionId])
+      ? rep?.danos.map((x) => [x.reportadoEn, x.ambiente, x.codigo || '', x.item, x.naturaleza, x.novedadEstado || '', etiquetaTipoDano(x.tipoDano), x.severidad, x.comentario, x.estadoActual || (x.familiaId ? 'familia' : 'salón'), x.instructor, x.portero || '', x.inspeccionId])
       : inspecciones.map((s) => [s.id, s.ambiente.codigo, s.instructor.nombre, s.portero?.nombre || '', ESTADOS_INSPECCION[s.estado]?.[0], s.resultado || '', s.danos, s.iniciadaEn, s.confirmadaEn || '', s.recibidaEn || '']);
     if (!filas?.length) { toast('aviso', 'Nada para exportar', 'Ajusta los filtros.'); return; }
     const cabeza = tipo === 'danos'
-      ? ['Fecha', 'Ambiente', 'Código', 'Ítem', 'Tipo', 'Severidad', 'Comentario', 'Estado actual', 'Reportó (instructor)', 'Entregó (portero)', 'Inspección']
+      ? ['Fecha', 'Ambiente', 'Código', 'Ítem', 'Naturaleza', 'Novedad permanente', 'Tipo', 'Severidad', 'Comentario', 'Estado actual', 'Reportó (instructor)', 'Entregó (portero)', 'Inspección']
       : ['Inspección', 'Ambiente', 'Revisó y recibió (instructor)', 'Entregó (portero)', 'Estado', 'Resultado', 'Daños', 'Inicio', 'Revisión terminada', 'Recibida'];
     const celda = (v) => { const t = String(v ?? ''); return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
     const csv = '﻿' + [cabeza, ...filas].map((fila) => fila.map(celda).join(';')).join('\n');

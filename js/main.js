@@ -12,7 +12,7 @@ import { aplicarPreferencias, movimientoReducido } from './ui/preferencias.js';
 import { estado, escuchar, cerrarSesion, restaurarSesion, alCerrarSesion } from './estado.js';
 import { alVencerSesion } from './api/cliente.js';
 import { apiAmb } from './api/ambientes.js';
-import { ETIQUETA_ROL } from './reglas.js';
+import { ETIQUETA_ROL, ETIQUETA_AREA } from './reglas.js';
 
 const TODOS = ['instructor', 'portero', 'administrativo', 'aprendiz'];
 const PERSONAL = ['instructor', 'portero', 'administrativo'];
@@ -29,6 +29,7 @@ const RUTAS = {
   planilla: { vista: () => import('./vistas/planilla.js'), roles: PERSONAL, titulo: 'Planilla de entrega', activa: 'inspecciones' },
   inventario: { vista: () => import('./vistas/inventario.js'), roles: PERSONAL, titulo: 'Inventario', icono: 'caja', grupo: 'ambientes' },
   etiquetas: { vista: () => import('./vistas/etiquetas.js'), roles: PERSONAL, titulo: 'Pegatinas', activa: 'inventario' },
+  novedades: { vista: () => import('./vistas/novedades.js'), roles: ['administrativo'], titulo: 'Novedades', icono: 'alerta', grupo: 'ambientes' },
   reportes: { vista: () => import('./vistas/reportes.js'), roles: ['administrativo'], titulo: 'Reportes', icono: 'reporte', grupo: 'ambientes' },
   // Asistencia a clases (datos simulados, js/api/mock).
   clases: { vista: () => import('./vistas/instructor.js'), roles: ['instructor'], titulo: 'Asistencia a clases', icono: 'qr', grupo: 'asistencia' },
@@ -80,7 +81,7 @@ document.addEventListener('pointerdown', (e) => {
 function pintarMenu(u) {
   shell.pintar({
     usuario: u,
-    etiquetaRol: ETIQUETA_ROL[u.rol],
+    etiquetaRol: ETIQUETA_ROL[u.rol] + (u.area && ETIQUETA_AREA[u.area] !== ETIQUETA_ROL[u.rol] ? ` · ${ETIQUETA_AREA[u.area]}` : ''),
     grupos: GRUPOS.map((g) => ({
       ...g,
       items: Object.entries(RUTAS).filter(([, r]) => r.grupo === g.clave && r.roles.includes(u.rol))
@@ -99,10 +100,12 @@ async function actualizarInsignias() {
       ? (await apiAmb.inspecciones()).filter((s) => ['en_curso', 'pendiente_recepcion'].includes(s.estado)).length
       : (await apiAmb.inspecciones({ estado: 'pendiente_recepcion', asignados: u.rol === 'portero' ? 1 : undefined })).length;
     shell.insignia('inspecciones', n, u.rol === 'instructor' ? 'en proceso' : 'por entregar');
+    if (u.rol === 'administrativo') shell.insignia('novedades', (await apiAmb.novedades({ estado: 'activa' })).length, 'novedades permanentes activas');
   } catch { /* la insignia es informativa */ }
 }
 escuchar('bandeja', actualizarInsignias);
 escuchar('inspecciones', actualizarInsignias);
+escuchar('novedades', actualizarInsignias);
 
 async function navegar() {
   const id = ++navegacion;

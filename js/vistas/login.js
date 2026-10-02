@@ -39,6 +39,8 @@ const USUARIOS_DEMO = [
   { identificacion: '4040404040', nombre: 'Jorge Enrique Salazar', rol: 'portero' },
   { identificacion: '4040404041', nombre: 'Martha Lucía Peña', rol: 'portero' },
   { identificacion: '2020202020', nombre: 'Carlos Méndez Ruiz', rol: 'administrativo' },
+  { identificacion: '2020202021', nombre: 'Patricia Rondón Gil (coordinación)', rol: 'administrativo' },
+  { identificacion: '2020202022', nombre: 'Hernán Darío Ospina (inventario)', rol: 'administrativo' },
   { identificacion: '1122334455', nombre: 'Camila Rojas Herrera', rol: 'aprendiz', tipo: 'TI' },
 ];
 // Los módulos de asistencia siguen con datos simulados: tras el login real
