@@ -16,6 +16,8 @@ require __DIR__ . '/modulos/familias.php';
 require __DIR__ . '/modulos/carga.php';
 require __DIR__ . '/modulos/inspecciones.php';
 require __DIR__ . '/modulos/novedades.php';
+require __DIR__ . '/modulos/auditoria.php';
+require __DIR__ . '/modulos/asignaciones.php';
 require __DIR__ . '/modulos/notificaciones.php';
 require __DIR__ . '/modulos/reportes.php';
 
@@ -85,6 +87,15 @@ $RUTAS = [
     ['PATCH',  '#^/persistent-issues/(\d+)$#',           'rutaEditarNovedad'],
     ['POST',   '#^/persistent-issues/(\d+)/resolve$#',   'rutaResolverNovedad'],
     ['GET',    '#^/issues$#',                            'rutaHistorialNovedades'],
+
+    ['GET',    '#^/assignments/board$#',                 'rutaTableroAsignaciones'],
+    ['GET',    '#^/assignments$#',                       'rutaAsignaciones'],
+    ['POST',   '#^/assignments$#',                       'rutaCrearAsignacion'],
+    ['GET',    '#^/assignments/(\d+)$#',                 'rutaAsignacion'],
+    ['POST',   '#^/assignments/(\d+)/reassign$#',        'rutaReasignar'],
+    ['POST',   '#^/assignments/(\d+)/cancel$#',          'rutaAnularAsignacion'],
+
+    ['GET',    '#^/audit$#',                             'rutaAuditoria'],
 
     ['GET',    '#^/inbox$#',                             'rutaBandeja'],
     ['POST',   '#^/inbox/read-all$#',                    'rutaLeerTodas'],

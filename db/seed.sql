@@ -3,7 +3,8 @@
 -- 3 instructores, 2 porteros, 3 administrativos (administrativo, coordinación
 -- e inventario), 3 aprendices; 6 especialidades; ambientes 107 a 111; 11
 -- categorías de inventario; familias de ítems (PC, estación de cocina, kit de
--- grabación); 2 inspecciones históricas y 3 novedades permanentes (2 activas).
+-- grabación); 2 inspecciones históricas, 3 novedades permanentes (2 en curso)
+-- con su historial de auditoría y asignaciones de instructores por jornada.
 -- db/inventario-prueba.xlsx completa el inventario con la carga masiva
 -- (monitores, teclados y mouse de cada familia PC y los ambientes 110 y 111).
 USE sena_ambientes;
@@ -120,12 +121,12 @@ INSERT INTO inspections (id, environment_id, instructor_id, portero_id, estado, 
 -- activo) y el ventilador del 108 (ya resuelto por inventario).
 INSERT INTO persistent_issues (id, environment_id, inventory_item_id, tipo_dano, severidad, descripcion, estado,
                                reportada_por, inspection_id, creada_en, resuelta_por, resuelta_en, resolucion)
-  SELECT 1, 3, id, 'no_funciona', 'moderada', 'La punta no calienta aunque la estación enciende. Se retira de uso.', 'activa',
+  SELECT 1, 3, id, 'no_funciona', 'moderada', 'La punta no calienta aunque la estación enciende. Se retira de uso.', 'en_curso',
          3, 2, TIMESTAMP(CURDATE() - INTERVAL 1 DAY, '07:20:00'), NULL, NULL, NULL
   FROM inventory_items WHERE codigo = 'AMB109-005';
 INSERT INTO persistent_issues (id, environment_id, inventory_item_id, tipo_dano, severidad, descripcion, estado,
                                reportada_por, inspection_id, creada_en, resuelta_por, resuelta_en, resolucion)
-  SELECT 2, 1, id, 'no_funciona', 'grave', 'El aire acondicionado no enfría y el compresor hace ruido. Mantenimiento lo revisa la próxima semana.', 'activa',
+  SELECT 2, 1, id, 'no_funciona', 'grave', 'El aire acondicionado no enfría y el compresor hace ruido. Mantenimiento lo revisa la próxima semana.', 'en_curso',
          10, NULL, TIMESTAMP(CURDATE() - INTERVAL 3 DAY, '10:15:00'), NULL, NULL, NULL
   FROM inventory_items WHERE codigo = 'AMB107-007';
 INSERT INTO persistent_issues (id, environment_id, inventory_item_id, tipo_dano, severidad, descripcion, estado,
@@ -156,3 +157,47 @@ INSERT INTO item_history (inventory_item_id, user_id, accion, detalle, persisten
 INSERT INTO item_history (inventory_item_id, user_id, accion, detalle, persistent_issue_id, created_at)
   SELECT inventory_item_id, resuelta_por, 'novedad_resuelta', CONCAT('Novedad permanente #', id, ' resuelta: ', resolucion, ' Vuelve a Operativo.'), id, resuelta_en
   FROM persistent_issues WHERE estado = 'resuelta';
+
+-- Historial de auditoría de las novedades: apertura (con su evidencia), cambio a
+-- fuera de servicio del aire del 107 y resolución del ventilador del 108.
+INSERT INTO audit_events (entidad, entidad_id, environment_id, accion, detalle, foto, user_id, created_at)
+  SELECT 'novedad', id, environment_id, 'creada', CONCAT('Novedad permanente abierta: ', descripcion), foto, reportada_por, creada_en FROM persistent_issues;
+INSERT INTO audit_events (entidad, entidad_id, environment_id, accion, detalle, user_id, created_at) VALUES
+  ('novedad', 2, 1, 'modificada', 'Ítem AMB107-007: Dañado → Fuera de servicio hasta su reparación', 10, TIMESTAMP(CURDATE() - INTERVAL 3 DAY, '10:20:00')),
+  ('novedad', 3, 2, 'resuelta', 'Resuelta: Se cambió el juego de aspas y se balanceó el ventilador. AMB108-007 vuelve a Operativo', 11, TIMESTAMP(CURDATE() - INTERVAL 5 DAY, '15:40:00'));
+
+-- Asignación de instructores por jornada.
+--   107 mañana: Laura (permanente); mañana la reemplaza Diana solo por ese día.
+--   107 tarde: Andrés (periodo de 30 días). 108 noche: Diana (periodo).
+--   109 mañana: Diana (permanente). 110 tarde: Laura hasta hace 4 días, reasignada a Andrés.
+--   111 noche: un turno de Laura de antier que se anuló.
+INSERT INTO instructor_assignments (id, environment_id, instructor_id, jornada, tipo, fecha_inicio, fecha_fin, estado, motivo, reemplaza_id,
+                                    creada_por, creada_en, cerrada_por, cerrada_en, motivo_cierre) VALUES
+  (1, 1, 1, 'manana', 'permanente', CURDATE() - INTERVAL 30 DAY, NULL, 'vigente', 'Ficha 2758432 · Análisis y desarrollo de software', NULL,
+     10, TIMESTAMP(CURDATE() - INTERVAL 31 DAY, '09:00:00'), NULL, NULL, NULL),
+  (2, 1, 2, 'tarde', 'periodo', CURDATE() - INTERVAL 10 DAY, CURDATE() + INTERVAL 20 DAY, 'vigente', 'Competencia de bases de datos', NULL,
+     10, TIMESTAMP(CURDATE() - INTERVAL 11 DAY, '09:10:00'), NULL, NULL, NULL),
+  (3, 3, 3, 'manana', 'permanente', CURDATE() - INTERVAL 30 DAY, NULL, 'vigente', 'Ficha 2834519 · Electrónica', NULL,
+     10, TIMESTAMP(CURDATE() - INTERVAL 31 DAY, '09:20:00'), NULL, NULL, NULL),
+  (4, 2, 3, 'noche', 'periodo', CURDATE() - INTERVAL 5 DAY, CURDATE() + INTERVAL 25 DAY, 'vigente', 'Curso complementario de contabilidad', NULL,
+     6, TIMESTAMP(CURDATE() - INTERVAL 6 DAY, '14:00:00'), NULL, NULL, NULL),
+  (5, 1, 3, 'manana', 'dia', CURDATE() + INTERVAL 1 DAY, CURDATE() + INTERVAL 1 DAY, 'vigente', 'Laura Gómez está en capacitación ese día', NULL,
+     10, TIMESTAMP(CURDATE() - INTERVAL 1 DAY, '16:30:00'), NULL, NULL, NULL),
+  (6, 4, 1, 'tarde', 'permanente', CURDATE() - INTERVAL 20 DAY, CURDATE() - INTERVAL 4 DAY, 'vigente', 'Ficha de cocina 2901122', NULL,
+     10, TIMESTAMP(CURDATE() - INTERVAL 21 DAY, '08:00:00'), 10, TIMESTAMP(CURDATE() - INTERVAL 4 DAY, '17:00:00'), 'Cambio de horario de Laura Gómez'),
+  (7, 4, 2, 'tarde', 'permanente', CURDATE() - INTERVAL 3 DAY, NULL, 'vigente', 'Cambio de horario de Laura Gómez', 6,
+     10, TIMESTAMP(CURDATE() - INTERVAL 4 DAY, '17:00:00'), NULL, NULL, NULL),
+  (8, 5, 1, 'noche', 'dia', CURDATE() - INTERVAL 2 DAY, CURDATE() - INTERVAL 2 DAY, 'anulada', 'Taller de edición', NULL,
+     6, TIMESTAMP(CURDATE() - INTERVAL 5 DAY, '10:00:00'), 6, TIMESTAMP(CURDATE() - INTERVAL 3 DAY, '11:00:00'), 'Se aplazó el taller');
+
+INSERT INTO audit_events (entidad, entidad_id, environment_id, accion, detalle, user_id, created_at)
+  SELECT 'asignacion', a.id, a.environment_id, 'creada',
+         CONCAT(u.nombre, ' · ', ELT(FIELD(a.jornada, 'manana', 'tarde', 'noche'), 'mañana', 'tarde', 'noche'), ' · ',
+                CASE a.tipo WHEN 'dia' THEN CONCAT('solo el ', DATE_FORMAT(a.fecha_inicio, '%Y-%m-%d'))
+                            WHEN 'periodo' THEN CONCAT('del ', DATE_FORMAT(a.fecha_inicio, '%Y-%m-%d'), ' al ', DATE_FORMAT(a.fecha_fin, '%Y-%m-%d'))
+                            ELSE CONCAT('permanente desde el ', DATE_FORMAT(a.fecha_inicio, '%Y-%m-%d')) END),
+         a.creada_por, a.creada_en
+  FROM instructor_assignments a JOIN users u ON u.id = a.instructor_id;
+INSERT INTO audit_events (entidad, entidad_id, environment_id, accion, detalle, user_id, created_at) VALUES
+  ('asignacion', 6, 4, 'reasignada', 'Laura Gómez Patiño → Andrés Felipe Castro desde el día siguiente · Cambio de horario de Laura Gómez', 10, TIMESTAMP(CURDATE() - INTERVAL 4 DAY, '17:00:00')),
+  ('asignacion', 8, 5, 'anulada', 'Turno anulado: Se aplazó el taller', 6, TIMESTAMP(CURDATE() - INTERVAL 3 DAY, '11:00:00'));

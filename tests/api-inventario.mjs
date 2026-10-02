@@ -154,5 +154,5 @@ test('revisión: "todo está bien" no confirma por sí solo; ítems OK al termin
   assert.match(aviso.detalle, /daño\(s\) del salón \(pared\)/);
   assert.match(aviso.detalle, /1 novedad\(es\) permanente\(s\) nueva\(s\)/);
   const reporte = (await pedir('GET', '/reports', { token: admin })).datos;
-  assert.ok(reporte.danos.some((d) => d.inspeccionId === r2.id && d.item === 'Salón · Pared' && d.novedadEstado === 'activa'));
+  assert.ok(reporte.danos.some((d) => d.inspeccionId === r2.id && d.item === 'Salón · Pared' && d.novedadEstado === 'en_curso'));
 });

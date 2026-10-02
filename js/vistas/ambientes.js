@@ -14,6 +14,7 @@ import { apiAmb } from '../api/ambientes.js';
 import { estado } from '../estado.js';
 import { escanearEntrega } from '../ui/recibir.js';
 import { gestionarCatalogo } from '../ui/catalogo.js';
+import { ETIQUETA_JORNADA } from '../reglas.js';
 
 export async function render(raiz) {
   const u = estado.usuario;
@@ -98,8 +99,12 @@ export async function render(raiz) {
         h('div', {}, h('dt', {}, 'Inventario'), h('dd', {}, `${a.itemsTotal} ítems`, a.familiasTotal ? ` · ${a.familiasTotal} familia${a.familiasTotal === 1 ? '' : 's'}` : '',
           a.itemsNovedad ? h('span', { class: 'amb-novedad' }, ` · ${a.itemsNovedad} con novedad`) : '')),
         a.novedadesActivas ? h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Novedades permanentes'), h('dd', {},
-          admin ? h('a', { class: 'table-link amb-novedad', href: `#/novedades?ambiente=${a.id}` }, `${a.novedadesActivas} activa(s)`)
-            : h('span', { class: 'amb-novedad' }, `${a.novedadesActivas} activa(s) hasta que coordinación las resuelva`))) : null,
+          u.rol === 'administrativo' || u.rol === 'instructor'
+            ? h('a', { class: 'table-link amb-novedad', href: `#/novedades?ambiente=${a.id}` }, `${a.novedadesActivas} en curso`)
+            : h('span', { class: 'amb-novedad' }, `${a.novedadesActivas} en curso hasta que se resuelvan`))) : null,
+        a.asignadosHoy && h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Instructores hoy'), h('dd', { class: 'amb-jornadas' },
+          a.asignadosHoy.map((j) => h('span', { class: `amb-jornada${j.instructor ? '' : ' amb-jornada--vacia'}` },
+            h('strong', {}, ETIQUETA_JORNADA[j.jornada]), ` ${j.instructor ? j.instructor.split(' ').slice(0, 2).join(' ') : '—'}`)))),
         h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Revisión de hoy'), h('dd', {},
           hoy ? [chipInspeccion(ult.estado), h('span', { class: 'text-muted' }, ` ${ult.instructor}${ult.portero ? ` · entregó ${ult.portero}` : ''} · ${fecha.hora(ult.iniciadaEn)}`)]
             : h('span', { class: 'status-chip neutro' }, ult ? `Última: ${fecha.corta(ult.iniciadaEn)}` : 'Sin inspecciones')))),

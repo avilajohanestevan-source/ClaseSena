@@ -147,8 +147,8 @@ export async function render(raiz, { params, alSalir }) {
   function pintarActivas() {
     activas.hidden = !d.novedadesActivas.length;
     vaciar(activas,
-      h('h3', { class: 'bloque-titulo', id: 'insp-t-activas' }, icono('reloj'), ` Novedades permanentes activas (${d.novedadesActivas.length})`),
-      h('p', { class: 'text-muted' }, 'Ya están registradas y siguen activas hasta que coordinación las resuelva. No hace falta reportarlas de nuevo.'),
+      h('h3', { class: 'bloque-titulo', id: 'insp-t-activas' }, icono('reloj'), ` Novedades permanentes en curso (${d.novedadesActivas.length})`),
+      h('p', { class: 'text-muted' }, 'Ya están registradas y siguen en curso hasta que un instructor o coordinación las resuelva. No hace falta reportarlas de nuevo: puedes agregarles seguimiento en Novedades.'),
       h('ul', { class: 'insp-activas-lista' }, d.novedadesActivas.map((n) => h('li', {},
         h('strong', {}, n.titulo),
         h('span', {}, n.descripcion),
@@ -164,7 +164,7 @@ export async function render(raiz, { params, alSalir }) {
         h('strong', {}, it.nombre),
         h('span', { class: 'mono text-muted' }, it.codigo, it.familia && ` · ${it.familia.codigo}`)),
       it.reportado ? h('span', { class: 'status-chip error' }, icono('alerta'), it.reportadoPorFamilia ? 'Reportado con la familia' : 'Reportado')
-        : it.novedadActivaId ? h('span', { class: 'status-chip out' }, icono('reloj'), 'Novedad activa')
+        : it.novedadActivaId ? h('span', { class: 'status-chip out' }, icono('reloj'), 'Novedad en curso')
           : revisable ? h('button', { class: 'checklist-btn checklist-btn--ok', type: 'button', 'aria-pressed': String(ok), 'aria-label': `${it.nombre}: ${ok ? 'marcado OK' : 'marcar OK'}`, onclick: () => alternarOk(it) }, icono('check'), 'OK')
             : chipItem(it.estado),
       !it.reportado && h('button', { class: 'btn btn-outline btn-sm', type: 'button', 'aria-label': `Reportar novedad en ${it.nombre}`, onclick: () => formularioDano({ item: it }) }, icono('herramienta'), 'Novedad'));
@@ -185,7 +185,7 @@ export async function render(raiz, { params, alSalir }) {
     vaciar(listaFamilias, d.familias.map((f) => h('li', { class: `inv-fila${f.reportado ? ' inv-fila--reportado' : ''}` },
       h('div', { class: 'inv-fila-datos' }, h('strong', {}, icono('capas'), ` ${f.nombre}`), h('span', { class: 'mono text-muted' }, `${f.codigo} · ${f.itemIds.length} componente(s)`)),
       f.reportado ? h('span', { class: 'status-chip error' }, icono('alerta'), 'Familia reportada')
-        : f.novedadActivaId ? h('span', { class: 'status-chip out' }, icono('reloj'), 'Novedad activa') : null,
+        : f.novedadActivaId ? h('span', { class: 'status-chip out' }, icono('reloj'), 'Novedad en curso') : null,
       !f.reportado && h('button', { class: 'btn btn-outline btn-sm', type: 'button', 'aria-label': `Novedad en la familia ${f.nombre}`, onclick: () => elegirEnFamilia(f) }, icono('herramienta'), 'Novedad'))));
     const revisables = itemsRevisables(d.inventario);
     const marcados = revisables.filter((i) => itemsOk.has(i.id)).length;
@@ -196,7 +196,8 @@ export async function render(raiz, { params, alSalir }) {
       r.foto ? h('img', { class: 'reporte-foto', src: r.foto, alt: `Foto de la novedad en ${r.nombre}`, loading: 'lazy' }) : h('span', { class: 'reporte-foto reporte-foto--vacia', 'aria-hidden': 'true' }, icono('camara')),
       h('div', { class: 'reporte-datos' },
         h('strong', {}, r.itemId || r.familiaId ? r.nombre : `Salón · ${r.nombre}`), h('span', { class: 'mono text-muted' }, r.codigo || `Ambiente ${d.ambiente.codigo}`),
-        h('div', { class: 'reporte-chips' }, chipNaturaleza(r.naturaleza), h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(r.tipoDano)), chipSeveridad(r.severidad)),
+        h('div', { class: 'reporte-chips' }, chipNaturaleza(r.naturaleza), h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(r.tipoDano)), chipSeveridad(r.severidad),
+          r.novedadId && h('a', { class: 'status-chip error', href: `#/novedades?id=${r.novedadId}` }, `Novedad #${r.novedadId} en curso`)),
         h('p', {}, r.comentario)),
       h('button', { class: 'btn btn-outline btn-sm btn-icono', type: 'button', 'aria-label': `Quitar el reporte de ${r.nombre}`, onclick: () => quitar(r) }, icono('basura'))))
       : h('p', { class: 'text-muted reportes-vacio' }, 'Ninguna novedad reportada.'));
@@ -380,7 +381,8 @@ export async function render(raiz, { params, alSalir }) {
         cerrar();
         pintarTodo();
         const permanente = naturaleza === 'permanente';
-        toast('exito', 'Novedad reportada', familia ? `La familia ${familia.nombre}${permanente ? ' quedó marcada como dañada' : ' quedó con la novedad'}.`
+        if (permanente) emitir('novedades');
+        toast(permanente ? 'aviso' : 'exito', permanente ? 'Novedad permanente en curso' : 'Novedad reportada', familia ? `La familia ${familia.nombre}${permanente ? ' quedó marcada como dañada' : ' quedó con la novedad'}.`
           : item ? `${item.nombre}${permanente ? ' quedó marcado como dañado en el inventario' : ': incidencia registrada, el inventario no cambia'}.` : 'Quedó asociada al ambiente con su foto.');
       } catch (e) {
         toast('error', 'No se reportó', e.message);

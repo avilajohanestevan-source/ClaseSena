@@ -12,7 +12,13 @@
 --   el instructor escanea el QR y confirma que recibe  → inspections (recibida, recibida_en, estado_salon)
 --                                                        + persistent_issues por cada novedad permanente
 --                                                        + notifications al portero y a coordinación, administrativo e inventario
---   un administrativo marca la novedad resuelta        → persistent_issues (resuelta) + ítems de nuevo operativos
+--   el instructor o un administrativo la marca resuelta → persistent_issues (resuelta) + ítems de nuevo operativos
+--   cada cambio de una novedad o de una asignación      → audit_events (fecha, usuario, detalle y evidencia)
+--
+-- Asignación de instructores por jornada (mañana, tarde, noche): por un día,
+-- por un periodo (rango de fechas) o permanente (sin fecha final, hasta que
+-- se cambie). Para cada ambiente, jornada y día vale la más específica:
+-- día > periodo > permanente. Se reasignan o anulan; todo queda en audit_events.
 --
 -- Inventario: cada ítem tiene un código único y un qr_value (lo que lleva su
 -- QR; por defecto SENA-INV:<codigo>) y su código de barras (Code 128 del
@@ -26,8 +32,9 @@ CREATE DATABASE IF NOT EXISTS sena_ambientes CHARACTER SET utf8mb4 COLLATE utf8m
 USE sena_ambientes;
 
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS item_history, notifications, inspection_items, persistent_issues, inspections, inventory_items,
-                     item_families, inventory_categories, environments, especialidades_ambiente, api_tokens, users;
+DROP TABLE IF EXISTS audit_events, instructor_assignments, item_history, notifications, inspection_items, persistent_issues,
+                     inspections, inventory_items, item_families, inventory_categories, environments, especialidades_ambiente,
+                     api_tokens, users;
 SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE users (
@@ -157,7 +164,11 @@ CREATE TABLE inspections (
 ) ENGINE=InnoDB;
 
 -- Novedades permanentes (aire acondicionado dañado, video beam sin lámpara…):
--- siguen activas, revisión tras revisión, hasta que un administrativo las marca resueltas.
+-- nacen "en_curso" cuando un instructor las reporta (en una revisión o desde
+-- el módulo de novedades) o las registra un administrativo, y siguen así,
+-- revisión tras revisión, hasta que un instructor o un administrativo las
+-- marca resueltas. Si el reporte que la abrió se retira antes de entregar el
+-- ambiente, queda "anulada". Su historial completo está en audit_events.
 CREATE TABLE persistent_issues (
   id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   environment_id     INT UNSIGNED NOT NULL,
@@ -168,13 +179,15 @@ CREATE TABLE persistent_issues (
   severidad          ENUM('leve','moderada','grave') NOT NULL,
   descripcion        VARCHAR(500) NOT NULL,
   foto               VARCHAR(160) NULL,             -- evidencia con la que se abrió
-  estado             ENUM('activa','resuelta') NOT NULL DEFAULT 'activa',
+  estado             ENUM('en_curso','resuelta','anulada') NOT NULL DEFAULT 'en_curso',
   reportada_por      INT UNSIGNED NULL,
-  inspection_id      INT UNSIGNED NULL,             -- revisión en la que se reportó (NULL = registrada por un administrativo)
+  inspection_id      INT UNSIGNED NULL,             -- revisión en la que se reportó (NULL = registrada desde el módulo de novedades)
   creada_en          DATETIME     NOT NULL,
   resuelta_por       INT UNSIGNED NULL,
   resuelta_en        DATETIME     NULL,
   resolucion         VARCHAR(500) NULL,
+  foto_resolucion    VARCHAR(160) NULL,             -- evidencia de la reparación (opcional)
+  anulada_en         DATETIME     NULL,
   KEY ix_pi_estado (estado, environment_id),
   KEY ix_pi_item (inventory_item_id, estado),
   KEY ix_pi_familia (family_id, estado),
@@ -237,7 +250,7 @@ CREATE TABLE item_history (
 CREATE TABLE notifications (
   id                   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id              INT UNSIGNED NOT NULL,
-  tipo                 ENUM('revision_lista','entrega_recibida','dano_reportado','dano_grave','novedad_permanente','novedad_resuelta') NOT NULL,
+  tipo                 ENUM('revision_lista','entrega_recibida','dano_reportado','dano_grave','novedad_permanente','novedad_resuelta','asignacion') NOT NULL,
   titulo               VARCHAR(160) NOT NULL,
   detalle              VARCHAR(300) NOT NULL,
   inspection_id        INT UNSIGNED NULL,
@@ -248,4 +261,56 @@ CREATE TABLE notifications (
   CONSTRAINT fk_notif_user  FOREIGN KEY (user_id)             REFERENCES users(id)             ON DELETE CASCADE,
   CONSTRAINT fk_notif_insp  FOREIGN KEY (inspection_id)       REFERENCES inspections(id)       ON DELETE CASCADE,
   CONSTRAINT fk_notif_issue FOREIGN KEY (persistent_issue_id) REFERENCES persistent_issues(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Asignación de instructores a ambientes por jornada.
+--   dia:        fecha_inicio = fecha_fin
+--   periodo:    fecha_inicio ≤ fecha_fin
+--   permanente: fecha_fin NULL (vale hasta que se reasigne o se anule)
+-- Reasignar desde una fecha recorta la asignación (fecha_fin = día anterior)
+-- y crea la nueva con reemplaza_id; si es desde su primer día queda "reasignada".
+CREATE TABLE instructor_assignments (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  environment_id  INT UNSIGNED NOT NULL,
+  instructor_id   INT UNSIGNED NOT NULL,
+  jornada         ENUM('manana','tarde','noche') NOT NULL,
+  tipo            ENUM('dia','periodo','permanente') NOT NULL,
+  fecha_inicio    DATE         NOT NULL,
+  fecha_fin       DATE         NULL,
+  estado          ENUM('vigente','reasignada','anulada') NOT NULL DEFAULT 'vigente',
+  motivo          VARCHAR(300) NULL,
+  reemplaza_id    INT UNSIGNED NULL,               -- asignación a la que reemplaza (reasignación)
+  creada_por      INT UNSIGNED NULL,
+  creada_en       DATETIME     NOT NULL,
+  cerrada_por     INT UNSIGNED NULL,               -- quien la reasignó, recortó o anuló
+  cerrada_en      DATETIME     NULL,
+  motivo_cierre   VARCHAR(300) NULL,
+  KEY ix_asig_env (environment_id, jornada, estado),
+  KEY ix_asig_instructor (instructor_id, estado),
+  CONSTRAINT fk_asig_env        FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_asig_instructor FOREIGN KEY (instructor_id)  REFERENCES users(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_asig_reemplaza  FOREIGN KEY (reemplaza_id)   REFERENCES instructor_assignments(id) ON DELETE SET NULL,
+  CONSTRAINT fk_asig_crea       FOREIGN KEY (creada_por)     REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_asig_cierra     FOREIGN KEY (cerrada_por)    REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT ck_asig_fechas CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio)
+) ENGINE=InnoDB;
+
+-- Historial para auditoría: cada evento de una novedad (creada, reportada de
+-- nuevo, modificada, resuelta, anulada) o de una asignación (creada,
+-- reasignada, recortada, anulada) con fecha, usuario, detalle y evidencia.
+CREATE TABLE audit_events (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  entidad         ENUM('novedad','asignacion') NOT NULL,
+  entidad_id      INT UNSIGNED NOT NULL,
+  environment_id  INT UNSIGNED NULL,
+  accion          VARCHAR(40)  NOT NULL,
+  detalle         VARCHAR(500) NOT NULL,
+  foto            VARCHAR(160) NULL,               -- evidencia del evento (foto del daño o de la reparación)
+  datos           JSON         NULL,               -- antes/después de los campos que cambiaron
+  user_id         INT UNSIGNED NULL,
+  created_at      DATETIME     NOT NULL,
+  KEY ix_audit_entidad (entidad, entidad_id, created_at),
+  KEY ix_audit_fecha (created_at),
+  CONSTRAINT fk_audit_env  FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE SET NULL,
+  CONSTRAINT fk_audit_user FOREIGN KEY (user_id)        REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;

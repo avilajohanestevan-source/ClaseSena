@@ -181,7 +181,7 @@ test('novedad permanente de una familia: persistent_issues, avisos a coordinaci�
     const bandeja = (await pedir('GET', '/inbox', { token })).datos;
     assert.ok(bandeja.notificaciones.some((n) => n.tipo === 'novedad_permanente' && n.novedadId === novedadId && n.ambiente === '111'));
   }
-  const activas = (await pedir('GET', `/persistent-issues?estado=activa&ambienteId=${amb.id}`, { token: carlos })).datos;
+  const activas = (await pedir('GET', `/persistent-issues?estado=en_curso&ambienteId=${amb.id}`, { token: carlos })).datos;
   const nov = activas.find((n) => n.id === novedadId);
   assert.deepEqual([nov.objetivo.tipo, nov.objetivo.codigo, nov.severidad, nov.reportes], ['familia', 'FAM111-KIT01', 'grave', 1]);
 
@@ -203,11 +203,16 @@ test('novedad permanente de una familia: persistent_issues, avisos a coordinaci�
   assert.equal(fuera.status, 200, JSON.stringify(fuera.datos));
   const detalle = (await pedir('GET', `/persistent-issues/${novedadId}`, { token: hernan })).datos;
   assert.ok(detalle.items.every((i) => i.estado === 'fuera_servicio'));
-  assert.equal((await pedir('POST', `/persistent-issues/${novedadId}/resolve`, { token: andres, cuerpo: { resolucion: 'x' } })).status, 403);
+  assert.equal((await pedir('POST', `/persistent-issues/${novedadId}/resolve`, { token: martha, cuerpo: { resolucion: 'Revisado' } })).status, 403, 'el portero no resuelve');
+  assert.equal((await pedir('POST', `/persistent-issues/${novedadId}/resolve`, { token: andres, cuerpo: { resolucion: 'x' } })).status, 422);
   const resuelta = await pedir('POST', `/persistent-issues/${novedadId}/resolve`, { token: hernan, cuerpo: { resolucion: 'Se cambió la batería de la cámara y el cable del micrófono.' } });
   assert.equal(resuelta.status, 200, JSON.stringify(resuelta.datos));
   assert.equal(resuelta.datos.estado, 'resuelta');
   assert.equal(resuelta.datos.resueltaPor, 'Hernán Darío Ospina');
+  // Cada cambio de estado queda en su historial con fecha, usuario y evidencia
+  assert.deepEqual(resuelta.datos.eventos.map((e) => e.accion), ['creada', 'reportada_de_nuevo', 'modificada', 'resuelta']);
+  assert.ok(resuelta.datos.eventos.every((e) => e.fecha && e.usuario));
+  assert.ok(resuelta.datos.eventos[0].foto, 'la apertura guarda la foto de evidencia');
   assert.ok((await pedir('GET', `/persistent-issues/${novedadId}`, { token: hernan })).datos.items.every((i) => i.estado === 'operativo'));
   assert.equal((await pedir('POST', `/persistent-issues/${novedadId}/resolve`, { token: hernan, cuerpo: { resolucion: 'Otra vez' } })).status, 409);
   assert.ok((await pedir('GET', '/inbox', { token: andres })).datos.notificaciones.some((n) => n.tipo === 'novedad_resuelta' && n.novedadId === novedadId), 'avisa a quien la reportó');
@@ -224,7 +229,8 @@ test('novedad permanente de una familia: persistent_issues, avisos a coordinaci�
   assert.ok(deFondo.resueltaEn);
   const porItem = (await pedir('GET', `/issues?itemId=${kit.itemIds[0]}`, { token: carlos })).datos;
   assert.ok(porItem.some((h) => h.novedadId === novedadId), 'el historial de un componente incluye las novedades de su familia');
-  assert.equal((await pedir('GET', '/issues', { token: andres })).status, 403);
+  assert.equal((await pedir('GET', '/issues', { token: andres })).status, 200, 'los instructores también ven el historial');
+  assert.equal((await pedir('GET', '/issues', { token: martha })).status, 403);
 });
 
 test('novedad permanente registrada por un administrativo y ítem fuera de servicio', async (t) => {
@@ -243,5 +249,64 @@ test('novedad permanente registrada por un administrativo y ítem fuera de servi
   assert.equal(resuelta.estado, 'resuelta');
   assert.equal((await pedir('GET', '/items/by-code/AMB108-005', { token: carlos })).datos.estado, 'operativo');
   const hist = (await pedir('GET', '/issues?estado=resuelta', { token: carlos })).datos;
-  assert.ok(hist.some((h) => h.origen === 'administrativo' && h.novedadId === tv.datos.id && h.usuario === 'Patricia Rondón Gil'));
+  assert.ok(hist.some((h) => h.origen === 'modulo' && h.novedadId === tv.datos.id && h.usuario === 'Patricia Rondón Gil'));
+});
+
+test('el instructor levanta, modifica y resuelve una novedad grave; retirar el reporte la anula; todo queda en auditoría', async (t) => {
+  if (!await disponible()) { t.skip('API no disponible'); return; }
+  const laura = await ingresar('1010101010', 'instructor');
+  const diana = await ingresar('1010101012', 'instructor');
+  const carlos = await ingresar('2020202020', 'administrativo');
+  const patricia = await ingresar('2020202021', 'administrativo');
+  const amb111 = (await pedir('GET', '/environments', { token: laura })).datos.find((a) => a.codigo === '111');
+  const item = (await pedir('GET', `/environments/${amb111.id}/items`, { token: laura })).datos.find((i) => i.nombre === 'Aire acondicionado');
+
+  // Sin foto no; con foto queda en curso, visible en Novedades y avisa a los administrativos
+  const base = { itemId: item.id, tipoDano: 'no_funciona', severidad: 'grave', descripcion: 'El aire acondicionado del 111 dejó de enfriar en plena clase' };
+  assert.equal((await pedir('POST', '/persistent-issues', { token: laura, cuerpo: base })).status, 422);
+  assert.equal((await pedir('POST', '/persistent-issues', { token: laura, cuerpo: { ...base, foto: FOTO, estadoItem: 'baja' } })).status, 403, 'dar de baja es de administrativos');
+  const creada = await pedir('POST', '/persistent-issues', { token: laura, cuerpo: { ...base, foto: FOTO, estadoItem: 'fuera_servicio' } });
+  assert.equal(creada.status, 201, JSON.stringify(creada.datos));
+  const id = creada.datos.id;
+  assert.deepEqual([creada.datos.estado, creada.datos.reportadaPor, creada.datos.items[0].estado], ['en_curso', 'Laura Gómez Patiño', 'fuera_servicio']);
+  assert.ok((await pedir('GET', '/persistent-issues?estado=en_curso', { token: diana })).datos.some((n) => n.id === id), 'visible para los instructores');
+  assert.ok((await pedir('GET', '/inbox', { token: patricia })).datos.notificaciones.some((n) => n.tipo === 'novedad_permanente' && n.novedadId === id));
+  assert.equal((await pedir('POST', '/persistent-issues', { token: diana, cuerpo: { ...base, foto: FOTO } })).status, 409, 'no se duplica');
+
+  // Modificación con nota y nueva evidencia
+  assert.equal((await pedir('PATCH', `/persistent-issues/${id}`, { token: diana, cuerpo: {} })).status, 422);
+  const mod = await pedir('PATCH', `/persistent-issues/${id}`, { token: diana, cuerpo: { severidad: 'moderada', nota: 'Mantenimiento dice que falta gas refrigerante', foto: FOTO } });
+  assert.equal(mod.status, 200, JSON.stringify(mod.datos));
+  const evMod = mod.datos.eventos.at(-1);
+  assert.deepEqual([evMod.accion, evMod.usuario], ['modificada', 'Diana Marcela Ruiz']);
+  assert.ok(evMod.foto && evMod.datos.severidad && /refrigerante/.test(evMod.detalle));
+
+  // Otro instructor la resuelve con foto de la reparación; avisa a quien la levantó y a los administrativos
+  const res = await pedir('POST', `/persistent-issues/${id}/resolve`, { token: diana, cuerpo: { resolucion: 'Se recargó el gas y enfría bien', foto: FOTO } });
+  assert.equal(res.status, 200, JSON.stringify(res.datos));
+  assert.deepEqual([res.datos.estado, res.datos.resueltaPor, res.datos.items[0].estado], ['resuelta', 'Diana Marcela Ruiz', 'operativo']);
+  assert.ok(res.datos.fotoResolucion);
+  assert.deepEqual(res.datos.eventos.map((e) => e.accion), ['creada', 'modificada', 'resuelta']);
+  assert.ok((await pedir('GET', '/inbox', { token: laura })).datos.notificaciones.some((n) => n.tipo === 'novedad_resuelta' && n.novedadId === id));
+  assert.ok((await pedir('GET', '/inbox', { token: carlos })).datos.notificaciones.some((n) => n.tipo === 'novedad_resuelta' && n.novedadId === id));
+  const auditoria = (await pedir('GET', `/audit?entidad=novedad&entidadId=${id}`, { token: carlos })).datos;
+  assert.deepEqual(auditoria.map((e) => e.accion), ['resuelta', 'modificada', 'creada']);
+  assert.equal((await pedir('GET', '/audit', { token: laura })).status, 403);
+
+  // En una revisión la permanente queda en curso al reportarla; si se retira el reporte, queda anulada
+  const amb = (await pedir('GET', '/environments', { token: carlos })).datos.find((a) => a.codigo === '110');
+  const insp = (await pedir('POST', '/inspections', { token: laura, cuerpo: { ambienteId: amb.id } })).datos;
+  const nevera = insp.inventario.find((i) => i.nombre === 'Nevera industrial');
+  const rep = await pedir('POST', `/inspections/${insp.id}/items`, {
+    token: laura, cuerpo: { itemId: nevera.id, naturaleza: 'permanente', tipoDano: 'no_funciona', severidad: 'grave', comentario: 'La nevera no enfría desde anoche', foto: FOTO },
+  });
+  const reporte = rep.datos.reportes[0];
+  assert.ok(reporte.novedadId, 'queda en curso en el momento de reportarla');
+  assert.equal((await pedir('GET', `/persistent-issues/${reporte.novedadId}`, { token: laura })).datos.estado, 'en_curso');
+  await pedir('DELETE', `/inspections/${insp.id}/items/${reporte.id}`, { token: laura });
+  const anulada = (await pedir('GET', `/persistent-issues/${reporte.novedadId}`, { token: laura })).datos;
+  assert.equal(anulada.estado, 'anulada');
+  assert.deepEqual(anulada.eventos.map((e) => e.accion), ['creada', 'anulada']);
+  assert.ok((await pedir('GET', '/issues?estado=anulada', { token: laura })).datos.some((h) => h.novedadId === reporte.novedadId));
+  await pedir('POST', `/inspections/${insp.id}/cancel`, { token: laura });
 });

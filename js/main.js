@@ -29,7 +29,9 @@ const RUTAS = {
   planilla: { vista: () => import('./vistas/planilla.js'), roles: PERSONAL, titulo: 'Planilla de entrega', activa: 'inspecciones' },
   inventario: { vista: () => import('./vistas/inventario.js'), roles: PERSONAL, titulo: 'Inventario', icono: 'caja', grupo: 'ambientes' },
   etiquetas: { vista: () => import('./vistas/etiquetas.js'), roles: PERSONAL, titulo: 'Pegatinas', activa: 'inventario' },
-  novedades: { vista: () => import('./vistas/novedades.js'), roles: ['administrativo'], titulo: 'Novedades', icono: 'alerta', grupo: 'ambientes' },
+  novedades: { vista: () => import('./vistas/novedades.js'), roles: ['administrativo', 'instructor'], titulo: 'Novedades', icono: 'alerta', grupo: 'ambientes' },
+  asignaciones: { vista: () => import('./vistas/asignaciones.js'), roles: ['administrativo', 'instructor'], titulo: 'Asignaciones', icono: 'calendario', grupo: 'ambientes' },
+  auditoria: { vista: () => import('./vistas/auditoria.js'), roles: ['administrativo'], titulo: 'Auditoría', icono: 'historial', grupo: 'ambientes' },
   reportes: { vista: () => import('./vistas/reportes.js'), roles: ['administrativo'], titulo: 'Reportes', icono: 'reporte', grupo: 'ambientes' },
   // Asistencia a clases (datos simulados, js/api/mock).
   clases: { vista: () => import('./vistas/instructor.js'), roles: ['instructor'], titulo: 'Asistencia a clases', icono: 'qr', grupo: 'asistencia' },
@@ -100,7 +102,7 @@ async function actualizarInsignias() {
       ? (await apiAmb.inspecciones()).filter((s) => ['en_curso', 'pendiente_recepcion'].includes(s.estado)).length
       : (await apiAmb.inspecciones({ estado: 'pendiente_recepcion', asignados: u.rol === 'portero' ? 1 : undefined })).length;
     shell.insignia('inspecciones', n, u.rol === 'instructor' ? 'en proceso' : 'por entregar');
-    if (u.rol === 'administrativo') shell.insignia('novedades', (await apiAmb.novedades({ estado: 'activa' })).length, 'novedades permanentes activas');
+    if (['administrativo', 'instructor'].includes(u.rol)) shell.insignia('novedades', (await apiAmb.novedades({ estado: 'en_curso' })).length, 'novedades permanentes en curso');
   } catch { /* la insignia es informativa */ }
 }
 escuchar('bandeja', actualizarInsignias);

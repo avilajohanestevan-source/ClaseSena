@@ -11,7 +11,7 @@
 const SQL_FAMILIAS = "SELECT f.*, e.codigo AS ambiente_codigo, e.nombre AS ambiente_nombre,
                              (SELECT COUNT(*) FROM inventory_items i WHERE i.family_id = f.id) AS componentes,
                              (SELECT COUNT(*) FROM inventory_items i WHERE i.family_id = f.id AND i.estado <> 'operativo') AS componentes_novedad,
-                             (SELECT n.id FROM persistent_issues n WHERE n.family_id = f.id AND n.estado = 'activa' ORDER BY n.id LIMIT 1) AS novedad_activa_id
+                             (SELECT n.id FROM persistent_issues n WHERE n.family_id = f.id AND n.estado = 'en_curso' ORDER BY n.id LIMIT 1) AS novedad_activa_id
                       FROM item_families f JOIN environments e ON e.id = f.environment_id";
 
 /** Con $conComponentes trae los ítems de la familia (una consulta más). */

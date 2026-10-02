@@ -106,7 +106,7 @@ export async function render(raiz, { params }) {
         h('span', { class: 'inv-categoria' }, i.categoria, i.familia && h('span', { class: 'inv-familia' }, icono('capas'), i.familia.codigo)),
         h('strong', {}, i.nombre),
         h('span', { class: 'mono text-muted' }, `${i.codigo}${i.serial ? ` · ${i.serial}` : ''}`)),
-      h('div', { class: 'inv-fila-estado' }, chipItem(i.estado), i.novedadActivaId && h('span', { class: 'status-chip out' }, icono('reloj'), 'Novedad activa')),
+      h('div', { class: 'inv-fila-estado' }, chipItem(i.estado), i.novedadActivaId && h('span', { class: 'status-chip out' }, icono('reloj'), 'Novedad en curso')),
       admin && h('div', { class: 'inv-fila-acciones' },
         h('button', { class: 'btn btn-outline btn-sm btn-icono', type: 'button', 'aria-label': `Editar ${i.nombre}`, onclick: () => formulario(i) }, icono('lapiz')),
         h('button', { class: 'btn btn-outline btn-sm btn-icono', type: 'button', 'aria-label': `Borrar ${i.nombre}`, onclick: () => borrar(i) }, icono('basura')))))
@@ -129,7 +129,7 @@ export async function render(raiz, { params }) {
         h('span', { class: 'mono text-muted' }, `${f.codigo} · ${f.componentesTotal} componente(s)`)),
       h('ul', { class: 'fam-componentes', 'aria-label': `Componentes de ${f.nombre}` }, f.componentes.map((c) => h('li', { class: `fam-componente fam-componente--${c.estado}` }, c.nombre))),
       h('div', { class: 'inv-fila-estado' },
-        f.novedadActivaId ? h('span', { class: 'status-chip out' }, icono('reloj'), 'Novedad activa')
+        f.novedadActivaId ? h('span', { class: 'status-chip out' }, icono('reloj'), 'Novedad en curso')
           : f.componentesConNovedad ? h('span', { class: 'status-chip error' }, `${f.componentesConNovedad} con novedad`) : h('span', { class: 'status-chip in' }, 'Completa')),
       admin && h('div', { class: 'inv-fila-acciones' },
         h('button', { class: 'btn btn-outline btn-sm btn-icono', type: 'button', 'aria-label': `Editar familia ${f.nombre}`, onclick: () => formularioFamilia(f) }, icono('lapiz')),
@@ -144,8 +144,8 @@ export async function render(raiz, { params }) {
       contenido: h('div', { class: 'inv-detalle' },
         h('div', { class: 'inv-detalle-codigos' }, qr(f.qr, 168, `QR de la familia ${f.nombre}`), codigoBarras(f.codigo)),
         h('p', { class: 'text-muted' }, 'En la revisión, escanear esta pegatina permite reportar la familia completa o uno de sus componentes.'),
-        f.novedadActivaId && h('p', { class: 'banner warning' }, icono('reloj'), ' Tiene una novedad permanente activa',
-          admin && h('a', { class: 'table-link', href: `#/novedades?id=${f.novedadActivaId}` }, ' · ver novedad')),
+        f.novedadActivaId && h('p', { class: 'banner warning' }, icono('reloj'), ' Tiene una novedad permanente en curso',
+          estado.usuario.rol !== 'portero' && h('a', { class: 'table-link', href: `#/novedades?id=${f.novedadActivaId}` }, ' · ver novedad')),
         h('h3', { class: 'bloque-titulo' }, `Componentes (${f.componentes.length})`),
         h('ul', { class: 'inv-lista' }, f.componentes.map((c) => h('li', { class: 'inv-fila' },
           h('div', { class: 'inv-fila-datos' }, h('strong', {}, c.nombre), h('span', { class: 'mono text-muted' }, `${c.codigo} · ${c.categoria}`)),
@@ -234,15 +234,15 @@ export async function render(raiz, { params }) {
           h('span', {}, x.detalle),
           h('span', { class: 'text-muted' }, `${fecha.corta(x.fecha)} · ${x.usuario || 'Sistema'}`),
           x.inspeccionId && h('a', { class: 'table-link', href: `#/planilla?id=${x.inspeccionId}` }, 'Ver planilla'),
-          admin && x.novedadId && h('a', { class: 'table-link', href: `#/novedades?id=${x.novedadId}` }, 'Ver novedad')));
+          estado.usuario.rol !== 'portero' && x.novedadId && h('a', { class: 'table-link', href: `#/novedades?id=${x.novedadId}` }, 'Ver novedad')));
     }) : h('li', { class: 'text-muted' }, 'Sin movimientos.'))).catch((e) => vaciar(historial, h('li', { class: 'text-muted' }, e.message)));
 
     abrirModal({
       titulo: i.nombre, subtitulo: `${i.codigo} · ambiente ${i.ambiente}`, ancho: 'angosto',
       contenido: h('div', { class: 'inv-detalle' },
         h('div', { class: 'inv-detalle-codigos' }, qr(i.qr, 168, `QR de ${i.nombre}`), codigoBarras(i.codigo)),
-        i.novedadActivaId && h('p', { class: 'banner warning' }, icono('reloj'), ' Tiene una novedad permanente activa',
-          admin && h('a', { class: 'table-link', href: `#/novedades?id=${i.novedadActivaId}` }, ' · ver novedad')),
+        i.novedadActivaId && h('p', { class: 'banner warning' }, icono('reloj'), ' Tiene una novedad permanente en curso',
+          estado.usuario.rol !== 'portero' && h('a', { class: 'table-link', href: `#/novedades?id=${i.novedadActivaId}` }, ' · ver novedad')),
         h('dl', { class: 'detalle-datos' },
           h('dt', {}, 'Estado'), h('dd', {}, chipItem(i.estado)),
           h('dt', {}, 'Categoría'), h('dd', {}, i.categoria),

@@ -1,6 +1,6 @@
 // Planilla de entrega del ambiente: documento imprimible con datos,
 // checklist, estado del salón al recibirlo, novedades con foto (permanentes,
-// temporales o de limpieza), novedades permanentes activas, inventario con
+// temporales o de limpieza), novedades permanentes en curso, inventario con
 // los ítems marcados OK, quién revisó y recibió (instructor) y quién entregó
 // (portero). Arriba, según el momento:
 //  · Portero, revisión terminada sin QR: resumen y "Generar QR de entrega".
@@ -79,7 +79,7 @@ export async function render(raiz, { params, alSalir }) {
           dato('Dañados / en reparación', `${d.estadoSalon.items.danados} / ${d.estadoSalon.items.enReparacion}`),
           dato('Fuera de servicio', String(d.estadoSalon.items.fueraServicio)),
           dato('Novedades de esta revisión', `${d.estadoSalon.reportes.total} (permanentes: ${d.estadoSalon.reportes.permanentes} · temporales: ${d.estadoSalon.reportes.temporales} · limpieza: ${d.estadoSalon.reportes.limpieza})`),
-          dato('Novedades permanentes activas', String(d.estadoSalon.novedadesActivas)))),
+          dato('Novedades permanentes en curso', String(d.estadoSalon.novedadesActivas)))),
 
       h('section', { class: 'planilla-seccion' },
         h('h3', {}, `Novedades reportadas (${d.reportes.length})`),
@@ -90,13 +90,13 @@ export async function render(raiz, { params, alSalir }) {
             h('span', { class: 'reporte-chips' }, chipNaturaleza(r.naturaleza), h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(r.tipoDano)), chipSeveridad(r.severidad)),
             h('span', {}, r.comentario),
             h('span', { class: 'text-muted' }, `Reportado ${fecha.corta(r.reportadoEn)}`),
-            r.novedadId && (u.rol === 'administrativo'
+            r.novedadId && (u.rol !== 'portero'
               ? h('a', { class: 'table-link no-imprimir', href: `#/novedades?id=${r.novedadId}` }, `Novedad permanente #${r.novedadId}`)
               : h('span', { class: 'text-muted' }, `Novedad permanente #${r.novedadId}`))))))
           : h('p', { class: 'text-muted' }, 'Sin novedades reportadas.')),
 
       d.novedadesActivas.length ? h('section', { class: 'planilla-seccion' },
-        h('h3', {}, `Novedades permanentes activas del ambiente (${d.novedadesActivas.length})`),
+        h('h3', {}, `Novedades permanentes en curso del ambiente (${d.novedadesActivas.length})`),
         h('ul', { class: 'insp-activas-lista' }, d.novedadesActivas.map((n) => h('li', {},
           h('strong', {}, n.titulo), h('span', {}, n.descripcion),
           h('span', { class: 'reporte-chips' }, chipSeveridad(n.severidad), n.itemEstado && chipItem(n.itemEstado), h('span', { class: 'text-muted' }, `desde ${fecha.corta(n.creadaEn)}`)))))) : null,

@@ -14,9 +14,11 @@
  * (entrega). Cada novedad es una fila de inspection_items vinculada a un ítem,
  * a una familia completa o, si es del salón, a su ubicación. Su naturaleza:
  *   · permanente (aire dañado, video beam sin lámpara): el ítem (o todos los
- *     componentes de la familia) pasa a "danado" y, al recibir el ambiente,
- *     queda en persistent_issues hasta que un administrativo la resuelva
- *     (modulos/novedades.php), con aviso a coordinación, administrativo e inventario;
+ *     componentes de la familia) pasa a "danado" y, en el momento de
+ *     reportarla, queda "en_curso" en persistent_issues hasta que un
+ *     instructor o un administrativo la resuelva (modulos/novedades.php), con
+ *     aviso a coordinación, administrativo e inventario. Si el reporte se
+ *     retira antes de entregar el ambiente, la novedad queda anulada;
  *   · temporal o limpieza: queda en el historial y no cambia el inventario.
  */
 
@@ -156,7 +158,7 @@ function detalleInspeccion(array $s): array
             'reportado' => in_array((int) $f['id'], $familiasReportadas, true),
         ], $familias),
         // Novedades permanentes que el ambiente ya tiene abiertas: no hace falta volver a reportarlas.
-        'novedadesActivas' => array_map('novedadPublica', filas(SQL_NOVEDADES . " WHERE n.environment_id = ? AND n.estado = 'activa' ORDER BY n.creada_en", [(int) $s['environment_id']])),
+        'novedadesActivas' => array_map('novedadPublica', filas(SQL_NOVEDADES . " WHERE n.environment_id = ? AND n.estado = 'en_curso' ORDER BY n.creada_en", [(int) $s['environment_id']])),
     ];
 }
 
@@ -326,7 +328,7 @@ function rutaReportarDano(int $id): never
     $permanente = $naturaleza === 'permanente';
     $resumen = 'Novedad ' . NATURALEZAS[$naturaleza] . " en la revisión del ambiente {$s['amb_codigo']}: " . str_replace('_', ' ', $tipo) . " ($severidad)";
     db()->begin_transaction();
-    insertar(
+    $reporteId = insertar(
         'INSERT INTO inspection_items (inspection_id, inventory_item_id, family_id, ubicacion, naturaleza, tipo_dano, severidad, comentario, foto,
                                        estado_item_anterior, estados_anteriores, reportado_en)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
@@ -340,6 +342,8 @@ function rutaReportarDano(int $id): never
         if ($permanente) consulta(SQL_MARCAR_DANADO, [$m['id']]);
         historial($m['id'], 'dano', $m['detalle'] . ($permanente ? '. Pasa a Dañado.' : '. El inventario no cambia.'), (int) $u['id'], $id);
     }
+    // La permanente queda en curso desde ya (visible en Novedades) y avisa a coordinación, administrativo e inventario.
+    if ($permanente) abrirNovedadDeReporte($reporteId, $s, $u);
     db()->commit();
     responder(detalleInspeccion(buscarInspeccion($id)), 201);
 }
@@ -355,7 +359,9 @@ function deshacerReporte(array $r, ?int $usuarioId): void
         historial((int) $itemId, 'dano_retirado', 'Se retiró el reporte de novedad' . ($r['family_id'] ? ' de la familia' : '')
             . ($restaurar ? '; vuelve a ' . ETIQUETA_ESTADO[$estado] : ''), $usuarioId, (int) $r['inspection_id']);
     }
-    if ($r['foto'] && is_file(__DIR__ . '/../../' . $r['foto'])) @unlink(__DIR__ . '/../../' . $r['foto']);
+    retirarReporteDeNovedad($r, $usuarioId);
+    // La foto de una novedad permanente es evidencia del historial: se conserva.
+    if ($r['foto'] && !$r['persistent_issue_id'] && is_file(__DIR__ . '/../../' . $r['foto'])) @unlink(__DIR__ . '/../../' . $r['foto']);
     consulta('DELETE FROM inspection_items WHERE id = ?', [(int) $r['id']]);
 }
 
@@ -434,8 +440,9 @@ function rutaGenerarQr(int $id): never
  * POST /inspections/by-qr/{token}/receive: el instructor escanea el QR del
  * portero y confirma que recibió el ambiente. Queda guardado quién entregó
  * (portero_id), quién recibió (instructor_id), las horas, el estado del salón
- * (estado_salon) y sus reportes. Cada novedad permanente abre (o se suma a)
- * una persistent_issue y se avisa a coordinación, administrativo e inventario.
+ * (estado_salon) y sus reportes (las novedades permanentes ya están en curso
+ * desde que se reportaron). Si hubo novedades se avisa el resumen a
+ * coordinación, administrativo e inventario.
  */
 function rutaRecibirPorQr(string $token): never
 {
@@ -459,7 +466,8 @@ function rutaRecibirPorQr(string $token): never
     notificar((int) $s['portero_id'], 'entrega_recibida', "{$u['nombre']} recibió el ambiente {$s['amb_codigo']}",
         'Escaneó el QR de entrega' . ((int) $s['danos'] ? " · {$s['danos']} novedad(es) registrada(s)" : ' · sin novedades'), $id);
     // Novedades permanentes: abren una persistent_issue (o se suman a la que ya estaba activa) y avisan.
-    $permanentes = registrarNovedadesPermanentes($s, $u);
+    // Las novedades permanentes ya quedaron en curso al reportarlas: aquí solo se cuentan para el resumen.
+    $nuevas = (int) fila("SELECT COUNT(*) n FROM persistent_issues WHERE inspection_id = ? AND estado <> 'anulada'", [$id])['n'];
     if ($s['resultado'] === 'con_danos') {
         // Resumen para coordinación, administrativo e inventario: qué pasó a "Dañado", qué es del salón y qué fue temporal.
         $reportes = filas('SELECT d.ubicacion, d.naturaleza, COALESCE(it.codigo, f.codigo) codigo FROM inspection_items d
@@ -471,7 +479,7 @@ function rutaRecibirPorQr(string $token): never
         $partes = array_filter([
             $codigos ? 'Inventario: ' . implode(', ', $codigos) . (count($codigos) === 1 ? ' pasa' : ' pasan') . ' a Dañado' : null,
             $salon ? count($salon) . ' daño(s) del salón (' . implode(', ', array_unique($salon)) . ')' : null,
-            $permanentes['nuevas'] ? count($permanentes['nuevas']) . ' novedad(es) permanente(s) nueva(s)' : null,
+            $nuevas ? "$nuevas novedad(es) permanente(s) nueva(s) en curso" : null,
             $temporales ? "$temporales incidencia(s) temporal(es) o de limpieza" : null,
             !$reportes ? 'Novedades en el checklist' : null,
             (int) $s['danos_graves'] ? "{$s['danos_graves']} grave(s)" : null,
@@ -516,7 +524,7 @@ function estadoSalon(array $s): array
             'limpieza' => $porNaturaleza['limpieza'] ?? 0,
             'ids' => array_map('intval', array_column($reportes, 'id')),
         ],
-        'novedadesActivas' => (int) fila("SELECT COUNT(*) n FROM persistent_issues WHERE environment_id = ? AND estado = 'activa'", [$amb])['n'],
+        'novedadesActivas' => (int) fila("SELECT COUNT(*) n FROM persistent_issues WHERE environment_id = ? AND estado = 'en_curso'", [$amb])['n'],
         'registradoEn' => date(DATE_ATOM),
     ];
 }

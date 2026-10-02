@@ -21,7 +21,7 @@ const PREFIJO_QR_ITEM = 'SENA-INV:';
 const PREFIJO_QR_FAMILIA = 'SENA-FAM:';
 const SQL_ITEMS = "SELECT i.*, e.codigo AS ambiente_codigo, e.nombre AS ambiente_nombre, c.nombre AS categoria,
                           f.codigo AS familia_codigo, f.nombre AS familia_nombre, f.tipo AS familia_tipo,
-                          (SELECT n.id FROM persistent_issues n WHERE n.estado = 'activa'
+                          (SELECT n.id FROM persistent_issues n WHERE n.estado = 'en_curso'
                              AND (n.inventory_item_id = i.id OR n.family_id = i.family_id) ORDER BY n.id LIMIT 1) AS novedad_activa_id
                    FROM inventory_items i
                    JOIN environments e ON e.id = i.environment_id

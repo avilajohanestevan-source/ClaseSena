@@ -10,7 +10,7 @@ const SQL_AMBIENTES = "
            (SELECT COUNT(*) FROM inventory_items i WHERE i.environment_id = e.id AND i.estado <> 'baja') AS items_total,
            (SELECT COUNT(*) FROM inventory_items i WHERE i.environment_id = e.id AND i.estado IN ('danado','en_reparacion','fuera_servicio')) AS items_novedad,
            (SELECT COUNT(*) FROM item_families f WHERE f.environment_id = e.id) AS familias_total,
-           (SELECT COUNT(*) FROM persistent_issues n WHERE n.environment_id = e.id AND n.estado = 'activa') AS novedades_activas,
+           (SELECT COUNT(*) FROM persistent_issues n WHERE n.environment_id = e.id AND n.estado = 'en_curso') AS novedades_activas,
            u.id AS ult_id, u.estado AS ult_estado, u.resultado AS ult_resultado, u.iniciada_en AS ult_iniciada,
            u.instructor_id AS ult_instructor_id, ui.nombre AS ult_instructor, u.portero_id AS ult_portero_id, up.nombre AS ult_portero
     FROM environments e
@@ -62,7 +62,9 @@ function rutaAmbientes(): never
     if (!empty($_GET['asignados']) && $u['rol'] === 'portero') { $where[] = 'e.portero_id = ?'; $params[] = (int) $u['id']; }
     if ($v = entero($_GET, 'especialidadId', false)) { $where[] = 'e.especialidad_id = ?'; $params[] = $v; }
     $sql = SQL_AMBIENTES . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY e.codigo';
-    responder(array_map('ambientePublico', filas($sql, $params)));
+    // Quién está asignado hoy en cada jornada (modulos/asignaciones.php).
+    $efectivas = asignacionesEfectivas(hoy(), hoy());
+    responder(array_map(fn($e) => ambientePublico($e) + ['asignadosHoy' => asignadosHoy((int) $e['id'], $efectivas)], filas($sql, $params)));
 }
 
 function buscarAmbiente(int $id): array
@@ -75,7 +77,7 @@ function buscarAmbiente(int $id): array
 function rutaAmbiente(int $id): never
 {
     usuario();
-    responder(ambientePublico(buscarAmbiente($id)));
+    responder(ambientePublico(buscarAmbiente($id)) + ['asignadosHoy' => asignadosHoy($id, asignacionesEfectivas(hoy(), hoy(), $id))]);
 }
 
 /**

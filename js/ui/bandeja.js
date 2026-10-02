@@ -12,7 +12,7 @@ import { preferencia } from './preferencias.js';
 
 const ICONO = {
   revision_lista: 'qr', entrega_recibida: 'check', dano_reportado: 'herramienta', dano_grave: 'alerta',
-  novedad_permanente: 'reloj', novedad_resuelta: 'check',
+  novedad_permanente: 'reloj', novedad_resuelta: 'check', asignacion: 'calendario',
 };
 
 export function crearBandeja() {
@@ -51,9 +51,10 @@ export function crearBandeja() {
           onclick: async () => {
             cerrar();
             if (!n.leida) { n.leida = true; apiAmb.leerNotificacion(n.id).then(consultar).catch(() => {}); }
-            // Novedades permanentes: los administrativos van a la novedad; el resto, a la planilla.
-            if (n.novedadId && estado.usuario?.rol === 'administrativo') location.hash = `#/novedades?id=${n.novedadId}`;
+            // Novedades permanentes: administrativos e instructores van a la novedad; el portero, a la planilla.
+            if (n.novedadId && ['administrativo', 'instructor'].includes(estado.usuario?.rol)) location.hash = `#/novedades?id=${n.novedadId}`;
             else if (n.inspeccionId) location.hash = `#/planilla?id=${n.inspeccionId}`;
+            else if (n.tipo === 'asignacion') location.hash = '#/asignaciones';
           },
         },
           h('span', { class: 'bandeja-icono' }, icono(ICONO[n.tipo] || 'campana')),

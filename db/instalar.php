@@ -61,9 +61,9 @@ try {
     $conteos = $conn->query(
         "SELECT (SELECT COUNT(*) FROM users) usuarios, (SELECT COUNT(*) FROM environments) ambientes,
                 (SELECT COUNT(*) FROM inventory_items) items, (SELECT COUNT(*) FROM item_families) familias,
-                (SELECT COUNT(*) FROM inspections) inspecciones, (SELECT COUNT(*) FROM persistent_issues WHERE estado = 'activa') novedades"
+                (SELECT COUNT(*) FROM inspections) inspecciones, (SELECT COUNT(*) FROM persistent_issues WHERE estado = 'en_curso') novedades"
     )->fetch_assoc();
-    printf("Base %s lista: %d usuarios, %d ambientes, %d ítems, %d familias, %d inspecciones, %d novedades permanentes activas.\n",
+    printf("Base %s lista: %d usuarios, %d ambientes, %d ítems, %d familias, %d inspecciones, %d novedades permanentes en curso.\n",
         DB_NAME, $conteos['usuarios'], $conteos['ambientes'], $conteos['items'], $conteos['familias'], $conteos['inspecciones'], $conteos['novedades']);
     echo "Contraseña de todos los usuarios de prueba: Sena2026*\n";
 } catch (mysqli_sql_exception $e) {

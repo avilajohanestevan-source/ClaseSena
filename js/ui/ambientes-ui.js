@@ -1,7 +1,7 @@
 // Piezas de interfaz compartidas por las vistas de entrega y revisión de
 // ambientes: chips de estado, QR, tiempo relativo y estados vacíos.
 import { h, icono } from './dom.js';
-import { ESTADOS_INSPECCION, ESTADOS_ITEM, ESTADOS_NOVEDAD, TIPOS_DANO, PRIORIDADES, NATURALEZAS } from '../reglas.js';
+import { ESTADOS_INSPECCION, ESTADOS_ITEM, ESTADOS_NOVEDAD, TIPOS_DANO, PRIORIDADES, NATURALEZAS, ACCIONES_AUDITORIA } from '../reglas.js';
 import { svgCode128 } from './codigo128.js';
 
 export function chipInspeccion(estado) {
@@ -36,7 +36,7 @@ export function chipNaturaleza(naturaleza) {
     naturaleza === 'permanente' && icono('reloj'), n.etiqueta);
 }
 
-/** Estado de una novedad: en revisión, activa, resuelta o cerrada. */
+/** Estado de una novedad: en revisión, en curso, resuelta, anulada o cerrada. */
 export function chipNovedad(estado) {
   const [texto, clase] = ESTADOS_NOVEDAD[estado] || [estado, 'neutro'];
   return h('span', { class: `status-chip ${clase}` }, texto);
@@ -137,4 +137,23 @@ export function pegatina(it) {
 /** Pegatina de una familia: QR "SENA-FAM:<código>" + código de barras del código. */
 export function pegatinaFamilia(f) {
   return pegatina({ ...f, nombre: `${f.nombre} (familia)`, detalle: `Familia ${f.tipo} · ${f.componentesTotal} componente(s)` });
+}
+
+/**
+ * Línea de tiempo de eventos de auditoría (novedades y asignaciones): qué
+ * pasó, quién, cuándo y la foto de evidencia si la hay.
+ */
+export function lineaDeTiempo(eventos = []) {
+  if (!eventos.length) return h('p', { class: 'text-muted' }, 'Sin eventos registrados.');
+  return h('ol', { class: 'historial' }, eventos.map((e) => {
+    const [titulo, ic] = ACCIONES_AUDITORIA[e.accion] || [e.accion, 'reloj'];
+    return h('li', { class: `historial-fila historial-fila--${e.accion}` },
+      h('span', { class: 'historial-icono', 'aria-hidden': 'true' }, icono(ic)),
+      h('div', {},
+        h('strong', {}, titulo),
+        h('span', {}, e.detalle),
+        h('span', { class: 'text-muted' }, `${fecha.completa(e.fecha)} · ${e.usuario || 'Sistema'}`),
+        e.foto && h('a', { class: 'historial-foto', href: e.foto, target: '_blank', rel: 'noopener' },
+          h('img', { src: e.foto, alt: `Evidencia: ${titulo}`, loading: 'lazy' }))));
+  }));
 }

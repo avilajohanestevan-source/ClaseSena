@@ -24,7 +24,7 @@ import { pedirAmbientes as p, descargarAmbientes } from './cliente.js';
  * @typedef {{id:number, itemId:?number, familiaId:?number, ubicacion:?string, codigo:?string, nombre:string, categoria:string,
  *   naturaleza:Naturaleza, tipoDano:string, severidad:'leve'|'moderada'|'grave', comentario:string, foto:?string,
  *   novedadId:?number, reportadoEn:string}} ReporteDano
- * @typedef {{id:number, estado:'activa'|'resuelta', ambiente:{id:number, codigo:string, nombre:string},
+ * @typedef {{id:number, estado:'en_curso'|'resuelta'|'anulada', ambiente:{id:number, codigo:string, nombre:string},
  *   objetivo:{tipo:'item'|'familia'|'salon', id:?number, codigo:?string, nombre:string}, titulo:string, itemEstado:?EstadoItem,
  *   tipoDano:string, severidad:string, descripcion:string, foto:?string, reportadaPor:?string, inspeccionId:?number,
  *   creadaEn:string, resueltaPor:?string, resueltaEn:?string, resolucion:?string, reportes:number}} NovedadPermanente
@@ -104,6 +104,17 @@ export const apiAmb = {
   editarNovedad: (id, datos) => p('PATCH', `/persistent-issues/${id}`, datos), // {estadoItem?, severidad?, descripcion?}
   resolverNovedad: (id, datos) => p('POST', `/persistent-issues/${id}/resolve`, datos), // {resolucion, estadoItem?}
   historialNovedades: (filtros) => p('GET', '/issues', filtros),      // {ambienteId, itemId, naturaleza, estado, desde, hasta}
+
+  // Asignación de instructores por jornada
+  tableroAsignaciones: (filtros) => p('GET', '/assignments/board', filtros), // {desde, dias, ambienteId?} → {fechas, jornadas, ambientes:[{celdas}]}
+  asignaciones: (filtros) => p('GET', '/assignments', filtros),       // {ambienteId?, instructorId?, estado?, fecha?}
+  asignacion: (id) => p('GET', `/assignments/${id}`),                 // + eventos
+  crearAsignacion: (datos) => p('POST', '/assignments', datos),       // {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, motivo?} → {asignacion, advertencias}
+  reasignar: (id, datos) => p('POST', `/assignments/${id}/reassign`, datos), // {instructorId, motivo, desde?}
+  anularAsignacion: (id, datos) => p('POST', `/assignments/${id}/cancel`, datos), // {motivo, desde?}
+
+  // Auditoría (administrativo): eventos de novedades y asignaciones
+  auditoria: (filtros) => p('GET', '/audit', filtros),                // {entidad?, entidadId?, ambienteId?, usuarioId?, desde?, hasta?}
 
   // Notificaciones
   bandeja: () => p('GET', '/inbox'),                                  // → {sinLeer, notificaciones}

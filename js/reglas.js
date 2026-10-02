@@ -253,10 +253,54 @@ export function naturalezaPorDefecto(tipoDano) {
 /** [etiqueta, clase de .status-chip] de una novedad en el historial. */
 export const ESTADOS_NOVEDAD = {
   en_revision: ['En revisión', 'azul'],
-  activa: ['Activa', 'error'],
+  en_curso: ['En curso', 'error'],
   resuelta: ['Resuelta', 'in'],
+  anulada: ['Anulada', 'neutro'],
   cerrada: ['Cerrada', 'neutro'],
 };
+
+/** Eventos del historial de auditoría: [etiqueta, ícono]. */
+export const ACCIONES_AUDITORIA = {
+  creada: ['Creada', 'mas'], reportada_de_nuevo: ['Reportada de nuevo', 'alerta'], modificada: ['Modificada', 'lapiz'],
+  resuelta: ['Resuelta', 'check'], anulada: ['Anulada', 'prohibido'], reporte_retirado: ['Reporte retirado', 'reintentar'],
+  reasignada: ['Reasignada', 'usuarios'], recortada: ['Anulada desde una fecha', 'calendario'],
+};
+
+/* ---------------- asignación de instructores por jornada ---------------- */
+
+export const JORNADAS = [
+  { clave: 'manana', etiqueta: 'Mañana', horario: '6:00 a 12:00' },
+  { clave: 'tarde', etiqueta: 'Tarde', horario: '12:00 a 18:00' },
+  { clave: 'noche', etiqueta: 'Noche', horario: '18:00 a 22:00' },
+];
+export const ETIQUETA_JORNADA = Object.fromEntries(JORNADAS.map((j) => [j.clave, j.etiqueta]));
+
+export const TIPOS_ASIGNACION = [
+  { clave: 'dia', etiqueta: 'Solo un día', ayuda: 'Un reemplazo o una clase puntual. Tiene prioridad sobre las demás ese día.' },
+  { clave: 'periodo', etiqueta: 'Por un periodo', ayuda: 'Entre dos fechas (máximo un año).' },
+  { clave: 'permanente', etiqueta: 'Permanente', ayuda: 'Sin fecha final: vale hasta que se reasigne o se anule.' },
+];
+
+/**
+ * Valida el formulario de una asignación (mismas reglas que el backend,
+ * api/modulos/asignaciones.php). Fechas en aaaa-mm-dd; hoy para comparar.
+ */
+export function validarAsignacion({ ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin }, hoy = fechaIso()) {
+  const errores = {};
+  if (!ambienteId) errores.ambienteId = 'Elige el ambiente.';
+  if (!instructorId) errores.instructorId = 'Elige el instructor.';
+  if (!JORNADAS.some((j) => j.clave === jornada)) errores.jornada = 'Elige la jornada.';
+  if (!TIPOS_ASIGNACION.some((t) => t.clave === tipo)) errores.tipo = 'Elige si es por un día, un periodo o permanente.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaInicio || '')) errores.fechaInicio = 'Elige la fecha de inicio.';
+  if (tipo === 'periodo') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFin || '')) errores.fechaFin = 'Elige la fecha final.';
+    else if (fechaFin < fechaInicio) errores.fechaFin = 'La fecha final no puede ser anterior a la de inicio.';
+    else if ((new Date(fechaFin) - new Date(fechaInicio)) / 86_400_000 > 366) errores.fechaFin = 'Máximo un año; para más, usa permanente.';
+  }
+  const fin = tipo === 'dia' ? fechaInicio : tipo === 'periodo' ? fechaFin : null;
+  if (!errores.fechaInicio && fin && fin < hoy) errores.fechaInicio = 'No se puede asignar en fechas que ya pasaron.';
+  return errores;
+}
 
 /** Área de los administrativos (todos reciben los avisos de novedades). */
 export const ETIQUETA_AREA = { coordinacion: 'Coordinación', administrativo: 'Administrativo', inventario: 'Inventario' };

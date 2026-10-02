@@ -3,12 +3,17 @@
  * Novedades permanentes (persistent_issues) e historial de novedades.
  *
  * Una novedad permanente (aire acondicionado dañado, video beam sin lámpara,
- * grieta en la pared) nace cuando se recibe un ambiente con un reporte de
- * naturaleza "permanente", o la registra un administrativo. Sigue activa
- * —revisión tras revisión— hasta que un administrativo la marca resuelta.
+ * grieta en la pared) queda "en_curso" en cuanto un instructor la reporta
+ * —en una revisión, con naturaleza "permanente", o desde el módulo de
+ * novedades— o la registra un administrativo. Sigue en curso, revisión tras
+ * revisión, hasta que un instructor o un administrativo la marca resuelta.
  * Mientras tanto el ítem (o los componentes de la familia) puede quedar
- * "fuera_servicio" o "baja". Al abrirse y al resolverse se avisa a
- * coordinación, administrativo e inventario (todos los administrativos).
+ * "fuera_servicio" o "baja". Si el reporte que la abrió se retira antes de
+ * entregar el ambiente, queda "anulada".
+ *
+ * Cada cambio (creada, reportada de nuevo, modificada, resuelta, anulada)
+ * queda en audit_events con fecha, usuario y evidencia. Al abrirse y al
+ * resolverse se avisa a coordinación, administrativo e inventario.
  *
  * El historial (GET /issues) reúne cada novedad reportada: equipo o
  * ambiente, fecha, usuario, evidencia, naturaleza, estado y fecha de resolución.
@@ -17,7 +22,7 @@
 const SQL_NOVEDADES = "SELECT n.*, e.codigo AS ambiente_codigo, e.nombre AS ambiente_nombre,
                               it.codigo AS item_codigo, it.nombre AS item_nombre, it.estado AS item_estado,
                               f.codigo AS familia_codigo, f.nombre AS familia_nombre, f.tipo AS familia_tipo,
-                              ur.nombre AS reportada_por_nombre, us.nombre AS resuelta_por_nombre,
+                              ur.nombre AS reportada_por_nombre, ur.rol AS reportada_por_rol, us.nombre AS resuelta_por_nombre,
                               (SELECT COUNT(*) FROM inspection_items d WHERE d.persistent_issue_id = n.id) AS reportes
                        FROM persistent_issues n
                        JOIN environments e ON e.id = n.environment_id
@@ -26,7 +31,8 @@ const SQL_NOVEDADES = "SELECT n.*, e.codigo AS ambiente_codigo, e.nombre AS ambi
                        LEFT JOIN users ur ON ur.id = n.reportada_por
                        LEFT JOIN users us ON us.id = n.resuelta_por";
 
-/** Estados en los que el administrativo puede dejar los ítems de una novedad activa. */
+const ESTADOS_NOVEDAD = ['en_curso', 'resuelta', 'anulada'];
+/** Estados en los que se pueden dejar los ítems de una novedad en curso (baja = inactivo, solo administrativos). */
 const ESTADOS_NOVEDAD_ITEM = ['danado', 'en_reparacion', 'fuera_servicio', 'baja'];
 
 /** Ítem, familia o salón al que se refiere una novedad (o un reporte). */
@@ -53,11 +59,14 @@ function novedadPublica(array $n): array
         'descripcion' => $n['descripcion'],
         'foto' => $n['foto'],
         'reportadaPor' => $n['reportada_por_nombre'],
+        'reportadaPorRol' => $n['reportada_por_rol'],
         'inspeccionId' => $n['inspection_id'] !== null ? (int) $n['inspection_id'] : null,
         'creadaEn' => iso($n['creada_en']),
         'resueltaPor' => $n['resuelta_por_nombre'],
         'resueltaEn' => iso($n['resuelta_en']),
         'resolucion' => $n['resolucion'],
+        'fotoResolucion' => $n['foto_resolucion'],
+        'anuladaEn' => iso($n['anulada_en']),
         // Cuántas revisiones la han reportado (la primera y las que se le sumaron).
         'reportes' => (int) ($n['reportes'] ?? 0),
     ];
@@ -78,41 +87,63 @@ function itemsDeNovedad(array $n): array
     return [];
 }
 
-/**
- * Al recibir un ambiente: cada reporte permanente abre una novedad, o se suma
- * a la que el ítem (o la familia) ya tenía activa para no duplicarla. Avisa
- * a coordinación, administrativo e inventario por cada novedad nueva.
- * @return array{nuevas:int[], vinculadas:int[]}
- */
-function registrarNovedadesPermanentes(array $s, array $instructor): array
+/** Novedad en curso del mismo ítem o de la misma familia (para no duplicarla). */
+function novedadEnCursoDe(?int $itemId, ?int $familiaId): ?array
 {
-    $r = ['nuevas' => [], 'vinculadas' => []];
-    $reportes = filas("SELECT * FROM inspection_items WHERE inspection_id = ? AND naturaleza = 'permanente'", [(int) $s['id']]);
-    foreach ($reportes as $d) {
-        $activa = $d['inventory_item_id']
-            ? fila("SELECT id FROM persistent_issues WHERE inventory_item_id = ? AND estado = 'activa' ORDER BY id LIMIT 1", [(int) $d['inventory_item_id']])
-            : ($d['family_id'] ? fila("SELECT id FROM persistent_issues WHERE family_id = ? AND estado = 'activa' ORDER BY id LIMIT 1", [(int) $d['family_id']]) : null);
-        if ($activa) {
-            $novedadId = (int) $activa['id'];
-            $r['vinculadas'][] = $novedadId;
-            $texto = "Reportada otra vez en la revisión del ambiente {$s['amb_codigo']}: se suma a la novedad permanente #$novedadId, que sigue activa";
-        } else {
-            $novedadId = insertar(
-                'INSERT INTO persistent_issues (environment_id, inventory_item_id, family_id, ubicacion, tipo_dano, severidad, descripcion, foto,
-                                                reportada_por, inspection_id, creada_en)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-                [(int) $s['environment_id'], $d['inventory_item_id'] !== null ? (int) $d['inventory_item_id'] : null,
-                 $d['family_id'] !== null ? (int) $d['family_id'] : null, $d['ubicacion'], $d['tipo_dano'], $d['severidad'],
-                 $d['comentario'], $d['foto'], (int) $instructor['id'], (int) $s['id']]
-            );
-            $r['nuevas'][] = $novedadId;
-            $texto = "Novedad permanente #$novedadId abierta al recibir el ambiente {$s['amb_codigo']}: {$d['comentario']}";
-        }
-        consulta('UPDATE inspection_items SET persistent_issue_id = ? WHERE id = ?', [$novedadId, (int) $d['id']]);
-        foreach (itemsDeNovedad($d) as $i) historial((int) $i['id'], 'novedad', $texto, (int) $instructor['id'], (int) $s['id'], $novedadId);
+    if ($itemId) return fila("SELECT id FROM persistent_issues WHERE inventory_item_id = ? AND estado = 'en_curso' ORDER BY id LIMIT 1", [$itemId]);
+    if ($familiaId) return fila("SELECT id FROM persistent_issues WHERE family_id = ? AND estado = 'en_curso' ORDER BY id LIMIT 1", [$familiaId]);
+    return null;
+}
+
+/**
+ * Un reporte permanente de una revisión abre una novedad en curso (o se suma
+ * a la que el ítem o la familia ya tenía) en el momento de reportarlo. Avisa
+ * a coordinación, administrativo e inventario si es nueva.
+ * @return int id de la novedad
+ */
+function abrirNovedadDeReporte(int $reporteId, array $s, array $instructor): int
+{
+    $d = fila('SELECT * FROM inspection_items WHERE id = ?', [$reporteId]);
+    $activa = novedadEnCursoDe($d['inventory_item_id'] !== null ? (int) $d['inventory_item_id'] : null, $d['family_id'] !== null ? (int) $d['family_id'] : null);
+    if ($activa) {
+        $novedadId = (int) $activa['id'];
+        $texto = "Reportada otra vez en la revisión del ambiente {$s['amb_codigo']} por {$instructor['nombre']}: {$d['comentario']}";
+        auditar('novedad', $novedadId, (int) $s['environment_id'], 'reportada_de_nuevo', $texto, (int) $instructor['id'], $d['foto'], ['inspeccionId' => (int) $s['id'], 'reporteId' => $reporteId]);
+    } else {
+        $novedadId = insertar(
+            'INSERT INTO persistent_issues (environment_id, inventory_item_id, family_id, ubicacion, tipo_dano, severidad, descripcion, foto,
+                                            reportada_por, inspection_id, creada_en)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+            [(int) $s['environment_id'], $d['inventory_item_id'] !== null ? (int) $d['inventory_item_id'] : null,
+             $d['family_id'] !== null ? (int) $d['family_id'] : null, $d['ubicacion'], $d['tipo_dano'], $d['severidad'],
+             $d['comentario'], $d['foto'], (int) $instructor['id'], (int) $s['id']]
+        );
+        $texto = "Novedad permanente #$novedadId abierta en la revisión del ambiente {$s['amb_codigo']}: {$d['comentario']}";
+        auditar('novedad', $novedadId, (int) $s['environment_id'], 'creada', $texto, (int) $instructor['id'], $d['foto'],
+            ['inspeccionId' => (int) $s['id'], 'reporteId' => $reporteId, 'severidad' => $d['severidad'], 'tipoDano' => $d['tipo_dano']]);
     }
-    foreach ($r['nuevas'] as $novedadId) avisarNovedad(buscarNovedad($novedadId), 'novedad_permanente', 0);
-    return $r;
+    consulta('UPDATE inspection_items SET persistent_issue_id = ? WHERE id = ?', [$novedadId, $reporteId]);
+    foreach (itemsDeNovedad($d) as $i) historial((int) $i['id'], 'novedad', $texto, (int) $instructor['id'], (int) $s['id'], $novedadId);
+    if (!$activa) avisarNovedad(buscarNovedad($novedadId), 'novedad_permanente', 0);
+    return $novedadId;
+}
+
+/**
+ * Se retiró un reporte permanente antes de entregar el ambiente: si la novedad
+ * nació con ese reporte y ninguna otra revisión la reportó, queda anulada; si
+ * no, solo se deja constancia de que ese reporte se retiró.
+ */
+function retirarReporteDeNovedad(array $r, ?int $usuarioId): void
+{
+    if (!$r['persistent_issue_id']) return;
+    $n = buscarNovedad((int) $r['persistent_issue_id']);
+    $otros = (int) fila('SELECT COUNT(*) n FROM inspection_items WHERE persistent_issue_id = ? AND id <> ?', [(int) $n['id'], (int) $r['id']])['n'];
+    if ($n['estado'] === 'en_curso' && !$otros && (int) $n['inspection_id'] === (int) $r['inspection_id']) {
+        consulta("UPDATE persistent_issues SET estado = 'anulada', anulada_en = NOW() WHERE id = ?", [(int) $n['id']]);
+        auditar('novedad', (int) $n['id'], (int) $n['environment_id'], 'anulada', 'Anulada: se retiró el reporte que la abrió, antes de entregar el ambiente', $usuarioId);
+    } else {
+        auditar('novedad', (int) $n['id'], (int) $n['environment_id'], 'reporte_retirado', "Se retiró el reporte de la revisión #{$r['inspection_id']}; la novedad sigue " . str_replace('_', ' ', $n['estado']), $usuarioId);
+    }
 }
 
 /** Aviso a todos los administrativos (coordinación, administrativo e inventario). */
@@ -125,52 +156,64 @@ function avisarNovedad(array $n, string $tipo, int $excepto): void
     $detalle = $tipo === 'novedad_resuelta'
         ? "{$obj['nombre']}: {$n['resolucion']} · resolvió {$n['resuelta_por_nombre']}"
         : "{$obj['nombre']}" . ($obj['codigo'] ? " ({$obj['codigo']})" : '') . ': ' . str_replace('_', ' ', $n['tipo_dano']) . " ({$n['severidad']}) · "
-          . ($n['reportada_por_nombre'] ? "reportó {$n['reportada_por_nombre']} · " : '') . 'sigue activa hasta que se marque resuelta';
+          . ($n['reportada_por_nombre'] ? "reportó {$n['reportada_por_nombre']} · " : '') . 'en curso hasta que se marque resuelta';
     notificarAdministrativos($tipo, $titulo, $detalle, $n['inspection_id'] !== null ? (int) $n['inspection_id'] : null, (int) $n['id'], $excepto);
+}
+
+/** Foto opcional de evidencia (data URL) → ruta guardada, o null. */
+function fotoOpcional(array $d, string $campo = 'foto'): ?string
+{
+    return !empty($d[$campo]) ? guardarFoto((string) $d[$campo]) : null;
 }
 
 /* ---------------- rutas ---------------- */
 
-/** GET /persistent-issues?estado=activa|resuelta&ambienteId */
+/** GET /persistent-issues?estado=en_curso|resuelta|anulada&ambienteId */
 function rutaNovedades(): never
 {
     exigirRol('administrativo', 'instructor', 'portero');
     $where = [];
     $params = [];
-    if ($v = opcion($_GET, 'estado', ['activa', 'resuelta'], false)) { $where[] = 'n.estado = ?'; $params[] = $v; }
+    if ($v = opcion($_GET, 'estado', ESTADOS_NOVEDAD, false)) { $where[] = 'n.estado = ?'; $params[] = $v; }
     if ($v = entero($_GET, 'ambienteId', false)) { $where[] = 'n.environment_id = ?'; $params[] = $v; }
     $sql = SQL_NOVEDADES . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
-        . " ORDER BY n.estado = 'activa' DESC, FIELD(n.severidad, 'grave', 'moderada', 'leve'), n.creada_en DESC LIMIT 300";
+        . " ORDER BY n.estado = 'en_curso' DESC, FIELD(n.severidad, 'grave', 'moderada', 'leve'), n.creada_en DESC LIMIT 300";
     responder(array_map('novedadPublica', filas($sql, $params)));
 }
 
-/** GET /persistent-issues/{id}: con los ítems afectados y cada revisión que la reportó. */
+/** GET /persistent-issues/{id}: con los ítems afectados, cada revisión que la reportó y sus eventos (auditoría). */
 function rutaNovedad(int $id): never
 {
     exigirRol('administrativo', 'instructor', 'portero');
-    $n = buscarNovedad($id);
+    responder(detalleNovedad(buscarNovedad($id)));
+}
+
+function detalleNovedad(array $n): array
+{
     $reportes = filas(
         'SELECT d.id, d.inspection_id, d.comentario, d.foto, d.severidad, d.reportado_en, u.nombre AS instructor
          FROM inspection_items d JOIN inspections s ON s.id = d.inspection_id JOIN users u ON u.id = s.instructor_id
-         WHERE d.persistent_issue_id = ? ORDER BY d.reportado_en DESC', [$id]);
-    responder(novedadPublica($n) + [
+         WHERE d.persistent_issue_id = ? ORDER BY d.reportado_en DESC', [(int) $n['id']]);
+    return novedadPublica($n) + [
         'items' => array_map(fn($i) => ['id' => (int) $i['id'], 'codigo' => $i['codigo'], 'estado' => $i['estado']], itemsDeNovedad($n)),
         'historial' => array_map(fn($d) => [
             'reporteId' => (int) $d['id'], 'inspeccionId' => (int) $d['inspection_id'], 'instructor' => $d['instructor'],
             'comentario' => $d['comentario'], 'foto' => $d['foto'], 'severidad' => $d['severidad'], 'fecha' => iso($d['reportado_en']),
         ], $reportes),
-    ]);
+        'eventos' => eventosDe('novedad', (int) $n['id']),
+    ];
 }
 
 /**
- * POST /persistent-issues (administrativo): registra una novedad permanente
- * sin revisión de por medio.
- * {ambienteId?, itemId | familiaId | codigo | ubicacion, tipoDano, severidad, descripcion, foto?, estadoItem?}
- * Los ítems pasan a estadoItem (por defecto "danado").
+ * POST /persistent-issues (instructor o administrativo): levanta una novedad
+ * permanente sin revisión de por medio (p. ej. el aire se daña a mitad de la clase).
+ * {ambienteId?, itemId | familiaId | codigo | ubicacion, tipoDano, severidad, descripcion, foto, estadoItem?}
+ * La foto es obligatoria para los instructores. Los ítems pasan a estadoItem
+ * (por defecto "danado"; "baja" solo administrativos).
  */
 function rutaCrearNovedad(): never
 {
-    $u = exigirRol('administrativo');
+    $u = exigirRol('administrativo', 'instructor');
     $d = conAlias(cuerpo(), 'familiaId', 'familia_id');
     $item = $familia = $ubicacion = null;
     if (!empty($d['itemId'])) $item = fila(SQL_ITEMS . ' WHERE i.id = ?', [(int) $d['itemId']]) ?? fallar(404, 'El ítem no existe.', 'NO_ENCONTRADO');
@@ -182,15 +225,17 @@ function rutaCrearNovedad(): never
         $ubicacion = opcion($d, 'ubicacion', array_keys(UBICACIONES), true, 'dónde está la novedad');
     }
     $ambienteId = (int) (($item ?? $familia)['environment_id'] ?? buscarAmbiente(entero($d, 'ambienteId'))['id']);
-    $activa = $item ? fila("SELECT id FROM persistent_issues WHERE inventory_item_id = ? AND estado = 'activa'", [(int) $item['id']])
-        : ($familia ? fila("SELECT id FROM persistent_issues WHERE family_id = ? AND estado = 'activa'", [(int) $familia['id']]) : null);
-    if ($activa) fallar(409, "Ya hay una novedad permanente activa (#{$activa['id']}) para " . ($item['codigo'] ?? $familia['codigo']) . '.', 'DUPLICADO');
+    if ($activa = novedadEnCursoDe($item ? (int) $item['id'] : null, $familia ? (int) $familia['id'] : null)) {
+        fallar(409, "Ya hay una novedad permanente en curso (#{$activa['id']}) para " . ($item['codigo'] ?? $familia['codigo']) . '. Agrégale la información desde su detalle.', 'DUPLICADO');
+    }
     $tipo = opcion($d, 'tipoDano', TIPOS_DANO, true, 'el tipo de daño');
     $severidad = opcion($d, 'severidad', SEVERIDADES, true, 'la severidad');
     $descripcion = texto($d, 'descripcion', 500, true, 'la descripción');
     if (mb_strlen($descripcion) < 10) fallar(422, 'Describe la novedad con al menos 10 caracteres.', 'VALIDACION');
     $estadoItem = opcion($d, 'estadoItem', ESTADOS_NOVEDAD_ITEM, false, 'el estado del ítem') ?? 'danado';
-    $foto = !empty($d['foto']) ? guardarFoto((string) $d['foto']) : null;
+    if ($estadoItem === 'baja' && $u['rol'] !== 'administrativo') fallar(403, 'Solo un administrativo puede dar de baja un ítem.', 'PERMISO');
+    if ($u['rol'] === 'instructor' && empty($d['foto'])) fallar(422, 'Toma una foto de la novedad como evidencia.', 'VALIDACION');
+    $foto = fotoOpcional($d);
 
     db()->begin_transaction();
     $id = insertar(
@@ -198,33 +243,48 @@ function rutaCrearNovedad(): never
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
         [$ambienteId, $item ? (int) $item['id'] : null, $familia ? (int) $familia['id'] : null, $ubicacion, $tipo, $severidad, $descripcion, $foto, (int) $u['id']]
     );
-    $n = buscarNovedad($id);
-    foreach (itemsDeNovedad($n) as $i) {
-        if ($i['estado'] !== 'baja') consulta('UPDATE inventory_items SET estado = ? WHERE id = ?', [$estadoItem, (int) $i['id']]);
-        historial((int) $i['id'], 'novedad', "Novedad permanente #$id registrada por {$u['nombre']}: $descripcion · " . ETIQUETA_ESTADO[$i['estado']] . ' → ' . ETIQUETA_ESTADO[$estadoItem], (int) $u['id'], null, $id);
+    $cambios = [];
+    foreach (itemsDeNovedad(buscarNovedad($id)) as $i) {
+        if ($i['estado'] !== 'baja' && $i['estado'] !== $estadoItem) {
+            consulta('UPDATE inventory_items SET estado = ? WHERE id = ?', [$estadoItem, (int) $i['id']]);
+            $cambios[] = "{$i['codigo']}: " . ETIQUETA_ESTADO[$i['estado']] . ' → ' . ETIQUETA_ESTADO[$estadoItem];
+        }
+        historial((int) $i['id'], 'novedad', "Novedad permanente #$id levantada por {$u['nombre']}: $descripcion", (int) $u['id'], null, $id);
     }
-    avisarNovedad($n, 'novedad_permanente', (int) $u['id']);
+    auditar('novedad', $id, $ambienteId, 'creada', "Novedad permanente levantada por {$u['nombre']}: $descripcion" . ($cambios ? ' · ' . implode(' · ', $cambios) : ''),
+        (int) $u['id'], $foto, ['severidad' => $severidad, 'tipoDano' => $tipo, 'estadoItem' => $estadoItem]);
+    avisarNovedad(buscarNovedad($id), 'novedad_permanente', (int) $u['id']);
     db()->commit();
-    responder(novedadPublica(buscarNovedad($id)), 201);
+    responder(detalleNovedad(buscarNovedad($id)), 201);
 }
 
 /**
- * PATCH /persistent-issues/{id} {estadoItem, severidad?, descripcion?} (administrativo)
- * Mientras siga activa: deja el ítem (o los componentes de la familia)
- * dañado, en reparación, fuera de servicio o de baja (inactivo).
+ * PATCH /persistent-issues/{id} (instructor o administrativo), mientras siga en curso:
+ * {estadoItem?, severidad?, descripcion?, nota?, foto?}
+ *   · estadoItem deja el ítem (o los componentes de la familia) dañado, en
+ *     reparación, fuera de servicio o de baja (inactivo; solo administrativos)
+ *     hasta su reparación;
+ *   · nota y foto agregan seguimiento y evidencia.
+ * Cada modificación queda en el historial con lo que cambió.
  */
 function rutaEditarNovedad(int $id): never
 {
-    $u = exigirRol('administrativo');
+    $u = exigirRol('administrativo', 'instructor');
     $n = buscarNovedad($id);
-    if ($n['estado'] !== 'activa') fallar(409, 'La novedad ya está resuelta.', 'ESTADO');
+    if ($n['estado'] !== 'en_curso') fallar(409, 'La novedad ya no está en curso.', 'ESTADO');
     $d = cuerpo();
     $estadoItem = opcion($d, 'estadoItem', ESTADOS_NOVEDAD_ITEM, false, 'el estado del ítem');
+    if ($estadoItem === 'baja' && $u['rol'] !== 'administrativo') fallar(403, 'Solo un administrativo puede dar de baja un ítem.', 'PERMISO');
+    if ($estadoItem && !$n['inventory_item_id'] && !$n['family_id']) fallar(422, 'Esta novedad es del salón: no tiene ítems que cambiar de estado.', 'VALIDACION');
     $severidad = opcion($d, 'severidad', SEVERIDADES, false, 'la severidad') ?? $n['severidad'];
     $descripcion = texto($d, 'descripcion', 500, false, 'la descripción') ?? $n['descripcion'];
-    if (!$estadoItem && $severidad === $n['severidad'] && $descripcion === $n['descripcion']) fallar(422, 'No hay cambios.', 'VALIDACION');
-    if ($estadoItem && !$n['inventory_item_id'] && !$n['family_id']) fallar(422, 'Esta novedad es del salón: no tiene ítems que cambiar de estado.', 'VALIDACION');
+    $nota = texto($d, 'nota', 500, false, 'la nota');
+    $foto = fotoOpcional($d);
 
+    $cambios = [];
+    $datos = [];
+    if ($severidad !== $n['severidad']) { $cambios[] = "severidad: {$n['severidad']} → $severidad"; $datos['severidad'] = [$n['severidad'], $severidad]; }
+    if ($descripcion !== $n['descripcion']) { $cambios[] = 'descripción actualizada'; $datos['descripcion'] = [$n['descripcion'], $descripcion]; }
     db()->begin_transaction();
     consulta('UPDATE persistent_issues SET severidad = ?, descripcion = ? WHERE id = ?', [$severidad, $descripcion, $id]);
     if ($estadoItem) {
@@ -232,66 +292,81 @@ function rutaEditarNovedad(int $id): never
             if ($i['estado'] === $estadoItem) continue;
             consulta('UPDATE inventory_items SET estado = ? WHERE id = ?', [$estadoItem, (int) $i['id']]);
             historial((int) $i['id'], 'estado', 'Estado: ' . ETIQUETA_ESTADO[$i['estado']] . ' → ' . ETIQUETA_ESTADO[$estadoItem] . " (novedad permanente #$id)", (int) $u['id'], null, $id);
+            $cambios[] = "{$i['codigo']}: " . ETIQUETA_ESTADO[$i['estado']] . ' → ' . ETIQUETA_ESTADO[$estadoItem];
+            $datos['items'][$i['codigo']] = [$i['estado'], $estadoItem];
         }
     }
+    if (!$cambios && !$nota && !$foto) { db()->rollback(); fallar(422, 'No hay cambios: indica un estado, una nota o una foto.', 'VALIDACION'); }
+    auditar('novedad', $id, (int) $n['environment_id'], 'modificada',
+        implode(' · ', array_filter([$cambios ? implode(' · ', $cambios) : null, $nota ? "Nota: $nota" : null, $foto && !$nota ? 'Nueva evidencia' : null])),
+        (int) $u['id'], $foto, $datos ?: null);
     db()->commit();
-    responder(novedadPublica(buscarNovedad($id)));
+    responder(detalleNovedad(buscarNovedad($id)));
 }
 
 /**
- * POST /persistent-issues/{id}/resolve {resolucion, estadoItem?} (administrativo)
+ * POST /persistent-issues/{id}/resolve {resolucion, estadoItem?, foto?} (instructor o administrativo)
  * La marca resuelta; los ítems vuelven a estadoItem (por defecto "operativo";
- * los que están de baja no cambian). Avisa a los demás administrativos y a
- * quien la reportó.
+ * los que están de baja no cambian). Avisa a coordinación, administrativo e
+ * inventario y a quien la reportó.
  */
 function rutaResolverNovedad(int $id): never
 {
-    $u = exigirRol('administrativo');
+    $u = exigirRol('administrativo', 'instructor');
     $n = buscarNovedad($id);
-    if ($n['estado'] !== 'activa') fallar(409, 'La novedad ya estaba resuelta.', 'ESTADO');
+    if ($n['estado'] !== 'en_curso') fallar(409, $n['estado'] === 'resuelta' ? 'La novedad ya estaba resuelta.' : 'La novedad fue anulada.', 'ESTADO');
     $d = cuerpo();
     $resolucion = texto($d, 'resolucion', 500, true, 'qué se hizo para resolverla');
     if (mb_strlen($resolucion) < 5) fallar(422, 'Describe la solución con al menos 5 caracteres.', 'VALIDACION');
-    $estadoItem = opcion($d, 'estadoItem', ESTADOS_ITEM, false, 'el estado del ítem') ?? 'operativo';
+    $estadoItem = opcion($d, 'estadoItem', ['operativo', 'en_reparacion', 'baja'], false, 'el estado del ítem') ?? 'operativo';
+    if ($estadoItem === 'baja' && $u['rol'] !== 'administrativo') fallar(403, 'Solo un administrativo puede dar de baja un ítem.', 'PERMISO');
+    $foto = fotoOpcional($d);
 
     db()->begin_transaction();
-    consulta("UPDATE persistent_issues SET estado = 'resuelta', resuelta_por = ?, resuelta_en = NOW(), resolucion = ? WHERE id = ? AND estado = 'activa'",
-        [(int) $u['id'], $resolucion, $id]);
+    consulta("UPDATE persistent_issues SET estado = 'resuelta', resuelta_por = ?, resuelta_en = NOW(), resolucion = ?, foto_resolucion = ? WHERE id = ? AND estado = 'en_curso'",
+        [(int) $u['id'], $resolucion, $foto, $id]);
+    $cambios = [];
     foreach (itemsDeNovedad($n) as $i) {
-        // Si el ítem tiene otra novedad activa (p. ej. la de su familia), sigue como está.
-        $otra = fila("SELECT id FROM persistent_issues WHERE estado = 'activa' AND id <> ? AND (inventory_item_id = ? OR family_id = (SELECT family_id FROM inventory_items WHERE id = ?))",
+        // Si el ítem tiene otra novedad en curso (p. ej. la de su familia), sigue como está.
+        $otra = fila("SELECT id FROM persistent_issues WHERE estado = 'en_curso' AND id <> ? AND (inventory_item_id = ? OR family_id = (SELECT family_id FROM inventory_items WHERE id = ?))",
             [$id, (int) $i['id'], (int) $i['id']]);
         $nuevo = $i['estado'] === 'baja' || $otra ? $i['estado'] : $estadoItem;
-        if ($nuevo !== $i['estado']) consulta('UPDATE inventory_items SET estado = ? WHERE id = ?', [$nuevo, (int) $i['id']]);
-        historial((int) $i['id'], 'novedad_resuelta', "Novedad permanente #$id resuelta: $resolucion"
+        if ($nuevo !== $i['estado']) {
+            consulta('UPDATE inventory_items SET estado = ? WHERE id = ?', [$nuevo, (int) $i['id']]);
+            $cambios[] = "{$i['codigo']} vuelve a " . ETIQUETA_ESTADO[$nuevo];
+        }
+        historial((int) $i['id'], 'novedad_resuelta', "Novedad permanente #$id resuelta por {$u['nombre']}: $resolucion"
             . ($nuevo !== $i['estado'] ? ' · ' . ETIQUETA_ESTADO[$i['estado']] . ' → ' . ETIQUETA_ESTADO[$nuevo] : ($otra ? " · sigue con la novedad #{$otra['id']}" : '')),
             (int) $u['id'], null, $id);
     }
+    auditar('novedad', $id, (int) $n['environment_id'], 'resuelta', "Resuelta por {$u['nombre']}: $resolucion" . ($cambios ? ' · ' . implode(' · ', $cambios) : ''),
+        (int) $u['id'], $foto, ['estadoItem' => $estadoItem]);
     $n = buscarNovedad($id);
     avisarNovedad($n, 'novedad_resuelta', (int) $u['id']);
-    $reporto = fila("SELECT id, rol FROM users WHERE id = ? AND activo = 1", [(int) $n['reportada_por']]);
-    if ($reporto && $reporto['rol'] !== 'administrativo') {
+    $reporto = fila('SELECT id, rol FROM users WHERE id = ? AND activo = 1', [(int) $n['reportada_por']]);
+    if ($reporto && $reporto['rol'] !== 'administrativo' && (int) $reporto['id'] !== (int) $u['id']) {
         notificar((int) $reporto['id'], 'novedad_resuelta', "Se resolvió la novedad que reportaste en el ambiente {$n['ambiente_codigo']}",
             objetivoNovedad($n)['nombre'] . ": $resolucion", $n['inspection_id'] !== null ? (int) $n['inspection_id'] : null, $id);
     }
     db()->commit();
-    responder(novedadPublica($n));
+    responder(detalleNovedad($n));
 }
 
 /**
- * GET /issues?ambienteId&itemId&naturaleza&estado&desde&hasta (administrativo)
+ * GET /issues?ambienteId&itemId&naturaleza&estado&desde&hasta (instructor o administrativo)
  * Historial completo de novedades: todo lo reportado en las revisiones más
- * las novedades permanentes registradas por un administrativo.
- * estado: en_revision (la entrega no se ha recibido) | activa | resuelta
- * (permanentes) | cerrada (temporales y de limpieza, al recibir el ambiente).
+ * las novedades permanentes levantadas desde el módulo y las anuladas.
+ * estado: en_revision (la entrega no se ha recibido, solo temporales y
+ * limpieza) | en_curso | resuelta | anulada (permanentes) | cerrada
+ * (temporales y de limpieza, al recibir el ambiente).
  */
 function rutaHistorialNovedades(): never
 {
-    exigirRol('administrativo');
+    exigirRol('administrativo', 'instructor');
     $ambienteId = entero($_GET, 'ambienteId', false);
     $itemId = entero($_GET, 'itemId', false);
     $naturaleza = opcion($_GET, 'naturaleza', array_keys(NATURALEZAS), false);
-    $estado = opcion($_GET, 'estado', ['en_revision', 'activa', 'resuelta', 'cerrada'], false);
+    $estado = opcion($_GET, 'estado', ['en_revision', 'en_curso', 'resuelta', 'anulada', 'cerrada'], false);
     foreach (['desde', 'hasta'] as $campo) {
         if (!empty($_GET[$campo]) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET[$campo])) fallar(422, "La fecha '$campo' no es válida.", 'VALIDACION');
     }
@@ -312,11 +387,12 @@ function rutaHistorialNovedades(): never
          LEFT JOIN users ur ON ur.id = n.resuelta_por
          WHERE s.estado <> 'cancelada'"
     );
-    $manuales = filas(SQL_NOVEDADES . ' WHERE n.inspection_id IS NULL');
+    // Levantadas desde el módulo (sin revisión) y anuladas (su reporte se retiró).
+    $sueltas = filas(SQL_NOVEDADES . " WHERE n.inspection_id IS NULL OR n.estado = 'anulada'");
 
     $lista = [];
     foreach ($reportes as $r) {
-        $est = $r['insp_estado'] !== 'recibida' ? 'en_revision' : ($r['naturaleza'] === 'permanente' ? ($r['nov_estado'] ?? 'activa') : 'cerrada');
+        $est = $r['naturaleza'] === 'permanente' ? ($r['nov_estado'] ?? 'en_curso') : ($r['insp_estado'] !== 'recibida' ? 'en_revision' : 'cerrada');
         $lista[] = [
             'origen' => 'revision', 'id' => (int) $r['id'], 'inspeccionId' => (int) $r['inspection_id'],
             'novedadId' => $r['persistent_issue_id'] !== null ? (int) $r['persistent_issue_id'] : null,
@@ -330,15 +406,16 @@ function rutaHistorialNovedades(): never
             '_items' => array_filter([(int) $r['inventory_item_id']]), '_familia' => (int) $r['family_id'],
         ];
     }
-    foreach ($manuales as $n) {
+    foreach ($sueltas as $n) {
         $lista[] = [
-            'origen' => 'administrativo', 'id' => (int) $n['id'], 'inspeccionId' => null, 'novedadId' => (int) $n['id'],
+            'origen' => $n['inspection_id'] ? 'revision' : 'modulo', 'id' => (int) $n['id'],
+            'inspeccionId' => $n['inspection_id'] !== null ? (int) $n['inspection_id'] : null, 'novedadId' => (int) $n['id'],
             'ambiente' => ['id' => (int) $n['environment_id'], 'codigo' => $n['ambiente_codigo'], 'nombre' => $n['ambiente_nombre']],
             'objetivo' => objetivoNovedad($n), 'itemEstado' => $n['item_estado'],
             'naturaleza' => 'permanente', 'tipoDano' => $n['tipo_dano'], 'severidad' => $n['severidad'],
             'comentario' => $n['descripcion'], 'foto' => $n['foto'], 'usuario' => $n['reportada_por_nombre'],
             'fecha' => iso($n['creada_en']), 'estado' => $n['estado'],
-            'resueltaEn' => iso($n['resuelta_en']), 'resueltaPor' => $n['resuelta_por_nombre'], 'resolucion' => $n['resolucion'],
+            'resueltaEn' => iso($n['resuelta_en'] ?? $n['anulada_en']), 'resueltaPor' => $n['resuelta_por_nombre'], 'resolucion' => $n['resolucion'],
             '_items' => array_filter([(int) $n['inventory_item_id']]), '_familia' => (int) $n['family_id'],
         ];
     }

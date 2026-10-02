@@ -8,8 +8,10 @@ de formación, más el módulo de **asistencia a clases** que ya existía.
   especialidad) e inventario (categorías, familias de ítems, QR propios),
   revisión del salón por el instructor (checklist, ítems OK y novedades con
   foto), QR de entrega que genera el portero y el instructor escanea para
-  recibirlo, novedades permanentes que siguen activas hasta que se resuelven,
-  avisos a coordinación, administrativo e inventario, historial y reportes.
+  recibirlo, novedades permanentes que instructores y administrativos levantan
+  y resuelven (en curso hasta su resolución), asignación de instructores por
+  jornada, avisos a coordinación, administrativo e inventario, historial de
+  auditoría y reportes.
 - **Asistencia a clases** (QR de clase, semáforo de faltas, P004): sigue
   con datos simulados en el navegador (`js/api/mock`), como antes.
 
@@ -25,7 +27,8 @@ de formación, más el módulo de **asistencia a clases** que ya existía.
 
 3. Crea la base de prueba (borra y recrea `sena_ambientes`). Además de los
    datos de `seed.sql` (especialidades, ambientes 107 a 111, categorías,
-   familias PC y novedades permanentes de ejemplo), carga
+   familias PC, novedades permanentes con su historial y asignaciones de
+   instructores por jornada), carga
    `db/inventario-prueba.xlsx` con la misma carga masiva de la app: 196 filas
    (monitores, teclados y mouse de cada familia PC, sillas, mesas, la cocina
    del 110 y el kit audiovisual del 111) que crean 4 familias nuevas.
@@ -72,14 +75,17 @@ Ambientes con su especialidad y capacidad de aprendices: 107 Sistemas (30),
 108 Aula convencional (28), 109 Laboratorio (24), 110 Cocina (20) y 111
 Audiovisual (18); hay además la especialidad Axo sin ambiente. Dos
 inspecciones de días anteriores y tres novedades permanentes: el aire del 107
-(activa, fuera de servicio), la estación de soldadura del 109 (activa) y el
-ventilador del 108 (resuelta).
+(en curso, fuera de servicio), la estación de soldadura del 109 (en curso) y
+el ventilador del 108 (resuelta). Asignaciones: 107 mañana Laura (permanente;
+mañana la reemplaza Diana ese día), 107 tarde Andrés (periodo), 108 noche
+Diana (periodo), 109 mañana Diana (permanente), 110 tarde Andrés (reasignada
+desde Laura) y un turno anulado en el 111.
 
 ## Flujo de la demostración
 
 1. **Instructor** (1010101010) → *Inspecciones* → elige el ambiente 107 →
    **Iniciar revisión** (se registra la hora). Arriba aparecen las
-   **novedades permanentes activas** del ambiente (el aire acondicionado): no
+   **novedades permanentes en curso** del ambiente (el aire acondicionado): no
    hace falta reportarlas otra vez.
    - **Todo está bien** es un atajo: marca en la pantalla el checklist y todos
      los ítems revisables como OK. **No envía nada**, no termina la revisión
@@ -90,8 +96,10 @@ ventilador del 108 (resuelta).
      **toda la familia** (PC = CPU + monitor + teclado + mouse) o un
      componente. Se toma la **foto de evidencia** y se indica si es
      **permanente** (daño que sigue hasta que lo arreglen), **temporal** o de
-     **limpieza**, el tipo, la severidad y un comentario. Solo las permanentes
-     dejan el ítem *Dañado* en el inventario;
+     **limpieza**, el tipo, la severidad y un comentario. La permanente queda
+     **en curso** desde ese momento (visible en *Novedades*, con aviso a
+     coordinación, administrativo e inventario) y deja el ítem *Dañado*; si
+     se quita el reporte antes de entregar, queda anulada;
    - si el daño no es de un ítem (pared, techo, piso, puerta…), **Daño del
      salón**: se elige dónde está, con foto, y queda asociado al ambiente.
 2. **Terminar revisión** (con el checklist completo): envía el checklist y los
@@ -104,16 +112,27 @@ ventilador del 108 (resuelta).
 5. Queda guardado quién revisó y recibió (`instructor_id`), quién entregó
    (`portero_id`), las horas de cada paso, el **estado del salón**
    (`estado_salon`: ítems por estado, marcados OK, novedades por naturaleza)
-   y los reportes con foto. Cada novedad permanente abre una **novedad
-   permanente** (`persistent_issues`) o se suma a la que ya estaba activa.
-6. **Coordinación, administrativo e inventario** (2020202021, 2020202020 y
-   2020202022) reciben el aviso. En **Novedades** ven las activas, dejan el
-   ítem o la familia **fuera de servicio** o **de baja (inactivo)** y la
-   **marcan resuelta** (el ítem vuelve a Operativo y se avisa a quien la
-   reportó). La pestaña **Historial** tiene todas las novedades: equipo o
-   ambiente, fecha, usuario, evidencia, naturaleza, estado y fecha de
-   resolución (con CSV).
-7. El administrativo consulta el historial en *Inspecciones* y genera
+   y los reportes con foto.
+6. **Novedades** (instructores y administrativos): las permanentes en curso,
+   con su **historial de eventos** (creada, reportada de nuevo, modificada,
+   resuelta, anulada) con fecha, usuario y foto. Un instructor también puede
+   **levantar** una novedad grave sin revisión (con foto obligatoria), agregar
+   **seguimiento** (nota, foto, severidad, dejar el ítem **fuera de
+   servicio** o en reparación hasta su arreglo) y **marcarla resuelta** (con
+   foto de la reparación). Dar de baja (inactivo) es solo de administrativos.
+   **Coordinación, administrativo e inventario** (2020202021, 2020202020 y
+   2020202022) reciben los avisos. La pestaña **Historial** tiene todas las
+   novedades: equipo o ambiente, fecha, usuario, evidencia, naturaleza,
+   estado y fecha de resolución (con CSV).
+7. **Asignaciones** (administrativo): tablero semanal de quién está en cada
+   ambiente en cada jornada (mañana, tarde, noche). Se asigna por **un día**,
+   por **un periodo** o **permanente** (vale la más específica: día > periodo
+   > permanente), y se **reasigna** o **anula** un turno desde una fecha. El
+   instructor recibe el aviso y ve el tablero y sus turnos.
+8. **Auditoría** (administrativo): todos los eventos de novedades y
+   asignaciones (reportes, resoluciones, reasignaciones, anulaciones) con
+   fecha, usuario, detalle y evidencia, con filtros y CSV.
+9. El administrativo consulta el historial en *Inspecciones* y genera
    **Reportes** (CSV o impresión).
 
 Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
@@ -182,7 +201,9 @@ pulsan Enter). El código puede ser el consecutivo (`AMB107-012`), uno propio
 | Inicio, Mi perfil, Ambientes, Ajustes | ✓ | ✓ | ✓ (CRUD de ambientes y especialidades) | ✓ |
 | Inspecciones | Revisar, reportar novedades (ítem, familia o salón) y escanear el QR | Generar y mostrar el QR de entrega | Historial | — |
 | Inventario | Consulta y QR | Consulta y QR | CRUD, categorías y familias | — |
-| Novedades | — | — | Activas, resolver, fuera de servicio, historial | — |
+| Novedades | Levantar, seguimiento, resolver, historial | — | Lo mismo + dar de baja | — |
+| Asignaciones | Tablero y mis turnos | — | Asignar, reasignar y anular por jornada | — |
+| Auditoría | — | — | Eventos de novedades y asignaciones | — |
 | Reportes | — | — | ✓ | — |
 | Asistencia (datos simulados) | Clases, historial | — | Semáforo, P004, historial | Registrar asistencia |
 
@@ -192,7 +213,8 @@ pulsan Enter). El código puede ser el consecutivo (`AMB107-012`), uno propio
 index.html              Página única (enrutador por hash)
 API.md                  Contratos: asistencia (simulada) y entrega de ambientes (real)
 api/                    Backend PHP: index.php (rutas), config.php, lib/, modulos/ (catalogos, ambientes, inventario,
-                        familias, carga con PhpSpreadsheet, inspecciones, novedades, notificaciones, reportes)
+                        familias, carga con PhpSpreadsheet, inspecciones, novedades, asignaciones, auditoria,
+                        notificaciones, reportes)
 api/vendor/             PhpSpreadsheet (composer install; no va en git)
 composer.json           Dependencias PHP
 db/                     schema.sql, seed.sql, inventario-prueba.xlsx e instalar.php (datos de prueba)
@@ -221,7 +243,7 @@ tests/                  Pruebas (npm test y npm run test:api)
 
 ```
 npm test           # reglas, servidor simulado y códigos de barras
-npm run test:api   # flujo de entrega, carga masiva, escáner, pegatinas, familias, especialidades y novedades permanentes contra la API real
+npm run test:api   # flujo de entrega, carga masiva, escáner, pegatinas, familias, especialidades, novedades permanentes y asignaciones contra la API real
 ```
 
 `test:api` deja datos nuevos en la base; vuelve a correr `db\instalar.php`
