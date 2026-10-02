@@ -2,10 +2,13 @@
 //  · Tablero semanal: quién está asignado a cada ambiente en cada jornada
 //    (mañana, tarde, noche) cada día. Vale la asignación más específica:
 //    un día > un periodo > permanente.
-//  · Administrativo: asignar (por un día, por un periodo o permanente),
-//    reasignar o anular un turno desde una fecha; cada cambio queda en el
-//    historial de la asignación y en Auditoría, y se avisa al instructor.
-//  · Instructor: ve el tablero y sus turnos.
+//  · Administrativo: ve todas y las cambia: asignar (por un día, por un
+//    periodo o permanente), reasignar o anular un turno desde una fecha; cada
+//    cambio queda en el historial de la asignación y en Auditoría, y se avisa
+//    al instructor.
+//  · Portero: ve todas (tablero y detalle con su historial) sin cambiar nada.
+//  · Instructor: solo ve dónde está asignado él (el servidor no le envía las
+//    asignaciones de los demás).
 import { h, anexar, icono, vaciar, errorCampo } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { toast, abrirModal } from '../ui/avisos.js';
@@ -25,6 +28,8 @@ const SIGLA_TIPO = { dia: ['1 día', 'azul'], periodo: ['Periodo', 'out'], perma
 
 export async function render(raiz, { params }) {
   const admin = estado.usuario.rol === 'administrativo';
+  const instructor = estado.usuario.rol === 'instructor';
+  const veDetalle = !instructor; // administrativo y portero abren el detalle (el portero, sin acciones)
   const hoy = fechaIso();
   let desde = lunes(params.get('desde') || hoy);
   let ambienteId = params.get('ambiente') || '';
@@ -33,16 +38,17 @@ export async function render(raiz, { params }) {
 
   const rango = h('strong', { class: 'asig-rango', 'aria-live': 'polite' });
   const cuerpo = h('div', { class: 'asig-cuerpo' }, cargando());
-  const misTurnos = !admin && h('section', { class: 'card', 'data-anim': '' }, cargando());
+  const misTurnos = instructor && h('section', { class: 'card', 'data-anim': '' }, cargando());
   const filtroAmb = h('select', { 'aria-label': 'Ambiente', onchange: (e) => { ambienteId = e.target.value; cargar(); } },
     h('option', { value: '' }, 'Todos los ambientes'), ambientes.filter((a) => a.activo).map((a) => h('option', { value: a.id, selected: String(a.id) === ambienteId }, `${a.codigo} · ${a.nombre}`)));
   const mover = (n) => { desde = n === 0 ? lunes(hoy) : sumarDias(desde, n * DIAS); cargar(); };
 
   anexar(raiz,
     cabecera({
-      eyebrow: 'Ambientes · Jornadas', titulo: admin ? 'Asignación de instructores' : 'Asignaciones por jornada',
+      eyebrow: 'Ambientes · Jornadas', titulo: admin ? 'Asignación de instructores' : instructor ? 'Mis asignaciones' : 'Asignaciones por jornada',
       subtitulo: admin ? 'Asigna instructores a cada ambiente por jornada: por un día, por un periodo o de forma permanente. Reasigna o anula turnos; todo queda en el historial.'
-        : 'Quién está asignado a cada ambiente en cada jornada.',
+        : instructor ? 'Los ambientes y jornadas donde estás asignado. Si algo no coincide, habla con coordinación.'
+          : 'Quién está asignado a cada ambiente en cada jornada. Solo coordinación puede cambiar las asignaciones.',
       acciones: admin ? [
         h('a', { class: 'btn btn-outline', href: '#/auditoria?entidad=asignacion' }, icono('historial'), 'Historial'),
         h('button', { class: 'btn btn-primary', type: 'button', onclick: () => formulario({}) }, icono('mas'), 'Nueva asignación')] : [],
@@ -54,7 +60,7 @@ export async function render(raiz, { params }) {
         h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: () => mover(0) }, 'Esta semana'),
         h('button', { class: 'btn btn-outline btn-sm btn-icono', type: 'button', 'aria-label': 'Semana siguiente', onclick: () => mover(1) }, icono('flecha')),
         rango),
-      filtroAmb),
+      instructor ? null : filtroAmb),
     cuerpo,
     h('p', { class: 'text-muted asig-leyenda' }, 'Si un ambiente tiene varias asignaciones en la misma jornada, vale la más específica: un día > periodo > permanente.'));
 
@@ -68,20 +74,24 @@ export async function render(raiz, { params }) {
   }
 
   function pintar() {
-    if (!tablero.ambientes.length) { vaciar(cuerpo, vacio('No hay ambientes activos', '', 'ambiente')); return; }
+    if (!tablero.ambientes.length) {
+      vaciar(cuerpo, instructor ? vacio('No tienes turnos esta semana', 'Usa las flechas para ver otras semanas.', 'calendario') : vacio('No hay ambientes activos', '', 'ambiente'));
+      return;
+    }
     const celda = (amb, dia, jornada) => {
       const a = amb.celdas[dia][jornada];
       const pasado = dia < hoy;
-      const etiqueta = `${amb.codigo}, ${ETIQUETA_JORNADA[jornada].toLowerCase()}, ${fmtDia.format(aFecha(dia))}: ${a ? a.instructor : 'sin asignar'}`;
+      // El instructor solo recibe sus turnos: una celda vacía es "no te toca", no "sin asignar".
+      const etiqueta = `${amb.codigo}, ${ETIQUETA_JORNADA[jornada].toLowerCase()}, ${fmtDia.format(aFecha(dia))}: ${a ? a.instructor : instructor ? 'no tienes turno' : 'sin asignar'}`;
       if (!a) {
         return h('td', { class: `asig-celda asig-celda--vacia${dia === hoy ? ' asig-hoy' : ''}` },
           admin && !pasado ? h('button', { class: 'asig-boton', type: 'button', 'aria-label': `Asignar: ${etiqueta}`, onclick: () => formulario({ ambienteId: amb.id, jornada, fechaInicio: dia }) }, icono('mas'))
-            : h('span', { class: 'text-muted', 'aria-label': etiqueta }, '—'));
+            : h('span', { class: 'text-muted', 'aria-label': etiqueta }, instructor ? '' : '—'));
       }
       const [sigla, clase] = SIGLA_TIPO[a.tipo];
       const contenido = [h('strong', {}, a.instructor.split(' ').slice(0, 2).join(' ')), h('span', { class: `status-chip ${clase}` }, sigla)];
       return h('td', { class: `asig-celda asig-celda--${a.tipo}${dia === hoy ? ' asig-hoy' : ''}${a.instructorId === estado.usuario.id ? ' asig-celda--mia' : ''}` },
-        admin ? h('button', { class: 'asig-boton', type: 'button', 'aria-label': `Ver asignación: ${etiqueta}`, onclick: () => detalle(a.id) }, contenido)
+        veDetalle ? h('button', { class: 'asig-boton', type: 'button', 'aria-label': `Ver asignación: ${etiqueta}`, onclick: () => detalle(a.id) }, contenido)
           : h('span', { class: 'asig-boton', 'aria-label': etiqueta }, contenido));
     };
     vaciar(cuerpo, h('section', { class: 'card asig-tablero' }, h('div', { class: 'table-wrap' }, h('table', { class: 'tabla-asignaciones' },
@@ -125,7 +135,8 @@ export async function render(raiz, { params }) {
           h('dt', {}, 'Asignó'), h('dd', {}, `${a.creadaPor || '—'}`)),
         h('h3', { class: 'bloque-titulo' }, 'Historial'),
         lineaDeTiempo(a.eventos)),
-      acciones: vigente ? [
+      // Solo el administrativo cambia asignaciones; el portero solo consulta.
+      acciones: vigente && admin ? [
         ({ cerrar }) => h('button', { class: 'btn btn-outline', type: 'button', onclick: () => { cerrar(); anular(a); } }, icono('prohibido'), 'Anular turno'),
         ({ cerrar }) => h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { cerrar(); reasignar(a); } }, icono('usuarios'), 'Reasignar'),
       ] : [],

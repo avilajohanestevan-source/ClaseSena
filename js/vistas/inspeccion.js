@@ -1,7 +1,7 @@
 // Revisión del ambiente (instructor), en una sola columna pensada para el celular.
 // El instructor la hace al entrar al salón, antes de recibirlo:
-//  1. Cabecera con el ambiente, la hora de inicio y los instructores
-//     asignados hoy en cada jornada.
+//  1. Cabecera con el ambiente, la hora de inicio y las jornadas en que el
+//     instructor está asignado hoy a este ambiente (solo ve las suyas).
 //  2. "Todo está bien": atajo que marca en la pantalla el checklist y todos los
 //     ítems del ambiente como OK. No envía nada, no termina la revisión ni
 //     escanea ningún QR: el instructor revisa y luego pulsa "Terminar revisión".
@@ -85,15 +85,15 @@ export async function render(raiz, { params, alSalir }) {
     h('p', { class: 'insp-cabecera-ayuda' }, icono('qr'),
       h('span', {}, 'Si todo está en orden, "Todo está bien" marca el checklist y los ítems como OK; revisa y pulsa "Terminar revisión". Si algo tiene una novedad, escanea su pegatina (o la de su familia) y toma una foto.')));
 
-  /** Aviso de los instructores asignados hoy al ambiente en cada jornada (resalta al instructor actual). */
+  /** Aviso de asignación: en qué jornadas está asignado hoy el instructor a este ambiente (no ve las de los demás). */
   function avisoAsignados() {
-    const asignados = d.asignadosHoy || [];
-    const yo = asignados.filter((j) => j.instructorId === estado.usuario.id);
-    return h('div', { class: `insp-asignados${yo.length ? '' : ' insp-asignados--otro'}`, role: 'note' },
-      h('span', { class: 'insp-asignados-titulo' }, icono('usuarios'), 'Instructores asignados hoy'),
-      h('ul', {}, asignados.map((j) => h('li', { class: j.instructorId === estado.usuario.id ? 'insp-asignado--yo' : '' },
-        h('strong', {}, ETIQUETA_JORNADA[j.jornada]), ' ', j.instructor ? `${j.instructor}${j.instructorId === estado.usuario.id ? ' (tú)' : ''}` : h('span', { class: 'text-muted' }, 'sin asignar')))),
-      !yo.length && h('p', {}, 'No apareces asignado hoy a este ambiente. Puedes revisarlo igual; si es un reemplazo, avisa a coordinación.'));
+    const mias = (d.asignadosHoy || []).filter((j) => j.instructorId === estado.usuario.id);
+    const jornadas = mias.map((j) => ETIQUETA_JORNADA[j.jornada].toLowerCase());
+    return h('div', { class: `insp-asignados${mias.length ? '' : ' insp-asignados--otro'}`, role: 'note' },
+      h('span', { class: 'insp-asignados-titulo' }, icono('usuarios'), mias.length ? 'Estás asignado a este ambiente' : 'No apareces asignado hoy a este ambiente'),
+      h('p', {}, mias.length
+        ? `Hoy en la jornada de la ${jornadas.join(' y de la ')}.`
+        : 'Puedes revisarlo igual; si es un reemplazo, avisa a coordinación.'));
   }
 
   /* --- atajo "Todo está bien" (solo en la pantalla) --- */

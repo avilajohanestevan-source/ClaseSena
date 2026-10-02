@@ -64,7 +64,8 @@ function rutaAmbientes(): never
     $sql = SQL_AMBIENTES . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY e.codigo';
     // Quién está asignado hoy en cada jornada (modulos/asignaciones.php).
     $efectivas = asignacionesEfectivas(hoy(), hoy());
-    responder(array_map(fn($e) => ambientePublico($e) + ['asignadosHoy' => asignadosHoy((int) $e['id'], $efectivas)], filas($sql, $params)));
+    // El instructor solo ve sus propias jornadas (modulos/asignaciones.php).
+    responder(array_map(fn($e) => ambientePublico($e) + ['asignadosHoy' => asignadosHoyPara($u, (int) $e['id'], $efectivas)], filas($sql, $params)));
 }
 
 function buscarAmbiente(int $id): array
@@ -76,8 +77,8 @@ function buscarAmbiente(int $id): array
 
 function rutaAmbiente(int $id): never
 {
-    usuario();
-    responder(ambientePublico(buscarAmbiente($id)) + ['asignadosHoy' => asignadosHoy($id, asignacionesEfectivas(hoy(), hoy(), $id))]);
+    $u = usuario();
+    responder(ambientePublico(buscarAmbiente($id)) + ['asignadosHoy' => asignadosHoyPara($u, $id, asignacionesEfectivas(hoy(), hoy(), $id))]);
 }
 
 /**

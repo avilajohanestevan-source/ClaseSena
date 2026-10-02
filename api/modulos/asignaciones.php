@@ -14,7 +14,25 @@
  * Reasignar o anular desde una fecha recorta la asignación (fecha_fin = día
  * anterior); si es desde su primer día, queda "reasignada" o "anulada". Cada
  * evento queda en audit_events y se avisa al instructor.
+ *
+ * Quién ve qué:
+ *   administrativo  ve y cambia todas las asignaciones
+ *   portero         ve todas, sin cambiar nada
+ *   instructor      solo ve dónde está asignado él
  */
+
+/** ¿El usuario puede ver todas las asignaciones (administrativo y portero) o solo las suyas (instructor)? */
+function veTodasLasAsignaciones(array $u): bool
+{
+    return in_array($u['rol'], ['administrativo', 'portero'], true);
+}
+
+/** Jornadas de hoy que el usuario puede ver: todas, o solo las suyas si es instructor. */
+function asignadosHoyPara(array $u, int $ambienteId, array $efectivas): array
+{
+    $hoy = asignadosHoy($ambienteId, $efectivas);
+    return veTodasLasAsignaciones($u) ? $hoy : array_values(array_filter($hoy, fn($j) => $j['instructorId'] === (int) $u['id']));
+}
 
 const JORNADAS = ['manana' => 'mañana', 'tarde' => 'tarde', 'noche' => 'noche'];
 const HORARIO_JORNADA = ['manana' => '6:00 a 12:00', 'tarde' => '12:00 a 18:00', 'noche' => '18:00 a 22:00'];
@@ -169,7 +187,8 @@ function asignadosHoy(int $ambienteId, array $efectivas): array
  */
 function rutaTableroAsignaciones(): never
 {
-    exigirRol('administrativo', 'instructor', 'portero');
+    $u = exigirRol('administrativo', 'instructor', 'portero');
+    $soloMias = !veTodasLasAsignaciones($u);
     $desde = fechaValida($_GET['desde'] ?? null, 'la fecha', false) ?? hoy();
     $dias = max(1, min(31, (int) ($_GET['dias'] ?? 7)));
     $hasta = (new DateTime($desde))->modify('+' . ($dias - 1) . ' day')->format('Y-m-d');
@@ -178,24 +197,31 @@ function rutaTableroAsignaciones(): never
     $fechas = [];
     for ($f = new DateTime($desde); $f->format('Y-m-d') <= $hasta; $f->modify('+1 day')) $fechas[] = $f->format('Y-m-d');
     $ambientes = filas('SELECT id, codigo, nombre FROM environments WHERE activo = 1' . ($ambienteId ? ' AND id = ?' : '') . ' ORDER BY codigo', $ambienteId ? [$ambienteId] : []);
-    responder([
+    $tablero = [
         'desde' => $desde, 'hasta' => $hasta, 'fechas' => $fechas,
         'jornadas' => array_map(fn($k) => ['clave' => $k, 'etiqueta' => JORNADAS[$k], 'horario' => HORARIO_JORNADA[$k]], array_keys(JORNADAS)),
         'ambientes' => array_map(fn($e) => [
             'id' => (int) $e['id'], 'codigo' => $e['codigo'], 'nombre' => $e['nombre'],
-            'celdas' => array_combine($fechas, array_map(fn($dia) => array_combine(array_keys(JORNADAS), array_map(function ($j) use ($efectivas, $e, $dia) {
+            'celdas' => array_combine($fechas, array_map(fn($dia) => array_combine(array_keys(JORNADAS), array_map(function ($j) use ($efectivas, $e, $dia, $soloMias, $u) {
                 $a = $efectivas[(int) $e['id']][$dia][$j] ?? null;
+                // El instructor solo ve sus propios turnos.
+                if ($a && $soloMias && (int) $a['instructor_id'] !== (int) $u['id']) $a = null;
                 return $a ? ['id' => (int) $a['id'], 'instructorId' => (int) $a['instructor_id'], 'instructor' => $a['instructor_nombre'], 'tipo' => $a['tipo'],
                              'fechaInicio' => $a['fecha_inicio'], 'fechaFin' => $a['fecha_fin']] : null;
             }, array_keys(JORNADAS))), $fechas)),
         ], $ambientes),
-    ]);
+    ];
+    if ($soloMias) {
+        // Solo los ambientes donde tiene algún turno en el rango.
+        $tablero['ambientes'] = array_values(array_filter($tablero['ambientes'], fn($a) => array_filter(array_merge(...array_map('array_values', array_values($a['celdas']))))));
+    }
+    responder($tablero + ['soloMias' => $soloMias]);
 }
 
-/** GET /assignments?ambienteId&instructorId&estado=vigente|todas&fecha (el instructor solo ve las suyas) */
+/** GET /assignments?ambienteId&instructorId&estado=vigente|todas&fecha (administrativo y portero: todas; instructor: solo las suyas) */
 function rutaAsignaciones(): never
 {
-    $u = exigirRol('administrativo', 'instructor');
+    $u = exigirRol('administrativo', 'portero', 'instructor');
     $where = [];
     $params = [];
     if ($u['rol'] === 'instructor') { $where[] = 'a.instructor_id = ?'; $params[] = (int) $u['id']; }
@@ -211,7 +237,7 @@ function rutaAsignaciones(): never
 
 function rutaAsignacion(int $id): never
 {
-    $u = exigirRol('administrativo', 'instructor');
+    $u = exigirRol('administrativo', 'portero', 'instructor');
     $a = buscarAsignacion($id);
     if ($u['rol'] === 'instructor' && (int) $a['instructor_id'] !== (int) $u['id']) fallar(403, 'Solo puedes ver tus asignaciones.', 'PERMISO');
     responder(asignacionPublica($a) + ['eventos' => eventosDe('asignacion', $id)]);

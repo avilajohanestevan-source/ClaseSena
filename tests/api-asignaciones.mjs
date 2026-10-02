@@ -49,7 +49,7 @@ test('asignar instructores por jornada: día, periodo y permanente; reasignar y 
   assert.equal((await pedir('POST', '/assignments', { token: laura, cuerpo: { ambienteId: amb.id, instructorId: id('Laura'), jornada: 'noche', tipo: 'dia', fechaInicio: dia(1) } })).status, 403);
 
   // Tablero: el día 2 la mañana es de Andrés (día > permanente); los demás, de Laura
-  const tablero = (await pedir('GET', `/assignments/board?desde=${dia(0)}&dias=4&ambienteId=${amb.id}`, { token: laura })).datos;
+  const tablero = (await pedir('GET', `/assignments/board?desde=${dia(0)}&dias=4&ambienteId=${amb.id}`, { token: admin })).datos;
   const celdas = tablero.ambientes[0].celdas;
   assert.deepEqual(tablero.fechas.map((f) => celdas[f].manana.instructor.split(' ')[0]), ['Laura', 'Laura', 'Andrés', 'Laura']);
   assert.ok(tablero.fechas.every((f) => celdas[f].tarde.instructor.startsWith('Diana') && celdas[f].noche === null));
@@ -124,10 +124,49 @@ test('desde el formulario del ambiente: varios días de una vez y editar una asi
   // Volver a "sin tiempo definido"
   assert.equal((await pedir('PATCH', `/assignments/${permanente.id}`, { token: admin, cuerpo: { tipo: 'permanente', fechaFin: null } })).datos.asignacion.fechaFin, null);
 
-  // La revisión del instructor muestra quién está asignado hoy en cada jornada
+  // La revisión del instructor muestra solo sus propias jornadas de hoy en el ambiente
   const diana = await ingresar('1010101012', 'instructor');
   const insp = (await pedir('POST', '/inspections', { token: diana, cuerpo: { ambienteId: amb.id } })).datos;
-  assert.deepEqual(insp.asignadosHoy.map((j) => j.jornada), ['manana', 'tarde', 'noche']);
-  assert.equal(insp.asignadosHoy[0].instructor, 'Diana Marcela Ruiz');
+  assert.deepEqual(insp.asignadosHoy.map((j) => [j.jornada, j.instructor]), [['manana', 'Diana Marcela Ruiz']]);
   await pedir('POST', `/inspections/${insp.id}/cancel`, { token: diana });
+});
+
+test('permisos: el administrativo ve y cambia todo; el portero ve todo sin cambiar; el instructor solo ve dónde está asignado', async (t) => {
+  if (!await disponible()) { t.skip('API no disponible'); return; }
+  const admin = await ingresar('2020202020', 'administrativo');
+  const portero = await ingresar('4040404040', 'portero');
+  const laura = await ingresar('1010101010', 'instructor');
+  const andres = await ingresar('1010101011', 'instructor');
+  const amb107 = (await pedir('GET', '/environments', { token: admin })).datos.find((a) => a.codigo === '107');
+
+  // Portero: ve todas las asignaciones y el tablero completo…
+  const todas = (await pedir('GET', '/assignments', { token: portero })).datos;
+  assert.ok(new Set(todas.map((a) => a.instructor.nombre)).size >= 2, 'el portero ve las de todos los instructores');
+  const tabPortero = (await pedir('GET', `/assignments/board?desde=${dia(0)}&dias=1`, { token: portero })).datos;
+  assert.equal(tabPortero.soloMias, false);
+  assert.equal(tabPortero.ambientes.find((a) => a.codigo === '107').celdas[dia(0)].tarde.instructor, 'Andrés Felipe Castro');
+  assert.equal((await pedir('GET', `/assignments/${todas[0].id}`, { token: portero })).status, 200);
+  assert.equal((await pedir('GET', '/environments', { token: portero })).datos.find((a) => a.codigo === '107').asignadosHoy.length, 3);
+  // …pero no puede cambiar nada
+  const una = todas[0];
+  assert.equal((await pedir('POST', '/assignments', { token: portero, cuerpo: { ambienteId: amb107.id, instructorId: 1, jornada: 'noche', tipo: 'dia', fechaInicio: dia(1) } })).status, 403);
+  assert.equal((await pedir('PATCH', `/assignments/${una.id}`, { token: portero, cuerpo: { motivo: 'x' } })).status, 403);
+  assert.equal((await pedir('POST', `/assignments/${una.id}/reassign`, { token: portero, cuerpo: { instructorId: 2, motivo: 'x' } })).status, 403);
+  assert.equal((await pedir('POST', `/assignments/${una.id}/cancel`, { token: portero, cuerpo: { motivo: 'x' } })).status, 403);
+
+  // Instructor: solo sus asignaciones, en la lista, el tablero, los ambientes y la revisión
+  const mias = (await pedir('GET', '/assignments', { token: laura })).datos;
+  assert.ok(mias.length && mias.every((a) => a.instructor.nombre === 'Laura Gómez Patiño'));
+  const ajena = todas.find((a) => a.instructor.nombre !== 'Laura Gómez Patiño');
+  assert.equal((await pedir('GET', `/assignments/${ajena.id}`, { token: laura })).status, 403);
+  const tabLaura = (await pedir('GET', `/assignments/board?desde=${dia(0)}&dias=7`, { token: laura })).datos;
+  assert.equal(tabLaura.soloMias, true);
+  const celdas = tabLaura.ambientes.flatMap((a) => Object.values(a.celdas).flatMap((c) => Object.values(c))).filter(Boolean);
+  assert.ok(celdas.length && celdas.every((c) => c.instructor === 'Laura Gómez Patiño'), 'en el tablero solo ve sus turnos');
+  assert.ok(tabLaura.ambientes.every((a) => Object.values(a.celdas).some((c) => Object.values(c).some(Boolean))), 'y solo los ambientes donde está asignada');
+  const ambLaura = (await pedir('GET', '/environments', { token: laura })).datos.find((a) => a.codigo === '107');
+  assert.ok(ambLaura.asignadosHoy.every((j) => j.instructor === 'Laura Gómez Patiño'));
+  const ambAndres = (await pedir('GET', '/environments', { token: andres })).datos.find((a) => a.codigo === '107');
+  assert.deepEqual(ambAndres.asignadosHoy.map((j) => j.jornada), ['tarde'], 'Andrés solo ve su tarde en el 107');
+  assert.equal((await pedir('POST', '/assignments', { token: laura, cuerpo: { ambienteId: amb107.id, instructorId: 1, jornada: 'noche', tipo: 'dia', fechaInicio: dia(1) } })).status, 403);
 });

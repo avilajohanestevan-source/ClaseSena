@@ -105,9 +105,13 @@ export async function render(raiz) {
           u.rol === 'administrativo' || u.rol === 'instructor'
             ? h('a', { class: 'table-link amb-novedad', href: `#/novedades?ambiente=${a.id}` }, `${a.novedadesActivas} en curso`)
             : h('span', { class: 'amb-novedad' }, `${a.novedadesActivas} en curso hasta que se resuelvan`))) : null,
-        a.asignadosHoy && h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Instructores hoy'), h('dd', { class: 'amb-jornadas' },
-          a.asignadosHoy.map((j) => h('span', { class: `amb-jornada${j.instructor ? '' : ' amb-jornada--vacia'}` },
-            h('strong', {}, ETIQUETA_JORNADA[j.jornada]), ` ${j.instructor ? j.instructor.split(' ').slice(0, 2).join(' ') : '—'}`)))),
+        // El instructor solo recibe sus propias jornadas; portero y administrativo, las de todos.
+        a.asignadosHoy && u.rol === 'instructor'
+          ? (a.asignadosHoy.length ? h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Tus jornadas hoy'), h('dd', { class: 'amb-jornadas' },
+            a.asignadosHoy.map((j) => h('span', { class: 'amb-jornada amb-jornada--mia' }, h('strong', {}, ETIQUETA_JORNADA[j.jornada]))))) : null)
+          : a.asignadosHoy && h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Instructores hoy'), h('dd', { class: 'amb-jornadas' },
+            a.asignadosHoy.map((j) => h('span', { class: `amb-jornada${j.instructor ? '' : ' amb-jornada--vacia'}` },
+              h('strong', {}, ETIQUETA_JORNADA[j.jornada]), ` ${j.instructor ? j.instructor.split(' ').slice(0, 2).join(' ') : '—'}`)))),
         h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Revisión de hoy'), h('dd', {},
           hoy ? [chipInspeccion(ult.estado), h('span', { class: 'text-muted' }, ` ${ult.instructor}${ult.portero ? ` · entregó ${ult.portero}` : ''} · ${fecha.hora(ult.iniciadaEn)}`)]
             : h('span', { class: 'status-chip neutro' }, ult ? `Última: ${fecha.corta(ult.iniciadaEn)}` : 'Sin inspecciones')))),

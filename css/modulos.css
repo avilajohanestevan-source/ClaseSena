@@ -575,6 +575,7 @@ button.accion-grande{ width:100%; border:0; font:inherit; text-align:left; curso
 .amb-jornada{ padding:3px 10px; border-radius:var(--r-pill); background:var(--c-cian-50); color:var(--c-azul-900); font-size:12.5px; }
 .amb-jornada strong{ font-weight:700; }
 .amb-jornada--vacia{ background:var(--color-surface-muted); color:var(--color-text-muted); }
+.amb-jornada--mia{ background:var(--c-verde-100); color:var(--c-verde-800); }
 .asig-barra{ align-items:center; }
 .asig-semana{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .asig-flecha-izq{ display:inline-flex; transform:scaleX(-1); }

@@ -30,7 +30,8 @@ const RUTAS = {
   inventario: { vista: () => import('./vistas/inventario.js'), roles: PERSONAL, titulo: 'Inventario', icono: 'caja', grupo: 'ambientes' },
   etiquetas: { vista: () => import('./vistas/etiquetas.js'), roles: PERSONAL, titulo: 'Pegatinas', activa: 'inventario' },
   novedades: { vista: () => import('./vistas/novedades.js'), roles: ['administrativo', 'instructor'], titulo: 'Novedades', icono: 'alerta', grupo: 'ambientes' },
-  asignaciones: { vista: () => import('./vistas/asignaciones.js'), roles: ['administrativo', 'instructor'], titulo: 'Asignaciones', icono: 'calendario', grupo: 'ambientes' },
+  // Administrativo: ve y cambia todas; portero: ve todas sin cambiar; instructor: solo las suyas.
+  asignaciones: { vista: () => import('./vistas/asignaciones.js'), roles: ['administrativo', 'portero', 'instructor'], titulo: 'Asignaciones', icono: 'calendario', grupo: 'ambientes' },
   auditoria: { vista: () => import('./vistas/auditoria.js'), roles: ['administrativo'], titulo: 'Auditoría', icono: 'historial', grupo: 'ambientes' },
   reportes: { vista: () => import('./vistas/reportes.js'), roles: ['administrativo'], titulo: 'Reportes', icono: 'reporte', grupo: 'ambientes' },
   // Asistencia a clases (datos simulados, js/api/mock).
