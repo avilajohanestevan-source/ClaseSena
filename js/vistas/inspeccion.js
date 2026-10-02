@@ -1,10 +1,16 @@
 // Revisión del ambiente (instructor), en una sola columna pensada para el celular.
 // El instructor la hace al entrar al salón, antes de recibirlo:
-//  1. Cabecera con el ambiente y la hora de inicio.
+//  1. Cabecera con el ambiente, la hora de inicio y los instructores
+//     asignados hoy en cada jornada.
 //  2. "Todo está bien": atajo que marca en la pantalla el checklist y todos los
 //     ítems del ambiente como OK. No envía nada, no termina la revisión ni
 //     escanea ningún QR: el instructor revisa y luego pulsa "Terminar revisión".
-//  3. Novedades permanentes que el ambiente ya tiene activas (no se reportan otra vez).
+//  3. Novedades permanentes que el ambiente ya tiene en curso (no se reportan
+//     otra vez). También aparecen resaltadas en amarillo en su área del
+//     checklist (el aire acondicionado en "Aire / ventilación"). Desde ahí se
+//     abre su detalle e historial, se adjunta una foto y, si ya funciona,
+//     "Ya está en funcionamiento" la marca resuelta (queda en el historial
+//     con fecha, usuario, evidencia y la referencia a esta revisión).
 //  4. Si hay una novedad: "Escanear ítem o familia" (QR o código de barras de
 //     la pegatina) o "Daño del salón" (pared, techo, piso…) → formulario con
 //     foto de evidencia, naturaleza (permanente, temporal o limpieza), tipo,
@@ -20,12 +26,13 @@ import { anim } from '../ui/anim.js';
 import { toast, abrirModal, confirmar } from '../ui/avisos.js';
 import { crearEscaner } from '../ui/escaner.js';
 import { crearCapturaFoto } from '../ui/camara.js';
-import { chipItem, chipSeveridad, chipNaturaleza, etiquetaTipoDano, fecha } from '../ui/ambientes-ui.js';
+import { chipItem, chipSeveridad, chipNaturaleza, chipNovedad, etiquetaTipoDano, fecha, lineaDeTiempo } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado, emitir } from '../estado.js';
 import {
   validarReporteDano, progresoChecklist, resultadoInspeccion, marcarTodoBien, itemsRevisables, naturalezaPorDefecto,
   TIPOS_DANO, PRIORIDADES, UBICACIONES, NATURALEZAS,
+  ETIQUETA_JORNADA,
 } from '../reglas.js';
 
 const AYUDA_SEVERIDAD = { leve: 'Se puede seguir usando.', moderada: 'Funciona con limitaciones.', grave: 'No se puede usar o es un riesgo.' };
@@ -74,8 +81,20 @@ export async function render(raiz, { params, alSalir }) {
         h('span', { class: 'eyebrow eyebrow-verde' }, 'Revisión al entrar'),
         h('h2', { class: 'vista-titulo' }, d.ambiente.nombre),
         h('p', { class: 'section-sub' }, transcurrido))),
+    avisoAsignados(),
     h('p', { class: 'insp-cabecera-ayuda' }, icono('qr'),
       h('span', {}, 'Si todo está en orden, "Todo está bien" marca el checklist y los ítems como OK; revisa y pulsa "Terminar revisión". Si algo tiene una novedad, escanea su pegatina (o la de su familia) y toma una foto.')));
+
+  /** Aviso de los instructores asignados hoy al ambiente en cada jornada (resalta al instructor actual). */
+  function avisoAsignados() {
+    const asignados = d.asignadosHoy || [];
+    const yo = asignados.filter((j) => j.instructorId === estado.usuario.id);
+    return h('div', { class: `insp-asignados${yo.length ? '' : ' insp-asignados--otro'}`, role: 'note' },
+      h('span', { class: 'insp-asignados-titulo' }, icono('usuarios'), 'Instructores asignados hoy'),
+      h('ul', {}, asignados.map((j) => h('li', { class: j.instructorId === estado.usuario.id ? 'insp-asignado--yo' : '' },
+        h('strong', {}, ETIQUETA_JORNADA[j.jornada]), ' ', j.instructor ? `${j.instructor}${j.instructorId === estado.usuario.id ? ' (tú)' : ''}` : h('span', { class: 'text-muted' }, 'sin asignar')))),
+      !yo.length && h('p', {}, 'No apareces asignado hoy a este ambiente. Puedes revisarlo igual; si es un reemplazo, avisa a coordinación.'));
+  }
 
   /* --- atajo "Todo está bien" (solo en la pantalla) --- */
   const todoBienTexto = h('span', {});
@@ -102,11 +121,18 @@ export async function render(raiz, { params, alSalir }) {
   observaciones.addEventListener('input', () => { errorCampo(observaciones, null); guardarLuego(); });
 
   function pintarChecklist() {
-    vaciar(listaChecklist, d.checklist.map((c) => h('li', { class: `checklist-fila${c.ok === false ? ' checklist-fila--novedad' : ''}` },
-      h('span', { class: 'checklist-etiqueta', id: `ck-${c.clave}` }, c.etiqueta),
-      h('div', { class: 'checklist-opciones', role: 'group', 'aria-labelledby': `ck-${c.clave}` },
-        h('button', { class: 'checklist-btn checklist-btn--ok', type: 'button', 'aria-pressed': String(c.ok === true), onclick: () => marcar(c, true) }, icono('check'), 'Bien'),
-        h('button', { class: 'checklist-btn checklist-btn--novedad', type: 'button', 'aria-pressed': String(c.ok === false), onclick: () => marcar(c, false) }, icono('alerta'), 'Novedad')))));
+    vaciar(listaChecklist, d.checklist.map((c) => {
+      const permanentes = d.novedadesActivas.filter((n) => n.area === c.clave);
+      return h('li', { class: `checklist-fila${c.ok === false ? ' checklist-fila--novedad' : ''}${permanentes.length ? ' checklist-fila--permanente' : ''}` },
+        h('span', { class: 'checklist-etiqueta', id: `ck-${c.clave}` }, c.etiqueta),
+        h('div', { class: 'checklist-opciones', role: 'group', 'aria-labelledby': `ck-${c.clave}` },
+          h('button', { class: 'checklist-btn checklist-btn--ok', type: 'button', 'aria-pressed': String(c.ok === true), onclick: () => marcar(c, true) }, icono('check'), 'Bien'),
+          h('button', { class: 'checklist-btn checklist-btn--novedad', type: 'button', 'aria-pressed': String(c.ok === false), onclick: () => marcar(c, false) }, icono('alerta'), 'Novedad')),
+        // Novedades permanentes en curso de esta área: abrir el detalle, adjuntar foto o marcarla resuelta.
+        permanentes.length ? h('ul', { class: 'checklist-permanentes', 'aria-label': `Novedades permanentes en ${c.etiqueta}` }, permanentes.map((n) => h('li', {},
+          h('button', { class: 'checklist-permanente', type: 'button', onclick: () => abrirNovedad(n), 'aria-label': `Novedad permanente en curso: ${n.titulo}. Abrir detalle` },
+            icono('reloj'), h('span', {}, h('strong', {}, n.titulo), h('span', {}, `En curso desde ${fecha.corta(n.creadaEn)} · ${n.descripcion}`)), icono('flecha'))))) : null);
+    }));
     const p = progresoChecklist(d.checklist);
     progreso.setAttribute('aria-valuemax', p.total);
     progreso.setAttribute('aria-valuenow', p.revisados);
@@ -148,12 +174,73 @@ export async function render(raiz, { params, alSalir }) {
     activas.hidden = !d.novedadesActivas.length;
     vaciar(activas,
       h('h3', { class: 'bloque-titulo', id: 'insp-t-activas' }, icono('reloj'), ` Novedades permanentes en curso (${d.novedadesActivas.length})`),
-      h('p', { class: 'text-muted' }, 'Ya están registradas y siguen en curso hasta que un instructor o coordinación las resuelva. No hace falta reportarlas de nuevo: puedes agregarles seguimiento en Novedades.'),
+      h('p', { class: 'text-muted' }, 'Ya están registradas y siguen en curso hasta que un instructor o coordinación las resuelva. No hace falta reportarlas de nuevo. Si ya funciona, márcala aquí mismo.'),
       h('ul', { class: 'insp-activas-lista' }, d.novedadesActivas.map((n) => h('li', {},
         h('strong', {}, n.titulo),
         h('span', {}, n.descripcion),
         h('span', { class: 'reporte-chips' }, chipSeveridad(n.severidad), n.itemEstado && chipItem(n.itemEstado),
-          h('span', { class: 'text-muted' }, `desde ${fecha.corta(n.creadaEn)}`))))));
+          h('span', { class: 'text-muted' }, `desde ${fecha.corta(n.creadaEn)}`)),
+        h('div', { class: 'insp-activas-acciones' },
+          h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: () => abrirNovedad(n) }, icono('ojo'), 'Detalle y foto'),
+          h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => abrirNovedad(n, { resolver: true }) }, icono('check'), 'Ya está en funcionamiento'))))));
+  }
+
+  /**
+   * Novedad permanente desde la revisión: detalle e historial, adjuntar foto
+   * (seguimiento) o "Ya está en funcionamiento" (la resuelve). Lo que se hace
+   * aquí queda en su historial con la referencia a esta revisión.
+   */
+  async function abrirNovedad(resumen, { resolver = false } = {}) {
+    let n;
+    try { n = await apiAmb.novedad(resumen.id); } catch (e) { toast('error', 'No se abrió la novedad', e.message); return; }
+    let foto = null, enviando = false;
+    const comentario = h('textarea', { id: 'nov-insp-comentario', rows: 2, maxlength: 500,
+      placeholder: resolver ? 'Ej.: ya enfría bien; lo arreglaron ayer.' : 'Ej.: sigue igual; se oye un ruido en el compresor.' });
+    const captura = crearCapturaFoto({ alCambiar: (x) => { foto = x; if (x) errorCampo(captura.el, null); } });
+    const fotoBtn = h('button', { class: 'btn btn-outline', type: 'button', onclick: () => guardarFoto() }, icono('camara'), 'Adjuntar foto');
+    const funcionaBtn = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => funciona() }, icono('check'), 'Ya está en funcionamiento');
+    const { cerrar } = abrirModal({
+      titulo: n.titulo, subtitulo: `Novedad permanente #${n.id} · ambiente ${n.ambiente.codigo}`, ancho: 'normal',
+      contenido: h('div', { class: 'novedad-detalle' },
+        h('div', { class: 'reporte-chips' }, chipNovedad(n.estado), chipSeveridad(n.severidad), h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(n.tipoDano)),
+          n.items.map((i) => h('span', { class: 'status-chip neutro' }, `${i.codigo}: `, chipItem(i.estado)))),
+        h('p', {}, n.descripcion),
+        n.foto && h('img', { class: 'novedad-foto', src: n.foto, alt: `Evidencia de ${n.titulo}`, loading: 'lazy' }),
+        h('details', { class: 'novedad-historial', open: !resolver },
+          h('summary', {}, `Historial de la novedad (${n.eventos.length})`), lineaDeTiempo(n.eventos)),
+        h('div', { class: 'campo' }, h('label', { for: 'nov-insp-comentario' }, resolver ? '¿Qué encontraste? ' : 'Comentario ', h('span', { class: 'opt' }, '(opcional)')), comentario),
+        h('div', { class: 'campo' }, h('label', {}, 'Foto ', h('span', { class: 'opt' }, resolver ? '(evidencia de que funciona, opcional)' : '(evidencia)')), captura.el)),
+      acciones: [fotoBtn, funcionaBtn],
+      alCerrar: () => captura.detener(),
+    });
+    if (resolver) setTimeout(() => comentario.focus(), 50);
+
+    async function guardarFoto() {
+      if (enviando) return;
+      if (!foto) { errorCampo(captura.el, 'Toma o elige una foto.'); return; }
+      enviando = true; fotoBtn.disabled = true;
+      try {
+        await apiAmb.editarNovedad(n.id, { foto, nota: comentario.value.trim() || undefined, inspeccionId: id });
+        toast('exito', 'Foto adjuntada', `Quedó en el historial de ${n.titulo}.`);
+        cerrar();
+      } catch (e) { toast('error', 'No se adjuntó la foto', e.message); enviando = false; fotoBtn.disabled = false; }
+    }
+
+    async function funciona() {
+      if (enviando) return;
+      if (!await confirmar({ titulo: '¿Ya está en funcionamiento?', mensaje: `${n.titulo} quedará resuelta y${n.items.length ? ' el ítem vuelve a Operativo;' : ''} se avisa a coordinación, administrativo e inventario.`, textoAceptar: 'Sí, ya funciona' })) return;
+      enviando = true; funcionaBtn.disabled = true;
+      try {
+        const texto = comentario.value.trim();
+        await apiAmb.resolverNovedad(n.id, { resolucion: texto ? `Ya está en funcionamiento: ${texto}` : 'Ya está en funcionamiento (verificado en la revisión del ambiente)', foto: foto || undefined, inspeccionId: id });
+        cerrar();
+        conservarLocal(await apiAmb.inspeccion(id));
+        pintarTodo();
+        emitir('novedades');
+        vibrar(30);
+        toast('exito', 'Novedad resuelta', `${n.titulo} ya está en funcionamiento. Quedó en el historial.`);
+      } catch (e) { toast('error', 'No se resolvió', e.message); enviando = false; funcionaBtn.disabled = false; }
+    }
   }
 
   function filaItem(it) {

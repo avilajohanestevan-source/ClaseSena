@@ -90,3 +90,44 @@ test('asignar instructores por jornada: día, periodo y permanente; reasignar y 
   const mias = (await pedir('GET', '/assignments', { token: laura })).datos;
   assert.ok(mias.length && mias.every((a) => a.instructor.nombre === 'Laura Gómez Patiño'));
 });
+
+test('desde el formulario del ambiente: varios días de una vez y editar una asignación', async (t) => {
+  if (!await disponible()) { t.skip('API no disponible'); return; }
+  const admin = await ingresar('2020202020', 'administrativo');
+  const usuarios = (await pedir('GET', '/users?rol=instructor', { token: admin })).datos;
+  const id = (nombre) => usuarios.find((u) => u.nombre.startsWith(nombre)).id;
+  const amb = (await pedir('GET', '/environments', { token: admin })).datos.find((a) => a.codigo === '109');
+
+  // Por días: tres fechas sueltas en una sola petición
+  const dias = await pedir('POST', '/assignments', { token: admin, cuerpo: { ambienteId: amb.id, instructorId: id('Andrés'), jornada: 'noche', tipo: 'dia', fechas: [dia(3), dia(1), dia(5)], motivo: 'Refuerzo' } });
+  assert.equal(dias.status, 201, JSON.stringify(dias.datos));
+  assert.deepEqual(dias.datos.asignaciones.map((a) => a.fechaInicio), [dia(1), dia(3), dia(5)]);
+  assert.equal((await pedir('POST', '/assignments', { token: admin, cuerpo: { ambienteId: amb.id, instructorId: id('Andrés'), jornada: 'noche', tipo: 'dia', fechas: [dia(-1)] } })).status, 422);
+
+  // Una que aún no empieza: se cambia todo (instructor, tipo y fechas)
+  const futura = dias.datos.asignaciones[2];
+  const ed = await pedir('PATCH', `/assignments/${futura.id}`, { token: admin, cuerpo: { instructorId: id('Laura'), tipo: 'periodo', fechaInicio: dia(5), fechaFin: dia(9) } });
+  assert.equal(ed.status, 200, JSON.stringify(ed.datos));
+  assert.deepEqual([ed.datos.asignacion.instructor.nombre, ed.datos.asignacion.tipo, ed.datos.asignacion.fechaFin], ['Laura Gómez Patiño', 'periodo', dia(9)]);
+  const ev = (await pedir('GET', `/assignments/${futura.id}`, { token: admin })).datos.eventos.at(-1);
+  assert.equal(ev.accion, 'modificada');
+  assert.ok(ev.datos.antes.instructor === 'Andrés Felipe Castro' && ev.datos.despues.instructor === 'Laura Gómez Patiño');
+  assert.equal((await pedir('PATCH', `/assignments/${futura.id}`, { token: admin, cuerpo: {} })).status, 422, 'sin cambios');
+
+  // Una que ya empezó (Diana, 109 mañana, permanente): se le pone fecha final, pero el instructor se cambia con reasignar
+  const permanente = (await pedir('GET', `/assignments?ambienteId=${amb.id}`, { token: admin })).datos.find((a) => a.jornada === 'manana' && a.tipo === 'permanente');
+  const fin = await pedir('PATCH', `/assignments/${permanente.id}`, { token: admin, cuerpo: { tipo: 'periodo', fechaFin: dia(60) } });
+  assert.equal(fin.status, 200, JSON.stringify(fin.datos));
+  assert.deepEqual([fin.datos.asignacion.tipo, fin.datos.asignacion.fechaFin], ['periodo', dia(60)]);
+  assert.equal((await pedir('PATCH', `/assignments/${permanente.id}`, { token: admin, cuerpo: { instructorId: id('Laura') } })).datos.codigo, 'USAR_REASIGNAR');
+  assert.equal((await pedir('PATCH', `/assignments/${permanente.id}`, { token: admin, cuerpo: { fechaInicio: dia(2) } })).status, 422);
+  // Volver a "sin tiempo definido"
+  assert.equal((await pedir('PATCH', `/assignments/${permanente.id}`, { token: admin, cuerpo: { tipo: 'permanente', fechaFin: null } })).datos.asignacion.fechaFin, null);
+
+  // La revisión del instructor muestra quién está asignado hoy en cada jornada
+  const diana = await ingresar('1010101012', 'instructor');
+  const insp = (await pedir('POST', '/inspections', { token: diana, cuerpo: { ambienteId: amb.id } })).datos;
+  assert.deepEqual(insp.asignadosHoy.map((j) => j.jornada), ['manana', 'tarde', 'noche']);
+  assert.equal(insp.asignadosHoy[0].instructor, 'Diana Marcela Ruiz');
+  await pedir('POST', `/inspections/${insp.id}/cancel`, { token: diana });
+});

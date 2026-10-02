@@ -235,7 +235,7 @@ administrativo, y solo mientras la entrega está pendiente.
 |---|---|---|---|
 | GET | `/inspections` | personal | Filtros: `estado, resultado, ambienteId, instructorId, desde, hasta, asignados` |
 | POST | `/inspections` | instructor | `{ambienteId}` inicia la revisión. Si ya tiene una abierta en ese ambiente la devuelve; si es de otro instructor → `409 EN_CURSO` |
-| GET | `/inspections/{id}` | personal | Detalle: checklist, `inventario` (con `reportado`, `reportadoPorFamilia`, `novedadActivaId`), `familias` (con `itemIds`, `reportado`), `novedadesActivas` del ambiente, `reportes`, `itemsOk`, `estadoSalon`, `entrega` y `recibe` |
+| GET | `/inspections/{id}` | personal | Detalle: checklist, `inventario` (con `reportado`, `reportadoPorFamilia`, `novedadActivaId`), `familias` (con `itemIds`, `reportado`), `novedadesActivas` del ambiente (cada una con su `area` del checklist), `asignadosHoy` (`[{jornada, instructorId, instructor, tipo}]`), `reportes`, `itemsOk`, `estadoSalon`, `entrega` y `recibe` |
 | GET | `/inspections/by-qr/{token}` | portero, administrativo | Consulta por el QR `SENA-INSP:<token>` |
 | PATCH | `/inspections/{id}/checklist` | instructor dueño | `{checklist:[{clave, ok}], observaciones}` (guardado automático de lo que el instructor marca a mano) |
 | POST | `/inspections/{id}/items` | instructor dueño | Novedad con foto: `{itemId \| familiaId \| codigo (lo escaneado: ítem o familia) \| ubicacion, naturaleza?, tipoDano, severidad, comentario, foto}`. `naturaleza` ∈ `permanente \| temporal \| limpieza` (sin ella: `suciedad` → limpieza, lo demás → permanente). Solo la permanente deja el ítem (o todos los componentes de la familia) `danado` y abre en ese momento una novedad `en_curso` (o se suma a la que ya tenía), con aviso a coordinación, administrativo e inventario. Quitar el reporte (DELETE) la deja `anulada`. Un componente y su familia no se reportan a la vez (`409 DUPLICADO`). La foto (data URL JPG/PNG/WebP, ≤ 3 MB) siempre es obligatoria |
@@ -260,17 +260,19 @@ se retira antes de entregar el ambiente (o se cancela la revisión), queda
 | Método | Ruta | Rol | Notas |
 |---|---|---|---|
 | GET | `/persistent-issues?estado=en_curso\|resuelta\|anulada&ambienteId` | personal | `[{id, estado, ambiente, objetivo:{tipo: item\|familia\|salon, id, codigo, nombre}, titulo, itemEstado, tipoDano, severidad, descripcion, foto, reportadaPor, inspeccionId, creadaEn, resueltaPor, resueltaEn, resolucion, fotoResolucion, anuladaEn, reportes}]` |
-| GET | `/persistent-issues/{id}` | personal | + `items` afectados con su estado, `historial` de revisiones que la reportaron y `eventos` (auditoría: creada, reportada_de_nuevo, modificada, resuelta, anulada, reporte_retirado) |
+| GET | `/persistent-issues/{id}` | personal | + `items` afectados con su estado, `historial` de revisiones que la reportaron y `eventos` (auditoría: creada, reportada_de_nuevo, modificada, resuelta, anulada, reporte_retirado). Cada novedad trae `area`: el punto del checklist donde se resalta en la revisión (`ventilacion` para el aire acondicionado, `equipos`, `mobiliario`, `puertas`, `electrico`, `luces`, `senalizacion`; null si no encaja) |
 | POST | `/persistent-issues` | instructor, administrativo | Levantar sin revisión: `{ambienteId?, itemId \| familiaId \| codigo \| ubicacion, tipoDano, severidad, descripcion, foto, estadoItem?}`. La foto es obligatoria para el instructor. `estadoItem` por defecto `danado` (`fuera_servicio`, `en_reparacion`; `baja` solo administrativo → si no `403`). Si el ítem o la familia ya tiene una en curso → `409 DUPLICADO`. Avisa a coordinación, administrativo e inventario |
-| PATCH | `/persistent-issues/{id}` | instructor, administrativo | Seguimiento mientras siga en curso: `{estadoItem?, severidad?, descripcion?, nota?, foto?}` (p. ej. dejar el ítem **fuera de servicio** hasta su reparación). Sin cambios → `422`. Queda como evento `modificada` con el antes y el después |
-| POST | `/persistent-issues/{id}/resolve` | instructor, administrativo | `{resolucion, estadoItem?, foto?}` (`estadoItem` por defecto `operativo`; `baja` solo administrativo). Avisa a coordinación, administrativo e inventario y a quien la reportó |
+| PATCH | `/persistent-issues/{id}` | instructor, administrativo | Seguimiento mientras siga en curso: `{estadoItem?, severidad?, descripcion?, nota?, foto?, inspeccionId?}` (con `inspeccionId`, desde la revisión del ambiente: el historial lo indica; debe ser del mismo ambiente y, si es instructor, suya) (p. ej. dejar el ítem **fuera de servicio** hasta su reparación). Sin cambios → `422`. Queda como evento `modificada` con el antes y el después |
+| POST | `/persistent-issues/{id}/resolve` | instructor, administrativo | `{resolucion, estadoItem?, foto?, inspeccionId?}` ("Ya está en funcionamiento" desde la revisión envía `inspeccionId`) (`estadoItem` por defecto `operativo`; `baja` solo administrativo). Avisa a coordinación, administrativo e inventario y a quien la reportó |
 | GET | `/issues?ambienteId&itemId&naturaleza&estado&desde&hasta` | instructor, administrativo | Historial completo: `[{origen: revision\|modulo, id, inspeccionId, novedadId, ambiente, objetivo, itemEstado, naturaleza, tipoDano, severidad, comentario, foto, usuario, fecha, estado, resueltaEn, resueltaPor, resolucion}]`. `estado` ∈ `en_revision \| en_curso \| resuelta \| anulada \| cerrada` (temporales y limpieza se cierran al recibir el ambiente). Con `itemId` incluye las novedades de su familia |
 
 ## Asignación de instructores por jornada
 
-Jornadas: `manana` (6:00 a 12:00), `tarde` (12:00 a 18:00), `noche` (18:00 a
-22:00). Tipos: `dia` (un día), `periodo` (rango de fechas, máximo un año) y
-`permanente` (sin fecha final, hasta que se reasigne o se anule). Para cada
+Se gestiona en el formulario *Editar ambiente* (y se consulta en el tablero
+de Asignaciones). Jornadas: `manana` (6:00 a 12:00), `tarde` (12:00 a 18:00),
+`noche` (18:00 a 22:00). Tipos: `dia` (por días: uno o varios días sueltos),
+`periodo` (fecha inicio — fecha fin, máximo un año) y `permanente` (sin tiempo
+definido, hasta que se cambie o se anule). Para cada
 ambiente, jornada y día vale la vigente más específica: **día > periodo >
 permanente**. No puede haber dos del mismo tipo cruzadas en el mismo ambiente
 y jornada (`409 DUPLICADO`); si el instructor ya tiene esa jornada en otro
@@ -281,7 +283,8 @@ ambiente, se crea igual y la respuesta trae `advertencias`.
 | GET | `/assignments/board?desde=aaaa-mm-dd&dias=7&ambienteId` | personal | Tablero (hasta 31 días): `{desde, hasta, fechas, jornadas, ambientes:[{id, codigo, nombre, celdas:{"2026-10-02": {manana: {id, instructorId, instructor, tipo, fechaInicio, fechaFin} \| null, tarde, noche}}}]}` |
 | GET | `/assignments?ambienteId&instructorId&estado=vigente\|todas&fecha` | instructor, administrativo | Lista (el instructor solo ve las suyas). Por defecto, las vigentes desde hoy |
 | GET | `/assignments/{id}` | instructor (las suyas), administrativo | + `eventos` (auditoría) |
-| POST | `/assignments` | administrativo | `{ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin? (solo periodo), motivo?}` → `{asignacion, advertencias}`. Fechas ya pasadas → `422`. Avisa al instructor |
+| POST | `/assignments` | administrativo | `{ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin? (solo periodo), fechas? (solo dia: varios días sueltos), motivo?}` → `{asignacion, asignaciones, advertencias}`. Fechas ya pasadas → `422`. Avisa al instructor |
+| PATCH | `/assignments/{id}` | administrativo | `{instructorId?, tipo?, fechaInicio?, fechaFin?, motivo?}` → `{asignacion, advertencias}`. Si aún no empieza se cambia todo; si ya empezó, solo la fecha final, el tipo (periodo ↔ sin tiempo definido) y el motivo: cambiar el instructor → `422 USAR_REASIGNAR` (se usa `/reassign` desde una fecha). Evento `modificada` con el antes y el después |
 | POST | `/assignments/{id}/reassign` | administrativo | `{instructorId, motivo, desde?}`: el nuevo instructor toma la jornada desde `desde` (por defecto hoy) hasta donde iba la original. Si `desde` es su primer día, la original queda `reasignada`; si no, se recorta al día anterior. → `{asignacion, anterior, advertencias}`. Avisa a ambos |
 | POST | `/assignments/{id}/cancel` | administrativo | `{motivo, desde?}`: anula el turno desde esa fecha (primer día → `anulada`; si no, se recorta). Avisa al instructor |
 

@@ -219,7 +219,13 @@ function rutaAsignacion(int $id): never
 
 /* ---------------- cambios (administrativo) ---------------- */
 
-/** POST /assignments {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, motivo?} → {asignacion, advertencias} */
+/**
+ * POST /assignments {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, fechas?, motivo?}
+ *   → {asignacion, asignaciones, advertencias}
+ * Con tipo "dia" y fechas: [aaaa-mm-dd, …] se asignan varios días sueltos de
+ * una vez (una asignación por día); con "periodo", de fechaInicio a fechaFin;
+ * con "permanente", desde fechaInicio sin fecha final.
+ */
 function rutaCrearAsignacion(): never
 {
     $u = exigirRol('administrativo');
@@ -228,24 +234,93 @@ function rutaCrearAsignacion(): never
     if (!$amb['activo']) fallar(409, 'El ambiente está desactivado.', 'ESTADO');
     $instructor = instructorActivo(entero($d, 'instructorId'));
     $jornada = opcion($d, 'jornada', array_keys(JORNADAS), true, 'la jornada');
-    $tipo = opcion($d, 'tipo', TIPOS_ASIGNACION, true, 'si es por un día, por un periodo o permanente');
-    [$inicio, $fin] = fechasSegunTipo($tipo, $d);
-    if (($fin ?? '9999-12-31') < hoy()) fallar(422, 'No se puede asignar en fechas que ya pasaron.', 'VALIDACION');
+    $tipo = opcion($d, 'tipo', TIPOS_ASIGNACION, true, 'si es por días, por un periodo o sin tiempo definido');
     $motivo = texto($d, 'motivo', 300, false, 'el motivo');
-    $advertencias = revisarCruces((int) $amb['id'], (int) $instructor['id'], $jornada, $tipo, $inicio, $fin);
+    if ($tipo === 'dia' && !empty($d['fechas'])) {
+        if (!is_array($d['fechas']) || count($d['fechas']) > 62) fallar(422, 'Indica entre 1 y 62 días.', 'VALIDACION');
+        $rangos = array_map(fn($f) => [fechaValida($f, 'cada día'), $f], array_values(array_unique($d['fechas'])));
+        sort($rangos);
+    } else {
+        $rangos = [fechasSegunTipo($tipo, $d)];
+    }
+    $advertencias = [];
+    foreach ($rangos as [$inicio, $fin]) {
+        if (($fin ?? '9999-12-31') < hoy()) fallar(422, $tipo === 'dia' ? "El $inicio ya pasó." : 'No se puede asignar en fechas que ya pasaron.', 'VALIDACION');
+        $advertencias = [...$advertencias, ...revisarCruces((int) $amb['id'], (int) $instructor['id'], $jornada, $tipo, $inicio, $fin)];
+    }
 
     db()->begin_transaction();
-    $id = insertar(
-        'INSERT INTO instructor_assignments (environment_id, instructor_id, jornada, tipo, fecha_inicio, fecha_fin, motivo, creada_por, creada_en)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-        [(int) $amb['id'], (int) $instructor['id'], $jornada, $tipo, $inicio, $fin, $motivo, (int) $u['id']]
-    );
-    $a = buscarAsignacion($id);
-    auditar('asignacion', $id, (int) $amb['id'], 'creada', describirAsignacion($a) . ($motivo ? " · $motivo" : ''), (int) $u['id'], null,
-        ['instructorId' => (int) $instructor['id'], 'jornada' => $jornada, 'tipo' => $tipo, 'fechaInicio' => $inicio, 'fechaFin' => $fin]);
-    avisarInstructor((int) $instructor['id'], "Te asignaron al ambiente {$amb['codigo']}", describirAsignacion($a) . ' (' . HORARIO_JORNADA[$jornada] . ')');
+    $creadas = [];
+    foreach ($rangos as [$inicio, $fin]) {
+        $id = insertar(
+            'INSERT INTO instructor_assignments (environment_id, instructor_id, jornada, tipo, fecha_inicio, fecha_fin, motivo, creada_por, creada_en)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+            [(int) $amb['id'], (int) $instructor['id'], $jornada, $tipo, $inicio, $fin, $motivo, (int) $u['id']]
+        );
+        $a = buscarAsignacion($id);
+        auditar('asignacion', $id, (int) $amb['id'], 'creada', describirAsignacion($a) . ($motivo ? " · $motivo" : ''), (int) $u['id'], null,
+            ['instructorId' => (int) $instructor['id'], 'jornada' => $jornada, 'tipo' => $tipo, 'fechaInicio' => $inicio, 'fechaFin' => $fin]);
+        $creadas[] = $a;
+    }
+    $resumen = count($creadas) === 1 ? describirAsignacion($creadas[0])
+        : "{$instructor['nombre']} · " . JORNADAS[$jornada] . ' · ' . count($creadas) . ' días: ' . implode(', ', array_column($creadas, 'fecha_inicio'));
+    avisarInstructor((int) $instructor['id'], "Te asignaron al ambiente {$amb['codigo']}", $resumen . ' (' . HORARIO_JORNADA[$jornada] . ')');
     db()->commit();
-    responder(['asignacion' => asignacionPublica($a), 'advertencias' => $advertencias], 201);
+    responder(['asignacion' => asignacionPublica($creadas[0]), 'asignaciones' => array_map('asignacionPublica', $creadas),
+               'advertencias' => array_values(array_unique($advertencias))], 201);
+}
+
+/**
+ * PATCH /assignments/{id} {instructorId?, tipo?, fechaInicio?, fechaFin?, motivo?}
+ * Edita una asignación vigente:
+ *   · si aún no empieza, se puede cambiar todo (instructor, tipo y fechas);
+ *   · si ya empezó, solo la fecha final, el tipo (periodo ↔ sin tiempo
+ *     definido) y el motivo; para cambiar el instructor se usa reasignar
+ *     (así los días anteriores conservan a quien los tuvo).
+ * → {asignacion, advertencias}. Queda en el historial con el antes y el después.
+ */
+function rutaEditarAsignacion(int $id): never
+{
+    $u = exigirRol('administrativo');
+    $a = buscarAsignacion($id);
+    if ($a['estado'] !== 'vigente' || ($a['fecha_fin'] !== null && $a['fecha_fin'] < hoy())) fallar(409, 'La asignación ya no está vigente.', 'ESTADO');
+    $d = cuerpo();
+    $empezo = $a['fecha_inicio'] <= hoy();
+    $instructorId = entero($d, 'instructorId', false) ?? (int) $a['instructor_id'];
+    $tipo = opcion($d, 'tipo', TIPOS_ASIGNACION, false, 'el tipo') ?? $a['tipo'];
+    [$inicio, $fin] = fechasSegunTipo($tipo, [
+        'fechaInicio' => $d['fechaInicio'] ?? $a['fecha_inicio'],
+        'fechaFin' => array_key_exists('fechaFin', $d) ? $d['fechaFin'] : $a['fecha_fin'],
+    ]);
+    $motivo = array_key_exists('motivo', $d) ? texto($d, 'motivo', 300, false, 'el motivo') : $a['motivo'];
+    if ($empezo) {
+        if ($inicio !== $a['fecha_inicio']) fallar(422, 'La asignación ya empezó: no se puede cambiar la fecha de inicio. Cambia la fecha final o anúlala desde una fecha.', 'VALIDACION');
+        if ($instructorId !== (int) $a['instructor_id']) fallar(422, 'La asignación ya empezó: para cambiar el instructor usa Reasignar, así los días anteriores conservan a quien los tuvo.', 'USAR_REASIGNAR');
+        if ($fin !== null && $fin < hoy()) fallar(422, 'La fecha final no puede quedar en el pasado. Para terminarla hoy, anúlala.', 'VALIDACION');
+    } elseif ($inicio < hoy()) {
+        fallar(422, 'No se puede mover la asignación a fechas que ya pasaron.', 'VALIDACION');
+    }
+    $nuevo = $instructorId !== (int) $a['instructor_id'] ? instructorActivo($instructorId) : null;
+
+    $antes = ['instructor' => $a['instructor_nombre'], 'tipo' => $a['tipo'], 'fechaInicio' => $a['fecha_inicio'], 'fechaFin' => $a['fecha_fin'], 'motivo' => $a['motivo']];
+    $despues = ['instructor' => $nuevo['nombre'] ?? $a['instructor_nombre'], 'tipo' => $tipo, 'fechaInicio' => $inicio, 'fechaFin' => $fin, 'motivo' => $motivo];
+    $cambios = array_filter(array_keys($antes), fn($k) => (string) $antes[$k] !== (string) $despues[$k]);
+    if (!$cambios) fallar(422, 'No hay cambios.', 'VALIDACION');
+    $advertencias = revisarCruces((int) $a['environment_id'], $instructorId, $a['jornada'], $tipo, $inicio, $fin, $id);
+
+    db()->begin_transaction();
+    consulta('UPDATE instructor_assignments SET instructor_id = ?, tipo = ?, fecha_inicio = ?, fecha_fin = ?, motivo = ? WHERE id = ?',
+        [$instructorId, $tipo, $inicio, $fin, $motivo, $id]);
+    $editada = buscarAsignacion($id);
+    $texto = implode(' · ', array_map(fn($k) => ['instructor' => 'instructor', 'tipo' => 'tipo', 'fechaInicio' => 'inicio', 'fechaFin' => 'fin', 'motivo' => 'motivo'][$k]
+        . ': ' . ($antes[$k] ?? 'sin fecha') . ' → ' . ($despues[$k] ?? 'sin fecha'), $cambios));
+    auditar('asignacion', $id, (int) $a['environment_id'], 'modificada', $texto, (int) $u['id'], null,
+        ['antes' => array_intersect_key($antes, array_flip($cambios)), 'despues' => array_intersect_key($despues, array_flip($cambios))]);
+    avisarInstructor($instructorId, "Cambió tu asignación en el ambiente {$a['ambiente_codigo']}", describirAsignacion($editada));
+    if ($nuevo) avisarInstructor((int) $a['instructor_id'], "Ya no tienes la asignación en el ambiente {$a['ambiente_codigo']}",
+        JORNADAS[$a['jornada']] . " desde el $inicio queda a cargo de {$nuevo['nombre']}");
+    db()->commit();
+    responder(['asignacion' => asignacionPublica($editada), 'advertencias' => $advertencias]);
 }
 
 /**

@@ -92,6 +92,7 @@ $RUTAS = [
     ['GET',    '#^/assignments$#',                       'rutaAsignaciones'],
     ['POST',   '#^/assignments$#',                       'rutaCrearAsignacion'],
     ['GET',    '#^/assignments/(\d+)$#',                 'rutaAsignacion'],
+    ['PATCH',  '#^/assignments/(\d+)$#',                 'rutaEditarAsignacion'],
     ['POST',   '#^/assignments/(\d+)/reassign$#',        'rutaReasignar'],
     ['POST',   '#^/assignments/(\d+)/cancel$#',          'rutaAnularAsignacion'],
 

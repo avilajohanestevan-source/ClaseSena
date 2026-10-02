@@ -109,9 +109,10 @@ export const apiAmb = {
   tableroAsignaciones: (filtros) => p('GET', '/assignments/board', filtros), // {desde, dias, ambienteId?} → {fechas, jornadas, ambientes:[{celdas}]}
   asignaciones: (filtros) => p('GET', '/assignments', filtros),       // {ambienteId?, instructorId?, estado?, fecha?}
   asignacion: (id) => p('GET', `/assignments/${id}`),                 // + eventos
-  crearAsignacion: (datos) => p('POST', '/assignments', datos),       // {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, motivo?} → {asignacion, advertencias}
+  crearAsignacion: (datos) => p('POST', '/assignments', datos),       // {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, fechas? (varios días), motivo?} → {asignacion, asignaciones, advertencias}
   reasignar: (id, datos) => p('POST', `/assignments/${id}/reassign`, datos), // {instructorId, motivo, desde?}
   anularAsignacion: (id, datos) => p('POST', `/assignments/${id}/cancel`, datos), // {motivo, desde?}
+  editarAsignacion: (id, datos) => p('PATCH', `/assignments/${id}`, datos), // {instructorId?, tipo?, fechaInicio?, fechaFin?, motivo?} → {asignacion, advertencias}
 
   // Auditoría (administrativo): eventos de novedades y asignaciones
   auditoria: (filtros) => p('GET', '/audit', filtros),                // {entidad?, entidadId?, ambienteId?, usuarioId?, desde?, hasta?}

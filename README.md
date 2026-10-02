@@ -84,9 +84,14 @@ desde Laura) y un turno anulado en el 111.
 ## Flujo de la demostración
 
 1. **Instructor** (1010101010) → *Inspecciones* → elige el ambiente 107 →
-   **Iniciar revisión** (se registra la hora). Arriba aparecen las
-   **novedades permanentes en curso** del ambiente (el aire acondicionado): no
-   hace falta reportarlas otra vez.
+   **Iniciar revisión** (se registra la hora). La cabecera muestra los
+   **instructores asignados hoy** en cada jornada (tú resaltado, o un aviso si
+   no estás asignado). Las **novedades permanentes en curso** del ambiente
+   aparecen arriba y, **resaltadas en amarillo, en su área del checklist** (el
+   aire acondicionado en *Aire / ventilación*): no hace falta reportarlas otra
+   vez. Desde ahí se abre su detalle e historial, se **adjunta una foto** o, si
+   ya funciona, **Ya está en funcionamiento** la marca resuelta; todo queda en
+   el historial de la novedad con fecha, usuario, evidencia y la revisión.
    - **Todo está bien** es un atajo: marca en la pantalla el checklist y todos
      los ítems revisables como OK. **No envía nada**, no termina la revisión
      ni escanea ningún QR (se puede deshacer);
@@ -124,7 +129,14 @@ desde Laura) y un turno anulado en el 111.
    2020202022) reciben los avisos. La pestaña **Historial** tiene todas las
    novedades: equipo o ambiente, fecha, usuario, evidencia, naturaleza,
    estado y fecha de resolución (con CSV).
-7. **Asignaciones** (administrativo): tablero semanal de quién está en cada
+7. **Instructores asignados** en *Ambientes → Editar ambiente* (administrativo):
+   en el mismo formulario se ven las asignaciones por jornada y quién está hoy,
+   y se asigna **por periodo** (inicio — fin), **por días** (uno o varios días
+   sueltos) o **sin tiempo definido**; cada asignación se **edita** o se
+   **anula** desde ahí (si ya empezó, cambiar de instructor la reasigna desde
+   una fecha y los días anteriores se conservan). Al crear un ambiente, las
+   asignaciones que agregues se crean al guardarlo. El tablero de
+   **Asignaciones** muestra la semana completa de quién está en cada
    ambiente en cada jornada (mañana, tarde, noche). Se asigna por **un día**,
    por **un periodo** o **permanente** (vale la más específica: día > periodo
    > permanente), y se **reasigna** o **anula** un turno desde una fecha. El

@@ -3,6 +3,8 @@
 //  · Portero: generar o mostrar el QR cuando la revisión está terminada; filtro "Mis asignados".
 //  · Administrativo: crear, editar, activar/desactivar y borrar (CRUD), con
 //    capacidad de aprendices y especialidad (y el catálogo de especialidades).
+//    En el mismo formulario se gestionan los instructores asignados por
+//    jornada: por periodo, por días o sin tiempo definido; editar y anular.
 //  · Todos: filtro por especialidad.
 //  · Aprendiz: solo consulta.
 import { h, anexar, icono, vaciar, errorCampo } from '../ui/dom.js';
@@ -14,6 +16,7 @@ import { apiAmb } from '../api/ambientes.js';
 import { estado } from '../estado.js';
 import { escanearEntrega } from '../ui/recibir.js';
 import { gestionarCatalogo } from '../ui/catalogo.js';
+import { crearGestorAsignaciones } from '../ui/asignaciones-ambiente.js';
 import { ETIQUETA_JORNADA } from '../reglas.js';
 
 export async function render(raiz) {
@@ -113,8 +116,12 @@ export async function render(raiz) {
 
   /* --- CRUD (administrativo) --- */
   async function formulario(a = null) {
-    let porteros = [], especialidades = [];
-    try { [porteros, especialidades] = await Promise.all([apiAmb.usuarios('portero'), apiAmb.especialidades()]); } catch (e) { toast('error', 'No se cargaron los porteros o las especialidades', e.message); }
+    let porteros = [], especialidades = [], instructores = [];
+    try {
+      [porteros, especialidades, instructores] = await Promise.all([apiAmb.usuarios('portero'), apiAmb.especialidades(), apiAmb.usuarios('instructor')]);
+    } catch (e) { toast('error', 'No se cargaron los porteros, instructores o especialidades', e.message); }
+    // Instructores asignados por jornada: se gestionan aquí mismo (los cambios se guardan al instante).
+    const asignaciones = crearGestorAsignaciones({ ambiente: a ? { id: a.id, codigo: a.codigo, asignadosHoy: a.asignadosHoy } : null, instructores });
     const c = (id, etiqueta, input) => h('div', { class: 'campo' }, h('label', { for: id }, etiqueta), input);
     const codigo = h('input', { type: 'text', id: 'amb-codigo', value: a?.codigo || '', maxlength: 10, inputmode: 'numeric', required: true });
     const nombre = h('input', { type: 'text', id: 'amb-nombre', value: a?.nombre || '', maxlength: 120, required: true });
@@ -130,11 +137,15 @@ export async function render(raiz) {
       h('div', { class: 'full' }, c('amb-nombre', 'Nombre', nombre)),
       c('amb-esp', 'Especialidad', especialidad), c('amb-bloque', 'Bloque / piso', bloque),
       h('div', { class: 'full' }, c('amb-portero', 'Portero asignado', portero)),
-      h('label', { class: 'interruptor full' }, activo, h('span', { class: 'interruptor-pista', 'aria-hidden': 'true' }), 'Ambiente activo (disponible para inspección)'));
+      h('label', { class: 'interruptor full' }, activo, h('span', { class: 'interruptor-pista', 'aria-hidden': 'true' }), 'Ambiente activo (disponible para inspección)'),
+      asignaciones.el);
     const guardar = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => enviar() }, icono('check'), a ? 'Guardar cambios' : 'Crear ambiente');
+    let guardado = false;
     const { cerrar } = abrirModal({
-      titulo: a ? `Editar ambiente ${a.codigo}` : 'Nuevo ambiente', contenido: form,
-      acciones: [({ cerrar: x }) => h('button', { class: 'btn btn-outline', type: 'button', onclick: () => x() }, 'Cancelar'), guardar],
+      titulo: a ? `Editar ambiente ${a.codigo}` : 'Nuevo ambiente', contenido: form, ancho: 'ancho',
+      acciones: [({ cerrar: x }) => h('button', { class: 'btn btn-outline', type: 'button', onclick: () => x() }, a ? 'Cerrar' : 'Cancelar'), guardar],
+      // Las asignaciones se guardan al instante: al cerrar se refrescan las tarjetas (instructores de hoy).
+      alCerrar: () => { if (a && !guardado) cargar(); },
     });
     async function enviar() {
       errorCampo(codigo, codigo.value.trim() ? null : 'Escribe el número.');
@@ -149,8 +160,10 @@ export async function render(raiz) {
       };
       guardar.disabled = true;
       try {
-        if (a) await apiAmb.editarAmbiente(a.id, datos); else await apiAmb.crearAmbiente(datos);
-        toast('exito', a ? 'Ambiente actualizado' : 'Ambiente creado', `Ambiente ${datos.codigo}`);
+        const r = a ? await apiAmb.editarAmbiente(a.id, datos) : await apiAmb.crearAmbiente(datos);
+        const asignadas = a ? 0 : await asignaciones.guardarPendientes(r.id);
+        toast('exito', a ? 'Ambiente actualizado' : 'Ambiente creado', `Ambiente ${datos.codigo}${asignadas ? ` · ${asignadas} asignación(es) de instructores` : ''}`);
+        guardado = true;
         cerrar();
         cargar();
       } catch (e) {

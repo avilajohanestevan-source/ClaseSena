@@ -276,21 +276,27 @@ export const JORNADAS = [
 export const ETIQUETA_JORNADA = Object.fromEntries(JORNADAS.map((j) => [j.clave, j.etiqueta]));
 
 export const TIPOS_ASIGNACION = [
-  { clave: 'dia', etiqueta: 'Solo un día', ayuda: 'Un reemplazo o una clase puntual. Tiene prioridad sobre las demás ese día.' },
-  { clave: 'periodo', etiqueta: 'Por un periodo', ayuda: 'Entre dos fechas (máximo un año).' },
-  { clave: 'permanente', etiqueta: 'Permanente', ayuda: 'Sin fecha final: vale hasta que se reasigne o se anule.' },
+  { clave: 'periodo', etiqueta: 'Por periodo', ayuda: 'De una fecha de inicio a una fecha final (máximo un año).' },
+  { clave: 'dia', etiqueta: 'Por días', ayuda: 'Uno o varios días sueltos (reemplazos, clases puntuales). Ese día tienen prioridad.' },
+  { clave: 'permanente', etiqueta: 'Sin tiempo definido', ayuda: 'Sin fecha final: vale hasta que se cambie o se anule.' },
 ];
 
 /**
  * Valida el formulario de una asignación (mismas reglas que el backend,
  * api/modulos/asignaciones.php). Fechas en aaaa-mm-dd; hoy para comparar.
  */
-export function validarAsignacion({ ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin }, hoy = fechaIso()) {
+export function validarAsignacion({ ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin, fechas }, hoy = fechaIso()) {
   const errores = {};
   if (!ambienteId) errores.ambienteId = 'Elige el ambiente.';
   if (!instructorId) errores.instructorId = 'Elige el instructor.';
   if (!JORNADAS.some((j) => j.clave === jornada)) errores.jornada = 'Elige la jornada.';
-  if (!TIPOS_ASIGNACION.some((t) => t.clave === tipo)) errores.tipo = 'Elige si es por un día, un periodo o permanente.';
+  if (!TIPOS_ASIGNACION.some((t) => t.clave === tipo)) errores.tipo = 'Elige si es por periodo, por días o sin tiempo definido.';
+  // Por días: varios días sueltos.
+  if (tipo === 'dia' && Array.isArray(fechas)) {
+    if (!fechas.length) errores.fechas = 'Agrega al menos un día.';
+    else if (fechas.some((f) => f < hoy)) errores.fechas = 'Hay días que ya pasaron.';
+    return errores;
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaInicio || '')) errores.fechaInicio = 'Elige la fecha de inicio.';
   if (tipo === 'periodo') {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFin || '')) errores.fechaFin = 'Elige la fecha final.';

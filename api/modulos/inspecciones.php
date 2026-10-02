@@ -157,6 +157,8 @@ function detalleInspeccion(array $s): array
             'itemIds' => array_map('intval', array_column(array_filter($inventario, fn($i) => (int) $i['family_id'] === (int) $f['id']), 'id')),
             'reportado' => in_array((int) $f['id'], $familiasReportadas, true),
         ], $familias),
+        // Instructores asignados hoy a este ambiente en cada jornada (modulos/asignaciones.php).
+        'asignadosHoy' => asignadosHoy((int) $s['environment_id'], asignacionesEfectivas(hoy(), hoy(), (int) $s['environment_id'])),
         // Novedades permanentes que el ambiente ya tiene abiertas: no hace falta volver a reportarlas.
         'novedadesActivas' => array_map('novedadPublica', filas(SQL_NOVEDADES . " WHERE n.environment_id = ? AND n.estado = 'en_curso' ORDER BY n.creada_en", [(int) $s['environment_id']])),
     ];

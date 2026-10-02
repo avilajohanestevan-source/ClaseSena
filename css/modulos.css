@@ -608,6 +608,56 @@ button.asig-boton:hover{ border-color:var(--color-border-strong); background:var
 .historial-foto{ display:inline-block; margin-top:6px; }
 .historial-foto img{ width:88px; height:88px; object-fit:cover; border-radius:10px; display:block; border:1px solid var(--color-border); }
 
+/* ================= Revisión: novedades permanentes por área y asignados de hoy ================= */
+/* Área del checklist con una novedad permanente en curso: resaltada en amarillo. */
+.checklist-fila--permanente{ background:var(--c-oro-50); border-color:var(--c-oro-400); box-shadow:inset 4px 0 0 var(--c-oro-400); }
+.checklist-permanentes{ flex-basis:100%; list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+.checklist-permanente{
+  display:flex; align-items:center; gap:10px; width:100%; min-height:var(--hit-min); padding:8px 12px;
+  border:1px solid var(--c-oro-400); border-radius:12px; background:#FFF6D6; color:var(--c-oro-800);
+  font:inherit; text-align:left; cursor:pointer; transition:background-color var(--dur-micro-2) var(--ease-standard);
+}
+.checklist-permanente:hover{ background:#FFEFB8; }
+.checklist-permanente:focus-visible{ outline:none; box-shadow:0 0 0 3px var(--color-focus); }
+.checklist-permanente > span{ flex:1; display:grid; gap:1px; min-width:0; }
+.checklist-permanente strong{ font-size:14px; color:var(--c-oro-800); }
+.checklist-permanente span span{ font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.checklist-permanente .icon{ width:18px; height:18px; flex-shrink:0; }
+.insp-activas-lista li{ border-left:4px solid var(--c-oro-400); }
+.insp-activas-acciones{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.novedad-foto{ width:100%; max-height:220px; object-fit:cover; border-radius:12px; }
+.novedad-historial > summary{ cursor:pointer; font-weight:700; color:var(--color-heading); margin-bottom:8px; }
+
+.insp-asignados{ margin-top:14px; padding:10px 12px; border-radius:12px; background:var(--c-cian-50); color:var(--c-azul-900); font-size:13.5px; }
+.insp-asignados--otro{ background:var(--c-oro-50); color:var(--c-oro-800); }
+.insp-asignados-titulo{ display:flex; align-items:center; gap:6px; font-weight:700; }
+.insp-asignados-titulo .icon{ width:16px; height:16px; }
+.insp-asignados ul{ list-style:none; margin:6px 0 0; padding:0; display:flex; flex-wrap:wrap; gap:6px 14px; }
+.insp-asignado--yo{ font-weight:700; }
+.insp-asignados p{ margin:6px 0 0; }
+
+/* Formulario del ambiente: instructores asignados */
+.asig-amb{ margin:8px 0 0; padding:14px; border:1px solid var(--color-border); border-radius:var(--r-lg); min-width:0; }
+.asig-amb legend{ display:flex; align-items:center; gap:6px; padding:0 6px; font-weight:700; color:var(--color-heading); }
+.asig-amb legend .icon{ width:18px; height:18px; }
+.asig-amb-hoy{ margin:0 0 10px; font-size:13.5px; }
+.asig-amb-jornada h4{ margin:10px 0 6px; font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--color-heading); }
+.asig-amb-fila--pendiente{ border-style:dashed; }
+.asig-amb-pie{ margin-top:10px; }
+.asig-amb-editor{ margin-top:10px; padding:12px; border:1px solid var(--c-azul-700); border-radius:14px; background:var(--color-surface); display:grid; gap:4px; }
+.asig-amb-editor .segmentos{ margin-top:2px; }
+.segmento[role="radio"][aria-checked="true"]{ background:var(--color-surface); color:var(--color-primary); box-shadow:var(--sh-1); }
+.segmento:disabled{ opacity:.45; cursor:not-allowed; }
+.asig-amb-ayuda{ margin:4px 0 0; font-size:12.5px; }
+.asig-amb-agregar-dia{ align-self:end; }
+.asig-amb-dias{ display:flex; flex-wrap:wrap; gap:6px; }
+.asig-amb-dia{ display:inline-flex; align-items:center; gap:4px; margin:0; }
+.asig-amb-dia .icon{ width:12px; height:12px; }
+.asig-amb-botones{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:6px; }
+.asig-amb-anular{ grid-column:1 / -1; display:grid; gap:8px; width:100%; }
+.asig-amb-anular-campos{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.asig-amb-anular-campos input[type="text"]{ flex:1; min-width:200px; }
+
 @media print{
   .etiquetas{ grid-template-columns:repeat(3, 1fr); gap:8px; }
   .etiqueta{ break-inside:avoid; border-style:solid; }

@@ -22,6 +22,10 @@ test('asignación: campos obligatorios y fechas pasadas', () => {
   // Un permanente que empezó antes sigue siendo válido (no tiene fin)
   assert.deepEqual(validarAsignacion({ ...base, tipo: 'permanente', fechaInicio: '2026-09-01' }, HOY), {});
   assert.deepEqual(JORNADAS.map((j) => j.clave), ['manana', 'tarde', 'noche']);
-  assert.deepEqual(TIPOS_ASIGNACION.map((t) => t.clave), ['dia', 'periodo', 'permanente']);
+  assert.deepEqual(TIPOS_ASIGNACION.map((t) => t.etiqueta), ['Por periodo', 'Por días', 'Sin tiempo definido']);
+  // Por días: varios días sueltos
+  assert.deepEqual(validarAsignacion({ ...base, tipo: 'dia', fechas: [HOY, '2026-10-09'] }, HOY), {});
+  assert.ok(validarAsignacion({ ...base, tipo: 'dia', fechas: [] }, HOY).fechas);
+  assert.ok(validarAsignacion({ ...base, tipo: 'dia', fechas: ['2026-09-30'] }, HOY).fechas);
   assert.equal(ESTADOS_NOVEDAD.en_curso[0], 'En curso');
 });

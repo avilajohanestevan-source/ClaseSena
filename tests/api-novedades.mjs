@@ -310,3 +310,35 @@ test('el instructor levanta, modifica y resuelve una novedad grave; retirar el r
   assert.ok((await pedir('GET', '/issues?estado=anulada', { token: laura })).datos.some((h) => h.novedadId === reporte.novedadId));
   await pedir('POST', `/inspections/${insp.id}/cancel`, { token: laura });
 });
+
+test('en la revisión: novedad permanente en su área del checklist y "ya está en funcionamiento" con foto e historial', async (t) => {
+  if (!await disponible()) { t.skip('API no disponible'); return; }
+  const laura = await ingresar('1010101010', 'instructor');
+  const andres = await ingresar('1010101011', 'instructor');
+  const amb = (await pedir('GET', '/environments', { token: laura })).datos.find((a) => a.codigo === '107');
+  const insp = (await pedir('POST', '/inspections', { token: laura, cuerpo: { ambienteId: amb.id } })).datos;
+  const aire = insp.novedadesActivas.find((n) => n.objetivo.codigo === 'AMB107-007');
+  assert.equal(aire.area, 'ventilacion', 'el aire acondicionado se muestra en "Aire / ventilación"');
+  assert.ok(insp.checklist.some((c) => c.clave === aire.area));
+
+  // Adjuntar foto desde la revisión: queda como seguimiento con la referencia a la revisión
+  const seg = await pedir('PATCH', `/persistent-issues/${aire.id}`, { token: laura, cuerpo: { nota: 'Sigue sin enfriar', foto: FOTO, inspeccionId: insp.id } });
+  assert.equal(seg.status, 200, JSON.stringify(seg.datos));
+  assert.match(seg.datos.eventos.at(-1).detalle, /desde la revisión INS-\d{6} del ambiente 107/);
+  assert.equal(seg.datos.eventos.at(-1).datos.inspeccionId, insp.id);
+  // Otro instructor no puede usar la revisión de Laura
+  assert.equal((await pedir('POST', `/persistent-issues/${aire.id}/resolve`, { token: andres, cuerpo: { resolucion: 'Ya está en funcionamiento', inspeccionId: insp.id } })).status, 403);
+
+  // "Ya está en funcionamiento": la instructora la resuelve desde la revisión
+  const res = await pedir('POST', `/persistent-issues/${aire.id}/resolve`, { token: laura, cuerpo: { resolucion: 'Ya está en funcionamiento: enfría bien', foto: FOTO, inspeccionId: insp.id } });
+  assert.equal(res.status, 200, JSON.stringify(res.datos));
+  const ultimo = res.datos.eventos.at(-1);
+  assert.deepEqual([res.datos.estado, ultimo.accion, ultimo.usuario, ultimo.datos.inspeccionId], ['resuelta', 'resuelta', 'Laura Gómez Patiño', insp.id]);
+  assert.ok(ultimo.foto && ultimo.fecha);
+  const despues = (await pedir('GET', `/inspections/${insp.id}`, { token: laura })).datos;
+  assert.ok(!despues.novedadesActivas.some((n) => n.id === aire.id));
+  assert.equal(despues.inventario.find((i) => i.codigo === 'AMB107-007').estado, 'operativo');
+  const hist = (await pedir('GET', `/items/${despues.inventario.find((i) => i.codigo === 'AMB107-007').id}/history`, { token: laura })).datos[0];
+  assert.deepEqual([hist.accion, hist.inspeccionId], ['novedad_resuelta', insp.id]);
+  await pedir('POST', `/inspections/${insp.id}/cancel`, { token: laura });
+});
