@@ -217,10 +217,10 @@ function rutaInspeccionPorQr(string $token): never
 /** POST /inspections {ambienteId}: el instructor inicia la revisión. Si ya tenía una en curso en ese ambiente, la retoma. */
 function rutaIniciarInspeccion(): never
 {
-    // Antes de su primera entrega (o de recibir como cuentadante) debe revisar el inventario.
+    // Antes de su primera entrega (o de recibir como responsable) debe revisar la cuenta antes.
     $pendiente = revisionPendiente((int) (cuerpo()['ambienteId'] ?? 0), (int) usuario()['id']);
     if ($pendiente) {
-        fallar(409, 'Antes de recibir este ambiente revisa su inventario (' . ($pendiente['tipo'] === 'cuentadante' ? 'lo recibes como cuentadante' : 'es tu primera vez en el ambiente') . ').', 'REVISION_INVENTARIO');
+        fallar(409, 'Antes de recibir este ambiente revisa si la cuenta antes es conforme (' . ($pendiente['tipo'] === 'cuentadante' ? 'la recibes como responsable' : 'te la entregaron con la asignación') . ').', 'REVISION_INVENTARIO');
     }
     $u = exigirRol('instructor');
     $ambienteId = entero(cuerpo(), 'ambienteId');

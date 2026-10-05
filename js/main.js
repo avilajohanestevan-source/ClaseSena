@@ -33,8 +33,8 @@ const RUTAS = {
   planilla: { vista: () => import('./vistas/planilla.js'), roles: ENTREGA, titulo: 'Planilla de entrega', activa: 'inspecciones' },
   inventario: { vista: () => import('./vistas/inventario.js'), roles: PERSONAL, titulo: 'Inventario', icono: 'caja', grupo: 'ambientes' },
   etiquetas: { vista: () => import('./vistas/etiquetas.js'), roles: PERSONAL, titulo: 'Pegatinas', activa: 'inventario' },
-  // Acta de entrega del inventario al cuentadante o a un instructor nuevo.
-  'revision-inventario': { vista: () => import('./vistas/revision-inventario.js'), roles: ['instructor', 'administrativo', 'almacen'], titulo: 'Revisión de inventario', icono: 'caja', grupo: 'ambientes' },
+  // Revisión de la cuenta antes (acta de entrega al instructor asignado o al responsable).
+  'revision-inventario': { vista: () => import('./vistas/revision-inventario.js'), roles: ['instructor', 'administrativo', 'almacen'], titulo: 'Cuenta antes', icono: 'caja', grupo: 'ambientes' },
   novedades: { vista: () => import('./vistas/novedades.js'), roles: ['administrativo', 'instructor', 'almacen'], titulo: 'Novedades', icono: 'alerta', grupo: 'ambientes' },
   // Administrativo: ve y cambia todas; portero: ve todas sin cambiar; instructor: solo las suyas.
   asignaciones: { vista: () => import('./vistas/asignaciones.js'), roles: ['administrativo', 'portero', 'instructor'], titulo: 'Asignaciones', icono: 'calendario', grupo: 'ambientes' },
@@ -121,7 +121,7 @@ async function actualizarInsignias() {
     }
     if (['administrativo', 'instructor', 'almacen'].includes(u.rol)) {
       const pendientes = await apiAmb.revisiones({ estado: 'pendiente', mias: u.rol === 'instructor' ? 1 : undefined });
-      shell.insignia('revision-inventario', pendientes.length, u.rol === 'instructor' ? 'inventarios por revisar' : 'revisiones de inventario pendientes');
+      shell.insignia('revision-inventario', pendientes.length, u.rol === 'instructor' ? 'cuentas antes por revisar' : 'revisiones de la cuenta antes pendientes');
     }
     if (['administrativo', 'instructor', 'almacen'].includes(u.rol)) shell.insignia('novedades', (await apiAmb.novedades({ estado: 'en_curso' })).length, 'novedades permanentes en curso');
   } catch { /* la insignia es informativa */ }

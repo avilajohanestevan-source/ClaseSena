@@ -1,11 +1,14 @@
-// Cuentadante y revisión del inventario contra la API real:
+// Cuenta antes y su revisión contra la API real (en la base y en la API el
+// responsable de la cuenta antes sigue llamándose "cuentadante"):
 //  · un instructor nuevo en el ambiente no puede hacer "Ingresé" hasta revisar
-//    y aceptar el inventario (OK, faltante o dañado con observación);
-//  · cambio de cuentadante: el nuevo lo es al aceptar la revisión (también
+//    y aceptar la cuenta antes (conforme, faltante o dañado con observación);
+//  · cambio de responsable: el nuevo lo es al aceptar la revisión (también
 //    subiendo el acta en Excel/CSV);
-//  · ambiente nuevo con cuentadante e inventario cargado desde Excel/CSV
+//  · ambiente nuevo con responsable y cuenta antes cargada desde Excel/CSV
 //    (con encabezado, placa, descripción y valor); asignar a un instructor
-//    nuevo o como cuentadante abre la revisión.
+//    nuevo o como responsable abre la revisión;
+//  · asignar con una cuenta antes nueva: el instructor la revisa aunque ya
+//    conociera el ambiente.
 //   npm run test:api   (Apache y MySQL encendidos, base instalada con db/instalar.php)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -85,7 +88,7 @@ test('cambio de cuentadante: el acta se baja en Excel y se sube llena; al acepta
   const d = (await pedir('GET', `/inventory-reviews/${revId}`, { token: rosa })).datos;
   const danado = d.items.find((i) => i.estadoItem === 'operativo');
   const filas = ['Acta de revisión de inventario · SENA', 'Ambiente;111', '', 'codigo;nombre;revision;observacion',
-    ...d.items.map((i) => `${i.codigo};${i.nombre};${i.itemId === danado.itemId ? 'DAÑADO;Pantalla rota' : 'OK;'}`), 'NO-EXISTE-1;Algo;OK;'];
+    ...d.items.map((i) => `${i.codigo};${i.nombre};${i.itemId === danado.itemId ? 'DAÑADO;Pantalla rota' : 'CONFORME;'}`), 'NO-EXISTE-1;Algo;OK;'];
   const sub = await pedir('POST', `/inventory-reviews/${revId}/import`, { token: rosa, cuerpo: { nombre: 'acta.csv', archivo: csv(filas) } });
   assert.equal(sub.status, 200, JSON.stringify(sub.datos));
   assert.equal(sub.datos.actualizados, d.items.length);
@@ -101,7 +104,7 @@ test('cambio de cuentadante: el acta se baja en Excel y se sube llena; al acepta
   assert.equal((await pedir('GET', `/items/by-code/${danado.codigo}`, { token: admin })).datos.estado, 'danado');
   // Avisos: a coordinación y a la cuentadante anterior
   const laura = await ingresar('1010101010', 'instructor');
-  assert.ok((await pedir('GET', '/inbox', { token: laura })).datos.notificaciones.some((n) => n.tipo === 'revision_inventario' && n.titulo.includes('cuentadante')));
+  assert.ok((await pedir('GET', '/inbox', { token: laura })).datos.notificaciones.some((n) => n.tipo === 'revision_inventario' && n.titulo.includes('responsable de la cuenta antes')));
 });
 
 test('ambiente nuevo con cuentadante e inventario desde Excel; asignar instructores nuevos abre la revisión', async (t) => {
@@ -155,4 +158,42 @@ test('ambiente nuevo con cuentadante e inventario desde Excel; asignar instructo
   assert.equal(todas.length, 3);
   const anulada = await pedir('POST', `/inventory-reviews/${asig.datos.revisionInventarioId}/cancel`, { token: almacen, cuerpo: { motivo: 'Prueba automática' } });
   assert.equal(anulada.datos.estado, 'anulada');
+});
+
+test('asignar con una cuenta antes nueva: el instructor la revisa aunque ya conozca el ambiente', async (t) => {
+  if (!await disponible()) { t.skip('API no disponible (enciende Apache y MySQL en XAMPP)'); return; }
+  const admin = await ingresar('2020202020', 'administrativo');
+  const andres = await ingresar('1010101011', 'instructor');
+  const usuarios = (await pedir('GET', '/users?rol=instructor', { token: admin })).datos;
+  const andresId = usuarios.find((u) => u.nombre.startsWith('Andrés')).id;
+  const codigo = `C${String(Date.now()).slice(-5)}`;
+  const amb = (await pedir('POST', '/environments', { token: admin, cuerpo: { codigo, nombre: 'Ambiente de prueba cuenta antes' } })).datos;
+  const cuentaAntes = (n) => csv(['placa;descripción;valor', ...Array.from({ length: n }, (_, i) => `CA${codigo}-${i + 1};Equipo ${i + 1};100000`)]);
+  assert.equal((await pedir('POST', `/environments/${amb.id}/inventory/import`, { token: admin, cuerpo: { nombre: 'ca.csv', archivo: cuentaAntes(2) } })).datos.nuevos, 2);
+
+  // Primera asignación: revisa la cuenta antes y la acepta
+  const primera = (await pedir('POST', '/assignments', { token: admin, cuerpo: { ambienteId: amb.id, instructorId: andresId, jornada: 'manana', tipo: 'permanente', fechaInicio: hoy() } })).datos;
+  assert.ok(primera.revisionInventarioId);
+  await pedir('PATCH', `/inventory-reviews/${primera.revisionInventarioId}/items`, { token: andres, cuerpo: { todoBien: true } });
+  assert.equal((await pedir('POST', `/inventory-reviews/${primera.revisionInventarioId}/accept`, { token: andres, cuerpo: {} })).datos.estado, 'aceptada');
+
+  // Otra jornada sin cuenta antes: ya conoce el ambiente, no revisa
+  const sin = (await pedir('POST', '/assignments', { token: admin, cuerpo: { ambienteId: amb.id, instructorId: andresId, jornada: 'tarde', tipo: 'permanente', fechaInicio: hoy() } })).datos;
+  assert.equal(sin.revisionInventarioId, null);
+
+  // Con una cuenta antes nueva: revisión nueva con los ítems que se importan después
+  const con = await pedir('POST', '/assignments', { token: admin, cuerpo: { ambienteId: amb.id, instructorId: andresId, jornada: 'noche', tipo: 'permanente', fechaInicio: hoy(), cuentaAntes: true } });
+  assert.equal(con.status, 201, JSON.stringify(con.datos));
+  assert.ok(con.datos.revisionInventarioId);
+  assert.notEqual(con.datos.revisionInventarioId, primera.revisionInventarioId);
+  assert.equal((await pedir('POST', `/environments/${amb.id}/inventory/import`, { token: admin, cuerpo: { nombre: 'ca.csv', archivo: cuentaAntes(3) } })).datos.nuevos, 1);
+  const rev = (await pedir('GET', `/inventory-reviews/${con.datos.revisionInventarioId}`, { token: andres })).datos;
+  assert.deepEqual([rev.tipo, rev.conteo.total, rev.conteo.pendientes], ['instructor', 3, 3]);
+  assert.match(rev.motivo, /cuenta antes nueva/);
+  assert.equal((await pedir('POST', '/inspections', { token: andres, cuerpo: { ambienteId: amb.id } })).datos.codigo, 'REVISION_INVENTARIO');
+  // El acta en Excel usa CONFORME
+  const acta = await pedir('GET', `/inventory-reviews/${rev.id}/export`, { token: andres });
+  assert.equal(acta.status, 200);
+  assert.ok(acta.tipo.includes('spreadsheetml'));
+  await pedir('POST', `/inventory-reviews/${rev.id}/cancel`, { token: admin, cuerpo: { motivo: 'Prueba automática' } });
 });

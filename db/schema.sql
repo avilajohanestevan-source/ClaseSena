@@ -478,7 +478,8 @@ CREATE TABLE plantillas_correo (
   CONSTRAINT fk_plantilla_user FOREIGN KEY (actualizado_por) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- ===================== Cuentadante y revisión del inventario =====================
+-- ===================== Cuenta antes y su revisión =====================
+-- (cuentadante = responsable de la cuenta antes, el inventario con que se entrega el ambiente)
 --
 -- El cuentadante es quien responde por el inventario del ambiente. Antes de
 -- recibirlo hay que revisar el inventario ítem por ítem (OK, faltante o

@@ -298,10 +298,13 @@ function rutaAsignacion(int $id): never
 /* ---------------- cambios (administrativo) ---------------- */
 
 /**
- * POST /assignments {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, fechas?, diasSemana?, motivo?, cuentadante?}
- * Un instructor que llega por primera vez al ambiente debe revisar su
- * inventario antes de su primera entrega; con cuentadante: true, además queda
- * como cuentadante al aceptar esa revisión (modulos/cuentadante.php).
+ * POST /assignments {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, fechas?, diasSemana?, motivo?, cuentadante?, cuentaAntes?}
+ * Un instructor que llega por primera vez al ambiente debe revisar si la
+ * cuenta antes es conforme antes de su primera entrega. Con cuentaAntes: true
+ * se le entrega una cuenta antes nueva (se importa después con
+ * /environments/{id}/inventory/import) y la revisa aunque ya conozca el
+ * ambiente; con cuentadante: true, además queda como responsable de la
+ * cuenta antes al aceptarla (modulos/cuentadante.php).
  *   → {asignacion, asignaciones, advertencias}
  * Con tipo "dia" y fechas: [aaaa-mm-dd, …] se asignan varios días sueltos de
  * una vez (una asignación por día); con "periodo", de fechaInicio a fechaFin;
@@ -348,8 +351,10 @@ function rutaCrearAsignacion(): never
         $creadas[] = $a;
     }
     $revision = !empty($d['cuentadante'])
-        ? crearRevision((int) $amb['id'], 'cuentadante', (int) $instructor['id'], (int) $u['id'], "Asignado como cuentadante · " . describirAsignacion($creadas[0]), (int) $creadas[0]['id'])
-        : crearRevision((int) $amb['id'], 'instructor', (int) $instructor['id'], (int) $u['id'], 'Asignación nueva · ' . describirAsignacion($creadas[0]), (int) $creadas[0]['id']);
+        ? crearRevision((int) $amb['id'], 'cuentadante', (int) $instructor['id'], (int) $u['id'], "Asignado como responsable de la cuenta antes · " . describirAsignacion($creadas[0]), (int) $creadas[0]['id'])
+        : null;
+    $revision ??= crearRevision((int) $amb['id'], 'instructor', (int) $instructor['id'], (int) $u['id'],
+        (!empty($d['cuentaAntes']) ? 'Asignación con cuenta antes nueva · ' : 'Asignación nueva · ') . describirAsignacion($creadas[0]), (int) $creadas[0]['id'], !empty($d['cuentaAntes']));
     $resumen = count($creadas) === 1 ? describirAsignacion($creadas[0])
         : "{$instructor['nombre']} · " . JORNADAS[$jornada] . ' · ' . count($creadas) . ' días: ' . implode(', ', array_column($creadas, 'fecha_inicio'));
     avisarInstructor((int) $instructor['id'], "Te asignaron al ambiente {$amb['codigo']}", $resumen . ' (' . HORARIO_JORNADA[$jornada] . ')');
@@ -470,8 +475,9 @@ function rutaReasignar(int $id): never
     );
     $nueva = buscarAsignacion($nuevaId);
     $revision = !empty($d['cuentadante'])
-        ? crearRevision((int) $a['environment_id'], 'cuentadante', (int) $nuevo['id'], (int) $u['id'], "Reasignado como cuentadante · $motivo", $nuevaId)
-        : crearRevision((int) $a['environment_id'], 'instructor', (int) $nuevo['id'], (int) $u['id'], "Reasignación · $motivo", $nuevaId);
+        ? crearRevision((int) $a['environment_id'], 'cuentadante', (int) $nuevo['id'], (int) $u['id'], "Reasignado como responsable de la cuenta antes · $motivo", $nuevaId)
+        : null;
+    $revision ??= crearRevision((int) $a['environment_id'], 'instructor', (int) $nuevo['id'], (int) $u['id'], "Reasignación · $motivo", $nuevaId, !empty($d['cuentaAntes']));
     $texto = "{$a['instructor_nombre']} → {$nuevo['nombre']} · " . JORNADAS[$a['jornada']] . " desde el $desde · $motivo";
     auditar('asignacion', (int) $a['id'], (int) $a['environment_id'], 'reasignada', $texto, (int) $u['id'], null,
         ['desde' => $desde, 'antes' => (int) $a['instructor_id'], 'despues' => (int) $nuevo['id'], 'nuevaAsignacionId' => $nuevaId, 'resultado' => $resultado]);

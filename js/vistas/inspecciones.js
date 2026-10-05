@@ -48,7 +48,7 @@ async function instructor(raiz, params) {
           h('span', { class: 'amb-opcion-datos' },
             h('strong', {}, a.nombre),
             h('span', { class: 'text-muted' }, [`${a.itemsTotal} ítems`, a.especialidad].filter(Boolean).join(' · ')),
-            revisionDe(a.id) ? h('span', { class: 'status-chip out' }, 'Inventario por revisar')
+            revisionDe(a.id) ? h('span', { class: 'status-chip out' }, 'Cuenta antes por revisar')
               : ocupado(a) ? h('span', { class: 'status-chip azul' }, `${ESTADOS_INSPECCION[ult.estado][0]} · ${ult.instructor}`)
               : hoy ? chipInspeccion(ult.estado) : h('span', { class: 'status-chip neutro' }, 'Sin revisión hoy')),
           h('span', { class: 'amb-opcion-marca', 'aria-hidden': 'true' }, icono('check'))));
@@ -58,7 +58,7 @@ async function instructor(raiz, params) {
     iniciar.disabled = !elegido;
     const a = ambientes.find((x) => x.id === elegido);
     const rev = a && revisionDe(a.id);
-    iniciar.lastChild.textContent = !a ? 'Ingresé' : rev ? `Revisar el inventario del ${a.codigo} primero` : `Ingresé al ${a.codigo} · iniciar revisión`;
+    iniciar.lastChild.textContent = !a ? 'Ingresé' : rev ? `Revisar la cuenta antes del ${a.codigo} primero` : `Ingresé al ${a.codigo} · iniciar revisión`;
   }
 
   async function arrancar() {
@@ -74,7 +74,7 @@ async function instructor(raiz, params) {
       location.hash = `#/inspeccion?id=${s.id}`;
     } catch (e) {
       if (e.codigo === 'REVISION_INVENTARIO' && revisionDe(elegido)) {
-        toast('aviso', 'Primero revisa el inventario', e.message, 8000);
+        toast('aviso', 'Primero revisa la cuenta antes', e.message, 8000);
         location.hash = `#/revision-inventario?id=${revisionDe(elegido).id}`;
         return;
       }

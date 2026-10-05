@@ -218,41 +218,48 @@ desde Laura) y un turno anulado en el 111.
 
 Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
 
-## Cuentadante y revisión del inventario
+## Cuenta antes y su revisión
 
-Cada ambiente tiene un **cuentadante**: quien responde por su inventario.
-Antes de recibir el inventario hay que **revisarlo ítem por ítem** y
-aceptarlo, como un acta de entrega:
+La **cuenta antes** es el inventario con que se entrega el ambiente (lo que
+tenía antes). Se **importa y exporta en Excel**, y quien recibe el ambiente
+—sobre todo el **instructor asignado**— tiene la responsabilidad de **revisar
+ítem por ítem si la cuenta antes es conforme** a lo que hay en el ambiente y
+aceptarla, como un acta de entrega:
 
-- **Al crear un ambiente** (*Ambientes → Nuevo ambiente*) se elige el
-  cuentadante (instructor, administrativo o almacén) y, opcionalmente, se sube
-  el **Excel con el inventario que tenía** (placa, descripción, serial,
-  categoría, valor…; acepta un encabezado arriba de los títulos y sin
-  categoría los ítems quedan en *Sin clasificar*). El cuentadante lo revisa y
-  queda como cuentadante al aceptarlo.
-- **Al cambiar el cuentadante** (*Editar ambiente*) o al **asignar un
-  instructor** marcando *Queda como cuentadante*, se abre la misma revisión;
-  hasta que la acepte responde el anterior (la tarjeta del ambiente muestra
-  *Laura → Rosa (revisando)*).
-- **Un instructor asignado por primera vez** al ambiente también revisa el
-  inventario: hasta aceptarlo **no puede hacer "Ingresé"** (la entrega diaria
-  responde `409 REVISION_INVENTARIO` y la app lo lleva a la revisión).
-- La revisión (*Revisión de inventario*, con insignia de pendientes): cada
-  ítem **OK**, **Faltante** o **Dañado** (con observación), escaneando la
-  pegatina (OK), con **Todo está bien** para los pendientes, o **descargando
-  el acta en Excel**, llenando la columna *revision* (OK, FALTANTE, DAÑADO;
-  con lista desplegable) y **subiéndola**. *Aceptar inventario* exige todo
-  revisado y una observación general si hay faltantes o dañados; los dañados
-  pasan a *Dañado*, todo queda en la trazabilidad de cada ítem y se avisa a
-  coordinación, administrativo, almacén y al cuentadante anterior.
-- **Excel del inventario del cuentadante** en *Editar ambiente*: descargar
-  (con el ambiente, el cuentadante, la fecha y el valor total arriba) y volver
-  a subir corregido (con vista previa); los ítems nuevos se suman a la
-  revisión pendiente. Administrativo y almacén ven todas las revisiones y
-  pueden anular una pendiente.
+- **Al asignar un instructor** (*Asignaciones → Nueva asignación*, o
+  *Editar ambiente → Instructores asignados → Asignar*) se puede **adjuntar el
+  Excel de la cuenta antes** (con vista previa). Se carga al asignar y el
+  instructor queda con la revisión pendiente, aunque ya conociera el ambiente.
+  Sin adjuntarla, el instructor que llega **por primera vez** al ambiente
+  también revisa la cuenta antes que haya.
+- Hasta aceptarla **no puede hacer "Ingresé"** (la entrega diaria responde
+  `409 REVISION_INVENTARIO` y la app lo lleva a la revisión).
+- La revisión (menú *Cuenta antes*, con insignia de pendientes): cada ítem
+  **Conforme**, **Faltante** o **Dañado** (con observación), escaneando la
+  pegatina (conforme), con **Todo está bien** para los pendientes, o
+  **descargando el acta en Excel**, llenando la columna *revision* (CONFORME,
+  FALTANTE, DAÑADO; con lista desplegable) y **subiéndola**. *Aceptar cuenta
+  antes* exige todo revisado y una observación general si hay faltantes o
+  dañados; los dañados pasan a *Dañado*, todo queda en la trazabilidad de
+  cada ítem y se avisa a coordinación, administrativo y almacén.
+- **Al crear un ambiente** se puede subir su cuenta antes y elegir el
+  **responsable de la cuenta antes** (instructor, administrativo o almacén);
+  en *Editar ambiente → Cuenta antes* se descarga (con el ambiente, el
+  responsable, la fecha y el valor total arriba) y se vuelve a subir
+  corregida. Acepta un encabezado arriba de los títulos, *placa*,
+  *descripción* y *valor*; sin categoría los ítems quedan en *Sin clasificar*.
+  Los ítems nuevos se suman a las revisiones pendientes.
+- Cambiar el responsable (o asignar marcando *Queda como responsable de la
+  cuenta antes*) abre la misma revisión; hasta que la acepte responde el
+  anterior (la tarjeta muestra *Laura → Rosa (revisando)*). Administrativo y
+  almacén ven todas las revisiones y pueden anular una pendiente.
 
-Demostración: **Rosa** (5050505050) tiene pendiente la revisión del **108**
-(la asignaron a la tarde) y la del **111** como cuentadante (hoy lo es Laura).
+En la base y en la API el responsable sigue llamándose `cuentadante`
+(`environments.cuentadante_id`, `cuentadanteId`).
+
+Demostración: **Rosa** (5050505050) tiene pendiente la cuenta antes del
+**108** (la asignaron a la tarde) y la del **111** como responsable (hoy lo
+es Laura).
 
 ## Inventario, pegatinas y carga masiva
 

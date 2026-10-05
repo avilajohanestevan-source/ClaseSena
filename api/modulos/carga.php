@@ -21,7 +21,7 @@
  */
 
 const COLUMNAS_CARGA = ['ambiente', 'codigo', 'nombre', 'categoria', 'serial', 'estado', 'familia', 'familia_nombre', 'familia_tipo', 'qr', 'valor'];
-/** Categoría de los ítems sin categoría en el inventario del cuentadante (se crea si no existe). */
+/** Categoría de los ítems sin categoría en la cuenta antes (se crea si no existe). */
 const CATEGORIA_SIN_CLASIFICAR = 'Sin clasificar';
 const MAX_FILAS_CARGA = 2000;
 
@@ -74,8 +74,8 @@ function leerTabla(string $ruta, string $nombreArchivo): array
  */
 function filasDeTabla(array $tabla, array $columnas, array $obligatorias, callable $normalizar, int $max = MAX_FILAS_CARGA): array
 {
-    // Los títulos pueden no estar en la primera fila (p. ej. el inventario del cuentadante
-    // exportado trae arriba el ambiente y el cuentadante): se busca la fila que los tenga.
+    // Los títulos pueden no estar en la primera fila (p. ej. la cuenta antes exportada
+    // trae arriba el ambiente y el responsable): se busca la fila que los tenga.
     $desplazamiento = 0;
     foreach (array_slice($tabla, 0, 15) as $n => $fila) {
         $t = array_map(fn($x) => $normalizar((string) $x), $fila ?? []);

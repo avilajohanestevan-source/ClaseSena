@@ -250,7 +250,7 @@ INSERT INTO p004 (documento, nombre, ficha, programa, estado, actualizado_por, a
          10, NOW() - INTERVAL 20 DAY
   FROM users u JOIN fichas f ON f.codigo = u.ficha WHERE u.rol = 'aprendiz';
 
--- ===================== Cuentadantes y revisiones de inventario =====================
+-- ===================== Cuenta antes: responsables y revisiones =====================
 -- Cada ambiente tiene su cuentadante (quien responde por el inventario). Los
 -- instructores de prueba ya revisaron el inventario de todos los ambientes.
 -- Rosa Quintero es nueva: la asignaron a la tarde del 108 (debe revisar su
@@ -271,8 +271,8 @@ INSERT INTO instructor_assignments (id, environment_id, instructor_id, jornada, 
 
 INSERT INTO revisiones_inventario (environment_id, tipo, responsable_id, cuentadante_anterior_id, asignacion_id, estado, motivo, creada_por, creada_en) VALUES
   (2, 'instructor',  23, NULL, 11,   'pendiente', 'Asignación nueva · tarde, sin tiempo definido', 10, NOW() - INTERVAL 1 HOUR),
-  (5, 'cuentadante', 23, 1,    NULL, 'pendiente', 'Cambio de cuentadante (antes Laura Gómez Patiño)', 10, NOW() - INTERVAL 50 MINUTE);
+  (5, 'cuentadante', 23, 1,    NULL, 'pendiente', 'Cambio de responsable de la cuenta antes (antes Laura Gómez Patiño)', 10, NOW() - INTERVAL 50 MINUTE);
 
 INSERT INTO notifications (user_id, tipo, titulo, detalle, created_at) VALUES
-  (23, 'revision_inventario', 'Revisa el inventario del ambiente 108', 'Antes de tu primera entrega del ambiente revisa su inventario.', NOW() - INTERVAL 1 HOUR),
-  (23, 'revision_inventario', 'Recibe el inventario del ambiente 111 como cuentadante', 'Quedarás como cuentadante cuando revises y aceptes el inventario.', NOW() - INTERVAL 50 MINUTE);
+  (23, 'revision_inventario', 'Revisa la cuenta antes del ambiente 108', 'Antes de tu primera entrega revisa si la cuenta antes es conforme a lo que hay en el ambiente.', NOW() - INTERVAL 1 HOUR),
+  (23, 'revision_inventario', 'Recibe la cuenta antes del ambiente 111 como responsable', 'Quedarás como responsable cuando revises que la cuenta antes es conforme y la aceptes.', NOW() - INTERVAL 50 MINUTE);

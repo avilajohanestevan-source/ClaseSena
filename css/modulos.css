@@ -755,7 +755,7 @@ button.asig-boton:hover{ border-color:var(--color-border-strong); background:var
 .instructor-fila .inv-fila-acciones{ grid-column:2 / -1; }
 @media (max-width: 599px){ .instructor-fila .reporte-chips{ grid-column:2; } }
 
-/* ================= Cuentadante y revisión del inventario ================= */
+/* ================= Cuenta antes y su revisión ================= */
 .inv-cuentadante-acciones{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .inv-cuentadante-acciones label.btn{ cursor:pointer; }
 .revisiones-lista{ display:grid; gap:12px; }

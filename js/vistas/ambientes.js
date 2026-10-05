@@ -17,6 +17,7 @@ import { estado } from '../estado.js';
 import { escanearEntrega } from '../ui/recibir.js';
 import { gestionarCatalogo } from '../ui/catalogo.js';
 import { crearGestorAsignaciones } from '../ui/asignaciones-ambiente.js';
+import { seccionCuentaAntes } from '../ui/cuenta-antes.js';
 import { ETIQUETA_JORNADA } from '../reglas.js';
 
 export async function render(raiz) {
@@ -99,9 +100,9 @@ export async function render(raiz) {
         !a.activo && h('span', { class: 'status-chip neutro' }, 'Inactivo')),
       h('dl', { class: 'amb-datos' },
         h('div', {}, h('dt', {}, 'Portero'), h('dd', {}, a.portero || 'Sin asignar')),
-        h('div', {}, h('dt', {}, 'Cuentadante'), h('dd', {}, a.cuentadante?.nombre || 'Sin cuentadante',
+        h('div', {}, h('dt', {}, 'Responsable cuenta antes'), h('dd', {}, a.cuentadante?.nombre || 'Sin responsable',
           a.cuentadantePendiente && h('a', { class: 'table-link amb-novedad', href: `#/revision-inventario?id=${a.cuentadantePendiente.revisionId}`,
-            title: 'Pasa a ser cuentadante cuando revise y acepte el inventario' }, ` → ${a.cuentadantePendiente.nombre.split(' ').slice(0, 2).join(' ')} (revisando)`))),
+            title: 'Pasa a ser responsable cuando revise que la cuenta antes es conforme y la acepte' }, ` → ${a.cuentadantePendiente.nombre.split(' ').slice(0, 2).join(' ')} (revisando)`))),
         h('div', {}, h('dt', {}, 'Inventario'), h('dd', {}, `${a.itemsTotal} ítems`, a.familiasTotal ? ` · ${a.familiasTotal} familia${a.familiasTotal === 1 ? '' : 's'}` : '',
           a.itemsNovedad ? h('span', { class: 'amb-novedad' }, ` · ${a.itemsNovedad} con novedad`) : '')),
         a.novedadesActivas ? h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Novedades permanentes'), h('dd', {},
@@ -139,20 +140,20 @@ export async function render(raiz) {
     const portero = h('select', { id: 'amb-portero' }, h('option', { value: '' }, 'Sin asignar'),
       porteros.map((p) => h('option', { value: p.id, selected: a?.porteroId === p.id }, p.nombre)));
     const activo = h('input', { type: 'checkbox', role: 'switch', checked: a ? a.activo : true });
-    // Cuentadante: responde por el inventario. El nuevo lo es cuando revisa y acepta el inventario.
+    // Responsable de la cuenta antes (environments.cuentadante_id): el nuevo lo es cuando la revisa y la acepta.
     const elegido = a?.cuentadantePendiente?.id ?? a?.cuentadante?.id;
     const grupo = (etiqueta, lista) => lista.length ? h('optgroup', { label: etiqueta }, lista.map((u) => h('option', { value: u.id, selected: u.id === elegido }, u.nombre))) : null;
-    const cuentadante = h('select', { id: 'amb-cuentadante' }, h('option', { value: '' }, a?.cuentadante ? 'Sin cambio' : 'Sin cuentadante'),
+    const cuentadante = h('select', { id: 'amb-cuentadante' }, h('option', { value: '' }, a?.cuentadante ? 'Sin cambio' : 'Sin responsable'),
       grupo('Instructores', instructores), grupo('Administrativos', administrativos), grupo('Almacén', almacen));
     const ayudaCuentadante = h('span', { class: 'field-hint' }, a?.cuentadantePendiente
-      ? `Hoy responde ${a.cuentadante?.nombre || 'nadie'}; ${a.cuentadantePendiente.nombre} lo será al aceptar la revisión del inventario.`
-      : 'Quien elijas revisa el inventario ítem por ítem y queda como cuentadante al aceptarlo.');
-    const inventarioCuentadante = seccionInventarioCuentadante(a);
+      ? `Hoy responde ${a.cuentadante?.nombre || 'nadie'}; ${a.cuentadantePendiente.nombre} lo será al aceptar la revisión de la cuenta antes.`
+      : 'Quien elijas revisa ítem por ítem si la cuenta antes es conforme y queda como responsable al aceptarla.');
+    const inventarioCuentadante = seccionCuentaAntes({ ambiente: a });
     const form = h('form', { class: 'form-grid', novalidate: true, onsubmit: (e) => { e.preventDefault(); enviar(); } },
       c('amb-codigo', 'Número del ambiente', codigo), c('amb-cap', 'Capacidad (aprendices)', capacidad),
       h('div', { class: 'full' }, c('amb-nombre', 'Nombre', nombre)),
       c('amb-esp', 'Especialidad', especialidad), c('amb-portero', 'Portero asignado', portero),
-      h('div', { class: 'full campo' }, h('label', { for: 'amb-cuentadante' }, 'Cuentadante (responde por el inventario)'), cuentadante, ayudaCuentadante),
+      h('div', { class: 'full campo' }, h('label', { for: 'amb-cuentadante' }, 'Responsable de la cuenta antes'), cuentadante, ayudaCuentadante),
       inventarioCuentadante.el,
       h('label', { class: 'interruptor full' }, activo, h('span', { class: 'interruptor-pista', 'aria-hidden': 'true' }), 'Ambiente activo (disponible para inspección)'),
       asignaciones.el);
@@ -179,13 +180,13 @@ export async function render(raiz) {
       guardar.disabled = true;
       try {
         const r = a ? await apiAmb.editarAmbiente(a.id, datos) : await apiAmb.crearAmbiente(datos);
-        // Ambiente nuevo: primero su inventario (Excel del cuentadante) y luego las asignaciones.
+        // Ambiente nuevo: primero su cuenta antes (Excel) y luego las asignaciones.
         const cargados = a ? null : await inventarioCuentadante.cargarPendiente(r.id);
         const asignadas = a ? 0 : await asignaciones.guardarPendientes(r.id);
         const cambio = datos.cuentadanteId && datos.cuentadanteId !== (a?.cuentadante?.id ?? null) && datos.cuentadanteId !== a?.cuentadantePendiente?.id;
         toast('exito', a ? 'Ambiente actualizado' : 'Ambiente creado', [`Ambiente ${datos.codigo}`,
-          cargados && `${cargados.nuevos + cargados.actualizados} ítems del inventario`, asignadas && `${asignadas} asignación(es) de instructores`,
-          cambio && `${cuentadante.selectedOptions[0].textContent} debe revisar y aceptar el inventario para quedar como cuentadante`].filter(Boolean).join(' · '), 9000);
+          cargados && `${cargados.nuevos + cargados.actualizados} ítems en la cuenta antes`, asignadas && `${asignadas} asignación(es) de instructores`,
+          cambio && `${cuentadante.selectedOptions[0].textContent} debe revisar y aceptar la cuenta antes para quedar como responsable`].filter(Boolean).join(' · '), 9000);
         guardado = true;
         cerrar();
         cargar();
@@ -193,63 +194,6 @@ export async function render(raiz) {
         if (e.codigo === 'DUPLICADO') errorCampo(codigo, e.message); else toast('error', 'No se guardó', e.message);
       } finally { guardar.disabled = false; }
     }
-  }
-
-  /**
-   * Inventario del cuentadante en Excel dentro del formulario. Ambiente que ya
-   * existe: descargar y cargar (con vista previa). Ambiente nuevo: el archivo
-   * se carga apenas se crea el ambiente (cargarPendiente).
-   */
-  function seccionInventarioCuentadante(a) {
-    let archivo = null;
-    const entrada = h('input', { type: 'file', id: 'amb-inv-archivo', accept: '.xlsx,.xls,.ods,.csv', onchange: () => elegir(entrada.files[0]) });
-    const resultado = h('div', { class: 'carga-resultado', 'aria-live': 'polite' });
-    const cargarBtn = h('button', { class: 'btn btn-primary btn-sm', type: 'button', hidden: true, onclick: () => importar(false) }, icono('subir'), h('span', {}, 'Cargar'));
-    const el = h('fieldset', { class: 'full asig-amb inv-cuentadante' },
-      h('legend', {}, icono('caja'), ' Inventario del cuentadante'),
-      h('p', { class: 'text-muted asig-amb-ayuda' }, a
-        ? `${a.itemsTotal} ítems. Descarga el Excel (con el ambiente, el cuentadante y el valor), corrígelo o complétalo y vuelve a subirlo. Los ítems nuevos se suman a la revisión pendiente.`
-        : 'Opcional: el Excel con el inventario que tenía el cuentadante (placa, descripción, serial, categoría, valor…). Se carga al crear el ambiente y el cuentadante lo revisa.'),
-      h('div', { class: 'inv-cuentadante-acciones' },
-        a && h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: async () => {
-          try { toast('exito', 'Excel descargado', await apiAmb.exportarInventarioCuentadante(a.id)); } catch (e) { toast('error', 'No se descargó', e.message); }
-        } }, icono('descargar'), 'Descargar Excel'),
-        h('label', { class: 'btn btn-outline btn-sm', for: 'amb-inv-archivo' }, icono('subir'), a ? 'Subir Excel' : 'Elegir Excel'), entrada, cargarBtn),
-      resultado);
-    entrada.hidden = true;
-
-    function elegir(f) {
-      if (!f) return;
-      if (f.size > 5 * 1024 * 1024) { vaciar(resultado, h('div', { class: 'banner error' }, 'El archivo supera 5 MB.')); return; }
-      const lector = new FileReader();
-      lector.onload = () => {
-        archivo = { nombre: f.name, archivo: lector.result };
-        if (a) importar(true);
-        else vaciar(resultado, h('p', { class: 'field-hint' }, `${f.name}: se carga al crear el ambiente.`));
-      };
-      lector.readAsDataURL(f);
-    }
-
-    async function importar(simular, ambienteId = a?.id) {
-      if (!archivo) return null;
-      cargarBtn.disabled = true;
-      vaciar(resultado, cargando(simular ? 'Leyendo el archivo…' : 'Cargando el inventario…'));
-      let r;
-      try { r = await apiAmb.importarInventarioCuentadante(ambienteId, { ...archivo, simular }); }
-      catch (e) { vaciar(resultado, h('div', { class: 'banner error' }, e.message)); cargarBtn.disabled = false; return null; }
-      const validas = r.nuevos + r.actualizados;
-      vaciar(resultado,
-        h('p', {}, h('strong', {}, simular ? 'Vista previa: ' : 'Cargado: '), `${r.nuevos} nuevos, ${r.actualizados} actualizados, ${r.sinCambios} sin cambios`,
-          r.familiasNuevas ? `, ${r.familiasNuevas} familias nuevas` : '', r.errores.length ? `, ${r.errores.length} con error` : '', '.'),
-        r.errores.length ? h('div', { class: 'banner error carga-errores' }, h('ul', {}, r.errores.slice(0, 20).map((e) => h('li', {}, `Fila ${e.fila}: ${e.mensaje}`)))) : null);
-      cargarBtn.hidden = !simular || !validas;
-      cargarBtn.disabled = false;
-      cargarBtn.lastChild.textContent = `Cargar ${validas} ítem(s)`;
-      if (!simular) { archivo = null; cargarBtn.hidden = true; }
-      return r;
-    }
-
-    return { el, cargarPendiente: (id) => importar(false, id) };
   }
 
   async function borrar(a) {

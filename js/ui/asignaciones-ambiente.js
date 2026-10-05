@@ -13,6 +13,7 @@ import { h, icono, vaciar, errorCampo } from './dom.js';
 import { toast } from './avisos.js';
 import { cargando } from './componentes.js';
 import { apiAmb } from '../api/ambientes.js';
+import { seccionCuentaAntes } from './cuenta-antes.js';
 import { crearFechasAsignacion, modoDe } from './fechas-asignacion.js';
 import { fechaIso, JORNADAS, ETIQUETA_JORNADA, MODOS_ASIGNACION, validarAsignacion, describirDiasSemana } from '../reglas.js';
 
@@ -29,11 +30,24 @@ export function describirAsignacion(a) {
   return `Desde el ${dia(a.fechaInicio)}${solo}`;
 }
 
-/** Aviso tras asignar: si el instructor es nuevo en el ambiente (o queda como cuentadante) debe revisar el inventario. */
-export function avisoRevisionInventario(r, nombre, cuentadante) {
+/** Aviso tras asignar: el instructor debe revisar si la cuenta antes es conforme (nuevo en el ambiente, cuenta antes nueva o responsable). */
+export function avisoRevisionInventario(r, nombre, cuentadante, cargada) {
   if (!r?.revisionInventarioId) return;
-  toast('info', cuentadante ? `${nombre} recibirá el inventario como cuentadante` : `${nombre} debe revisar el inventario`,
-    cuentadante ? 'Queda como cuentadante cuando revise y acepte el inventario del ambiente.' : 'Es su primera vez en el ambiente: revisará el inventario antes de su primera entrega.', 9000);
+  toast('info', cuentadante ? `${nombre} recibirá la cuenta antes como responsable` : `${nombre} debe revisar la cuenta antes`,
+    (cargada ? `Se cargaron ${cargada.nuevos + cargada.actualizados} ítems. ` : '')
+    + (cuentadante ? 'Queda como responsable cuando revise que la cuenta antes es conforme y la acepte.' : 'Antes de su primera entrega revisará si la cuenta antes es conforme a lo que hay en el ambiente.'), 9000);
+}
+
+/**
+ * Asigna y, si se adjuntó, carga la cuenta antes; el instructor queda con su
+ * revisión pendiente (cuentaAntes: true la abre aunque ya conozca el ambiente).
+ */
+export async function asignarConCuentaAntes(datos, cuentaAntes) {
+  const conArchivo = cuentaAntes?.tieneArchivo();
+  const r = await apiAmb.crearAsignacion({ ...datos, cuentaAntes: conArchivo || undefined });
+  const cargada = conArchivo ? await cuentaAntes.cargarPendiente(datos.ambienteId) : null;
+  if (conArchivo && !cargada) toast('error', 'Se asignó, pero no se cargó la cuenta antes', 'Súbela desde Editar ambiente → Cuenta antes.');
+  return { r, cargada };
 }
 
 /**
@@ -108,16 +122,19 @@ export function crearGestorAsignaciones({ ambiente, instructores }) {
     const desde = h('input', { type: 'date', id: id('desde'), value: hoy, min: hoy, max: a?.fechaFin || undefined });
     const campoDesde = empezo && a.tipo !== 'dia' ? campo('desde', 'Si cambias el instructor, desde', desde) : null;
     const motivo = h('input', { type: 'text', id: id('motivo'), maxlength: 300, value: a?.motivo || '', placeholder: 'Ficha, competencia o motivo (opcional)' });
-    // Solo al asignar: el instructor puede quedar además como cuentadante (revisa el inventario y lo acepta).
+    // Solo al asignar: la cuenta antes que recibe (Excel) y si queda además como responsable.
     const esCuentadante = !a && h('input', { type: 'checkbox', id: id('cuentadante') });
+    const cuentaAntes = !a && ambiente ? seccionCuentaAntes({ ambiente, prefijo: id('cuenta-antes'), alGuardar: true,
+      ayuda: 'Opcional: el Excel con la cuenta antes que recibe el instructor. Se carga al asignar y él revisa si es conforme a lo que hay en el ambiente antes de su primera entrega.' }) : null;
 
     const guardar = h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => enviar() }, icono('check'), a ? 'Guardar cambios' : (ambiente ? 'Asignar' : 'Agregar'));
     const caja = h('div', { class: 'asig-amb-editor' },
       h('div', { class: 'form-grid' }, campo('jornada', 'Jornada', jornada), campo('inst', a && empezo ? 'Instructor (para cambiarlo se reasigna)' : 'Instructor', instructor), campoDesde),
       fechas.el,
       campo('motivo', 'Motivo', motivo),
+      cuentaAntes?.el,
       esCuentadante && h('label', { class: 'interruptor' }, esCuentadante, h('span', { class: 'interruptor-pista', 'aria-hidden': 'true' }),
-        'Queda como cuentadante del ambiente (revisa y acepta el inventario)'),
+        'Queda como responsable de la cuenta antes (la revisa y la acepta)'),
       empezo && h('p', { class: 'text-muted asig-amb-ayuda' }, 'Esta asignación ya empezó: se conserva su fecha de inicio y los días anteriores quedan con quien los tuvo.'),
       h('div', { class: 'asig-amb-botones' },
         h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: () => { editando = null; pintar(); } }, 'Cancelar'), guardar));
@@ -148,9 +165,9 @@ export function crearGestorAsignaciones({ ambiente, instructores }) {
       try {
         let advertencias = [];
         if (!a) {
-          const r = await apiAmb.crearAsignacion(datos);
+          const { r, cargada } = await asignarConCuentaAntes(datos, cuentaAntes);
           advertencias = r.advertencias;
-          avisoRevisionInventario(r, nombre, datos.cuentadante);
+          avisoRevisionInventario(r, nombre, datos.cuentadante, cargada);
           toast('exito', 'Instructor asignado', `${nombre} · ${ETIQUETA_JORNADA[datos.jornada]} · ${r.asignaciones.length > 1 ? `${r.asignaciones.length} días` : describirAsignacion(r.asignacion)}`);
         } else {
           let actual = a;

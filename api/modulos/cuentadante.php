@@ -1,24 +1,26 @@
 <?php
 /**
- * Cuentadante del ambiente y revisión del inventario (acta de entrega).
+ * Cuenta antes del ambiente y su revisión (acta de entrega).
  *
- * El cuentadante responde por el inventario del ambiente. Antes de recibirlo
- * hay que revisarlo ítem por ítem (OK, faltante o dañado) y aceptarlo:
- *   · tipo cuentadante: al crear el ambiente con un cuentadante, al cambiarlo
- *     en "Editar ambiente" o al asignar un instructor marcado como
- *     cuentadante. environments.cuentadante_id cambia solo cuando el nuevo
- *     acepta (hasta entonces responde el anterior);
- *   · tipo instructor: un instructor asignado por primera vez al ambiente.
+ * La cuenta antes es el inventario con que se entrega el ambiente: se importa
+ * y exporta en Excel (/environments/{id}/inventory/…). Quien recibe el
+ * ambiente revisa ítem por ítem si la cuenta antes es conforme a lo que hay
+ * (conforme, faltante o dañado) y la acepta:
+ *   · tipo instructor: un instructor asignado por primera vez al ambiente, o
+ *     al que se le asigna con una cuenta antes nueva (cuentaAntes: true);
+ *   · tipo cuentadante (en pantalla, "responsable de la cuenta antes"): al
+ *     crear el ambiente con un responsable, al cambiarlo en "Editar ambiente"
+ *     o al asignar un instructor marcado como responsable.
+ *     environments.cuentadante_id cambia solo cuando el nuevo acepta.
  * Mientras tenga una revisión pendiente en el ambiente, esa persona no puede
  * iniciar la entrega diaria ("Ingresé" → 409 REVISION_INVENTARIO).
  *
- * El inventario del cuentadante se exporta e importa en Excel
- * (/environments/{id}/inventory/…) y el acta de la revisión también: se
- * descarga, se llena la columna "revision" (OK, FALTANTE, DAÑADO) y se sube.
+ * El acta de la revisión también va en Excel: se descarga, se llena la
+ * columna "revision" (CONFORME, FALTANTE, DAÑADO) y se sube.
  */
 
 const ESTADOS_REVISION_ITEM = ['pendiente', 'ok', 'faltante', 'danado'];
-const ETIQUETA_REVISION = ['pendiente' => 'PENDIENTE', 'ok' => 'OK', 'faltante' => 'FALTANTE', 'danado' => 'DAÑADO'];
+const ETIQUETA_REVISION = ['pendiente' => 'PENDIENTE', 'ok' => 'CONFORME', 'faltante' => 'FALTANTE', 'danado' => 'DAÑADO'];
 const COLUMNAS_ACTA = ['codigo', 'nombre', 'serial', 'categoria', 'familia', 'valor', 'estado', 'revision', 'observacion'];
 
 const SQL_REVISIONES = "SELECT r.*, e.codigo AS amb_codigo, e.nombre AS amb_nombre, e.cuentadante_id AS amb_cuentadante_id,
@@ -57,7 +59,7 @@ function revisionPublica(array $r): array
 function buscarRevision(int $id): array
 {
     $r = fila(SQL_REVISIONES . ' WHERE r.id = ?', [$id]);
-    if (!$r) fallar(404, 'La revisión de inventario no existe.', 'NO_ENCONTRADO');
+    if (!$r) fallar(404, 'La revisión de la cuenta antes no existe.', 'NO_ENCONTRADO');
     $u = usuario();
     if ((int) $r['responsable_id'] !== (int) $u['id'] && !in_array($u['rol'], ROLES_INVENTARIO, true)) fallar(403, 'Esa revisión es de otra persona.', 'PERMISO');
     return $r;
@@ -86,23 +88,27 @@ function sincronizarRevision(array $r): void
 
 /**
  * Crea la revisión que corresponda. Devuelve su id, o null si no hace falta:
- *   instructor  si ya revisó (o tiene pendiente) el inventario de este ambiente;
- *   cuentadante si ya es el cuentadante. Una revisión de cuentadante nueva
+ *   instructor  si ya revisó (o tiene pendiente) la cuenta antes de este
+ *               ambiente, salvo $nuevaCuentaAntes (se le asigna con una cuenta
+ *               antes nueva: la revisa aunque ya conozca el ambiente);
+ *   cuentadante si ya es el responsable. Una revisión de responsable nueva
  *               anula la otra pendiente del mismo ambiente.
  */
-function crearRevision(int $ambienteId, string $tipo, int $responsableId, ?int $creadaPor, string $motivo, ?int $asignacionId = null): ?int
+function crearRevision(int $ambienteId, string $tipo, int $responsableId, ?int $creadaPor, string $motivo, ?int $asignacionId = null, bool $nuevaCuentaAntes = false): ?int
 {
     $amb = fila('SELECT * FROM environments WHERE id = ?', [$ambienteId]);
-    if ($tipo === 'instructor') {
+    if ($tipo === 'instructor' && $nuevaCuentaAntes) {
+        if ($ya = revisionPendiente($ambienteId, $responsableId)) return (int) $ya['id'];
+    } elseif ($tipo === 'instructor') {
         if ((int) $amb['cuentadante_id'] === $responsableId) return null;
         if (fila("SELECT id FROM revisiones_inventario WHERE environment_id = ? AND responsable_id = ? AND estado IN ('pendiente', 'aceptada') LIMIT 1", [$ambienteId, $responsableId])) return null;
     } else {
         if ((int) $amb['cuentadante_id'] === $responsableId) return null;
         if ($ya = fila("SELECT id FROM revisiones_inventario WHERE environment_id = ? AND tipo = 'cuentadante' AND responsable_id = ? AND estado = 'pendiente'", [$ambienteId, $responsableId])) return (int) $ya['id'];
-        consulta("UPDATE revisiones_inventario SET estado = 'anulada', cerrada_por = ?, cerrada_en = NOW(), observaciones = 'Reemplazada por otro cambio de cuentadante'
+        consulta("UPDATE revisiones_inventario SET estado = 'anulada', cerrada_por = ?, cerrada_en = NOW(), observaciones = 'Reemplazada por otro cambio de responsable de la cuenta antes'
                   WHERE environment_id = ? AND tipo = 'cuentadante' AND estado = 'pendiente'", [$creadaPor, $ambienteId]);
-        // Un instructor que pasa a cuentadante no necesita además la revisión de instructor.
-        consulta("UPDATE revisiones_inventario SET estado = 'anulada', cerrada_por = ?, cerrada_en = NOW(), observaciones = 'Incluida en la revisión como cuentadante'
+        // Un instructor que pasa a responsable no necesita además la revisión de instructor.
+        consulta("UPDATE revisiones_inventario SET estado = 'anulada', cerrada_por = ?, cerrada_en = NOW(), observaciones = 'Incluida en la revisión como responsable de la cuenta antes'
                   WHERE environment_id = ? AND tipo = 'instructor' AND responsable_id = ? AND estado = 'pendiente'", [$creadaPor, $ambienteId, $responsableId]);
     }
     $id = insertar('INSERT INTO revisiones_inventario (environment_id, tipo, responsable_id, cuentadante_anterior_id, asignacion_id, motivo, creada_por, creada_en)
@@ -110,8 +116,9 @@ function crearRevision(int $ambienteId, string $tipo, int $responsableId, ?int $
         [$ambienteId, $tipo, $responsableId, $tipo === 'cuentadante' ? ($amb['cuentadante_id'] !== null ? (int) $amb['cuentadante_id'] : null) : null, $asignacionId, mb_substr($motivo, 0, 300), $creadaPor]);
     sincronizarRevision(fila('SELECT * FROM revisiones_inventario WHERE id = ?', [$id]));
     notificar($responsableId, 'revision_inventario',
-        $tipo === 'cuentadante' ? "Recibe el inventario del ambiente {$amb['codigo']} como cuentadante" : "Revisa el inventario del ambiente {$amb['codigo']}",
-        ($tipo === 'cuentadante' ? 'Quedarás como cuentadante cuando revises y aceptes el inventario.' : 'Antes de tu primera entrega del ambiente revisa su inventario.') . " · $motivo", null);
+        $tipo === 'cuentadante' ? "Recibe la cuenta antes del ambiente {$amb['codigo']} como responsable" : "Revisa la cuenta antes del ambiente {$amb['codigo']}",
+        ($tipo === 'cuentadante' ? 'Quedarás como responsable cuando revises que la cuenta antes es conforme y la aceptes.'
+            : 'Antes de tu primera entrega revisa si la cuenta antes es conforme a lo que hay en el ambiente.') . " · $motivo", null);
     return $id;
 }
 
@@ -163,7 +170,7 @@ function revisionEditable(int $id): array
 {
     $u = usuario();
     $r = buscarRevision($id);
-    if ((int) $r['responsable_id'] !== (int) $u['id']) fallar(403, "Solo {$r['responsable_nombre']} puede revisar este inventario.", 'PERMISO');
+    if ((int) $r['responsable_id'] !== (int) $u['id']) fallar(403, "Solo {$r['responsable_nombre']} puede revisar esta cuenta antes.", 'PERMISO');
     if ($r['estado'] !== 'pendiente') fallar(409, 'La revisión ya se cerró.', 'ESTADO');
     sincronizarRevision($r);
     return $r;
@@ -205,40 +212,40 @@ function rutaMarcarRevision(int $id): never
 
 /**
  * POST /inventory-reviews/{id}/accept {observaciones?}: con todo revisado, la
- * persona recibe el inventario. Si es de cuentadante, queda como cuentadante.
+ * persona recibe la cuenta antes. Si es de responsable, queda como responsable.
  * Los dañados pasan a "Dañado"; todo queda en la trazabilidad de cada ítem y
- * se avisa a coordinación, administrativo y almacén (y al cuentadante anterior).
+ * se avisa a coordinación, administrativo y almacén (y al responsable anterior).
  */
 function rutaAceptarRevision(int $id): never
 {
     $u = usuario();
     $r = revisionEditable($id);
     $r = fila(SQL_REVISIONES . ' WHERE r.id = ?', [$id]);
-    if ((int) $r['total'] === 0) fallar(422, 'El ambiente no tiene inventario para revisar. Pide a almacén que lo cargue.', 'SIN_INVENTARIO');
+    if ((int) $r['total'] === 0) fallar(422, 'El ambiente no tiene cuenta antes para revisar. Pide a almacén que la cargue.', 'SIN_INVENTARIO');
     if ((int) $r['pendientes']) fallar(422, "Faltan {$r['pendientes']} ítem(s) por revisar.", 'REVISION_INCOMPLETA');
     $observaciones = texto(cuerpo(), 'observaciones', 500, false, 'las observaciones');
     $novedades = (int) $r['faltantes'] + (int) $r['danados'];
     if ($novedades && !$observaciones) fallar(422, 'Hay ítems faltantes o dañados: escribe una observación general del acta.', 'VALIDACION');
 
     db()->begin_transaction();
-    $quien = $r['tipo'] === 'cuentadante' ? 'como cuentadante' : 'como instructor';
+    $quien = $r['tipo'] === 'cuentadante' ? 'como responsable' : 'como instructor';
     foreach (filas("SELECT * FROM revision_inventario_items WHERE revision_id = ? AND estado IN ('faltante', 'danado')", [$id]) as $x) {
         if ($x['estado'] === 'danado') consulta("UPDATE inventory_items SET estado = 'danado' WHERE id = ? AND estado = 'operativo'", [(int) $x['inventory_item_id']]);
-        historial((int) $x['inventory_item_id'], 'estado', "Revisión de inventario #$id ($quien, {$u['nombre']}): " . ETIQUETA_REVISION[$x['estado']] . ($x['observacion'] ? " · {$x['observacion']}" : ''), (int) $u['id']);
+        historial((int) $x['inventory_item_id'], 'estado', "Revisión de la cuenta antes #$id ($quien, {$u['nombre']}): " . ETIQUETA_REVISION[$x['estado']] . ($x['observacion'] ? " · {$x['observacion']}" : ''), (int) $u['id']);
     }
     $resumen = ['total' => (int) $r['total'], 'ok' => (int) $r['ok'], 'faltantes' => (int) $r['faltantes'], 'danados' => (int) $r['danados']];
     consulta("UPDATE revisiones_inventario SET estado = 'aceptada', observaciones = ?, resumen = ?, cerrada_por = ?, cerrada_en = NOW() WHERE id = ?",
         [$observaciones, json_encode($resumen), (int) $u['id'], $id]);
     if ($r['tipo'] === 'cuentadante') consulta('UPDATE environments SET cuentadante_id = ? WHERE id = ?', [(int) $u['id'], (int) $r['environment_id']]);
-    $detalle = "{$r['total']} ítems: {$r['ok']} OK" . ($r['faltantes'] ? ", {$r['faltantes']} faltante(s)" : '') . ($r['danados'] ? ", {$r['danados']} dañado(s)" : '') . ($observaciones ? " · $observaciones" : '');
-    $titulo = $r['tipo'] === 'cuentadante' ? "{$u['nombre']} es ahora cuentadante del ambiente {$r['amb_codigo']}" : "{$u['nombre']} revisó el inventario del ambiente {$r['amb_codigo']}";
+    $detalle = "{$r['total']} ítems: {$r['ok']} conformes" . ($r['faltantes'] ? ", {$r['faltantes']} faltante(s)" : '') . ($r['danados'] ? ", {$r['danados']} dañado(s)" : '') . ($observaciones ? " · $observaciones" : '');
+    $titulo = $r['tipo'] === 'cuentadante' ? "{$u['nombre']} es ahora responsable de la cuenta antes del ambiente {$r['amb_codigo']}" : "{$u['nombre']} revisó la cuenta antes del ambiente {$r['amb_codigo']}";
     if ($r['tipo'] === 'cuentadante' || $novedades) notificarAdministrativos('revision_inventario', $titulo, $detalle, null, null, (int) $u['id']);
-    if ($r['cuentadante_anterior_id']) notificar((int) $r['cuentadante_anterior_id'], 'revision_inventario', $titulo, "Entregaste el inventario · $detalle", null);
+    if ($r['cuentadante_anterior_id']) notificar((int) $r['cuentadante_anterior_id'], 'revision_inventario', $titulo, "Entregaste la cuenta antes · $detalle", null);
     db()->commit();
     responder(detalleRevision(buscarRevision($id)));
 }
 
-/** POST /inventory-reviews/{id}/cancel {motivo} (administrativo o almacén): la anula sin cambiar al cuentadante. */
+/** POST /inventory-reviews/{id}/cancel {motivo} (administrativo o almacén): la anula sin cambiar al responsable. */
 function rutaAnularRevision(int $id): never
 {
     $u = exigirRol(...ROLES_INVENTARIO);
@@ -246,7 +253,7 @@ function rutaAnularRevision(int $id): never
     if ($r['estado'] !== 'pendiente') fallar(409, 'La revisión ya se cerró.', 'ESTADO');
     $motivo = texto(cuerpo(), 'motivo', 300, true, 'el motivo');
     consulta("UPDATE revisiones_inventario SET estado = 'anulada', observaciones = ?, cerrada_por = ?, cerrada_en = NOW() WHERE id = ?", [$motivo, (int) $u['id'], $id]);
-    notificar((int) $r['responsable_id'], 'revision_inventario', "Se anuló la revisión de inventario del ambiente {$r['amb_codigo']}", "$motivo ({$u['nombre']})", null);
+    notificar((int) $r['responsable_id'], 'revision_inventario', "Se anuló la revisión de la cuenta antes del ambiente {$r['amb_codigo']}", "$motivo ({$u['nombre']})", null);
     responder(revisionPublica(fila(SQL_REVISIONES . ' WHERE r.id = ?', [$id])));
 }
 
@@ -290,9 +297,9 @@ function enviarExcel($libro, string $nombre): never
 }
 
 /**
- * GET /environments/{id}/inventory/export (personal): inventario del
- * cuentadante en Excel. Arriba el ambiente, el cuentadante y la fecha; debajo
- * las columnas de la carga masiva (se puede editar y volver a subir).
+ * GET /environments/{id}/inventory/export (personal): cuenta antes en Excel.
+ * Arriba el ambiente, el responsable y la fecha; debajo las columnas de la
+ * carga masiva (se puede editar y volver a subir).
  */
 function rutaExportarInventarioCuentadante(int $ambienteId): never
 {
@@ -303,10 +310,10 @@ function rutaExportarInventarioCuentadante(int $ambienteId): never
     $items = filas(SQL_ITEMS . " WHERE i.environment_id = ? AND i.estado <> 'baja' ORDER BY c.nombre, i.codigo", [$ambienteId]);
     $libro = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
     $hoja = $libro->getActiveSheet();
-    $hoja->setTitle('Inventario del cuentadante');
-    $cab = hojaConEncabezado($hoja, 'Inventario del cuentadante · SENA', [
+    $hoja->setTitle('Cuenta antes');
+    $cab = hojaConEncabezado($hoja, 'Cuenta antes del ambiente · SENA', [
         'Ambiente' => "{$amb['codigo']} · {$amb['nombre']}",
-        'Cuentadante' => $amb['cuentadante'] ? "{$amb['cuentadante']} (CC {$amb['cuentadante_doc']})" : 'Sin cuentadante',
+        'Responsable' => $amb['cuentadante'] ? "{$amb['cuentadante']} (CC {$amb['cuentadante_doc']})" : 'Sin responsable',
         'Fecha' => date('Y-m-d H:i'),
         'Ítems' => count($items),
         'Valor total' => number_format(array_sum(array_map(fn($i) => (float) $i['valor'], $items)), 0, ',', '.'),
@@ -314,12 +321,12 @@ function rutaExportarInventarioCuentadante(int $ambienteId): never
         array_map(fn($i) => [$i['codigo'], $i['nombre'], $i['serial'], $i['categoria'], ETIQUETA_ESTADO[$i['estado']], $i['familia_codigo'], $i['familia_nombre'],
             $i['familia_tipo'], $i['qr_value'], $i['valor'] !== null ? (float) $i['valor'] : null], $items));
     $hoja->getStyle('J' . ($cab + 1) . ':J' . ($cab + count($items) + 1))->getNumberFormat()->setFormatCode('#,##0');
-    enviarExcel($libro, "inventario-cuentadante-{$amb['codigo']}-" . date('Y-m-d') . '.xlsx');
+    enviarExcel($libro, "cuenta-antes-{$amb['codigo']}-" . date('Y-m-d') . '.xlsx');
 }
 
 /**
  * POST /environments/{id}/inventory/import (administrativo y almacén):
- * inventario del cuentadante desde Excel/CSV, todo para este ambiente
+ * cuenta antes desde Excel/CSV, todo para este ambiente
  * (columna ambiente opcional). Columnas como la carga masiva; acepta "placa"
  * y "descripción", y "valor". Sin categoría queda en "Sin clasificar".
  * Si hay una revisión de inventario pendiente, los ítems nuevos se suman a ella.
@@ -335,9 +342,9 @@ function rutaImportarInventarioCuentadante(int $ambienteId): never
     unset($f);
     // Sin categoría, los ítems quedan en "Sin clasificar" (se crea la primera vez; antes de consultar el catálogo).
     if (!fila('SELECT id FROM inventory_categories WHERE nombre = ?', [CATEGORIA_SIN_CLASIFICAR])) {
-        insertar('INSERT INTO inventory_categories (nombre, descripcion) VALUES (?, ?)', [CATEGORIA_SIN_CLASIFICAR, 'Ítems del inventario del cuentadante sin categoría']);
+        insertar('INSERT INTO inventory_categories (nombre, descripcion) VALUES (?, ?)', [CATEGORIA_SIN_CLASIFICAR, 'Ítems de la cuenta antes sin categoría']);
     }
-    $r = importarInventario($filas, (int) $u['id'], $simular, "inventario del cuentadante: $nombre", CATEGORIA_SIN_CLASIFICAR);
+    $r = importarInventario($filas, (int) $u['id'], $simular, "cuenta antes: $nombre", CATEGORIA_SIN_CLASIFICAR);
     if (!$simular) foreach (filas("SELECT * FROM revisiones_inventario WHERE environment_id = ? AND estado = 'pendiente'", [$ambienteId]) as $rev) sincronizarRevision($rev);
     responder($r);
 }
@@ -349,32 +356,32 @@ function rutaExportarRevision(int $id): never
     $d = detalleRevision(buscarRevision($id));
     $libro = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
     $hoja = $libro->getActiveSheet();
-    $hoja->setTitle('Revisión de inventario');
-    $cab = hojaConEncabezado($hoja, 'Acta de revisión de inventario · SENA', [
-        'Revisión' => "#{$d['id']} · " . ($d['tipo'] === 'cuentadante' ? 'entrega al cuentadante' : 'instructor nuevo') . " · {$d['estado']}",
+    $hoja->setTitle('Revisión cuenta antes');
+    $cab = hojaConEncabezado($hoja, 'Acta de revisión de la cuenta antes · SENA', [
+        'Revisión' => "#{$d['id']} · " . ($d['tipo'] === 'cuentadante' ? 'entrega al responsable' : 'instructor') . " · {$d['estado']}",
         'Ambiente' => "{$d['ambiente']['codigo']} · {$d['ambiente']['nombre']}",
         'Recibe' => $d['responsable']['nombre'],
         'Entrega' => $d['cuentadanteAnterior']['nombre'] ?? '—',
         'Fecha' => date('Y-m-d H:i'),
-        'Instrucciones' => 'En "revision" escribe OK, FALTANTE o DAÑADO (con observación) y sube el archivo en la revisión.',
+        'Instrucciones' => '¿La cuenta antes es conforme a lo que hay en el ambiente? En "revision" escribe CONFORME, FALTANTE o DAÑADO (con observación) y sube el archivo.',
     ], COLUMNAS_ACTA, array_map(fn($i) => [$i['codigo'], $i['nombre'], $i['serial'], $i['categoria'], $i['familia']['codigo'] ?? null, $i['valor'],
         ETIQUETA_ESTADO[$i['estadoItem']], ETIQUETA_REVISION[$i['revision']], $i['observacion']], $d['items']));
     // Lista desplegable en la columna "revision".
     $ultima = $cab + max(1, count($d['items']));
     for ($f = $cab + 1; $f <= $ultima; $f++) {
         $v = $hoja->getCell("H$f")->getDataValidation();
-        $v->setType('list')->setAllowBlank(true)->setShowDropDown(true)->setFormula1('"OK,FALTANTE,DAÑADO,PENDIENTE"');
+        $v->setType('list')->setAllowBlank(true)->setShowDropDown(true)->setFormula1('"CONFORME,FALTANTE,DAÑADO,PENDIENTE"');
     }
     $hoja->getStyle('F' . ($cab + 1) . ":F$ultima")->getNumberFormat()->setFormatCode('#,##0');
-    enviarExcel($libro, "revision-inventario-{$d['ambiente']['codigo']}-{$d['id']}.xlsx");
+    enviarExcel($libro, "revision-cuenta-antes-{$d['ambiente']['codigo']}-{$d['id']}.xlsx");
 }
 
-/** "ok", "Bien", "faltante", "No está", "dañado", "malo" → estado; vacío → null (no cambia). */
+/** "conforme", "ok", "Bien", "faltante", "No está", "dañado", "malo" → estado; vacío → null (no cambia). */
 function revisionDeCarga(string $v): ?string
 {
     $k = claveTexto($v);
     if ($k === '') return null;
-    return ['ok' => 'ok', 'bien' => 'ok', 'si' => 'ok', 'x' => 'ok', 'faltante' => 'faltante', 'falta' => 'faltante', 'noesta' => 'faltante',
+    return ['ok' => 'ok', 'conforme' => 'ok', 'bien' => 'ok', 'si' => 'ok', 'x' => 'ok', 'faltante' => 'faltante', 'falta' => 'faltante', 'noesta' => 'faltante',
             'danado' => 'danado', 'dano' => 'danado', 'malo' => 'danado', 'pendiente' => 'pendiente'][$k] ?? 'invalido';
 }
 
@@ -394,7 +401,7 @@ function rutaImportarRevision(int $id): never
         if (!$x) { $res['errores'][] = ['fila' => $f['fila'], 'mensaje' => "El código \"{$f['codigo']}\" no está en esta revisión."]; continue; }
         $estado = revisionDeCarga($f['revision'] ?? '');
         if ($estado === null) { $res['sinCambios']++; continue; }
-        if ($estado === 'invalido') { $res['errores'][] = ['fila' => $f['fila'], 'mensaje' => "Revisión \"{$f['revision']}\" no válida: OK, FALTANTE o DAÑADO."]; continue; }
+        if ($estado === 'invalido') { $res['errores'][] = ['fila' => $f['fila'], 'mensaje' => "Revisión \"{$f['revision']}\" no válida: CONFORME, FALTANTE o DAÑADO."]; continue; }
         $obs = mb_substr(trim($f['observacion'] ?? ''), 0, 300) ?: null;
         if (in_array($estado, ['faltante', 'danado'], true) && !$obs) { $res['errores'][] = ['fila' => $f['fila'], 'mensaje' => "{$x['codigo']}: escribe la observación de lo que falta o del daño."]; continue; }
         if ($x['estado'] === $estado && (string) $x['observacion'] === (string) $obs) { $res['sinCambios']++; continue; }

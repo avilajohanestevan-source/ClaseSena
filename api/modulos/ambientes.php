@@ -128,7 +128,7 @@ function cuentadanteElegido(array $d): ?int
     $id = entero($d, 'cuentadanteId', false);
     if ($id === null) return null;
     if (!fila("SELECT id FROM users WHERE id = ? AND activo = 1 AND rol IN ('instructor', 'administrativo', 'almacen')", [$id])) {
-        fallar(422, 'El cuentadante debe ser un instructor, un administrativo o almacén activo.', 'VALIDACION');
+        fallar(422, 'El responsable de la cuenta antes debe ser un instructor, un administrativo o almacén activo.', 'VALIDACION');
     }
     return $id;
 }
@@ -165,7 +165,7 @@ function rutaEditarAmbiente(int $id): never
     consulta('UPDATE environments SET codigo = ?, nombre = ?, capacidad_aprendices = ?, especialidad_id = ?, portero_id = ?, activo = ? WHERE id = ?', [...$v, $id]);
     // Cambio de cuentadante: el nuevo lo es cuando revise y acepte el inventario.
     if ($cuentadante && $cuentadante !== (int) $antes['cuentadante_id']) {
-        crearRevision($id, 'cuentadante', $cuentadante, (int) $u['id'], 'Cambio de cuentadante' . ($antes['cuentadante_nombre'] ? " (antes {$antes['cuentadante_nombre']})" : ''));
+        crearRevision($id, 'cuentadante', $cuentadante, (int) $u['id'], 'Cambio de responsable de la cuenta antes' . ($antes['cuentadante_nombre'] ? " (antes {$antes['cuentadante_nombre']})" : ''));
     }
     db()->commit();
     responder(ambientePublico(buscarAmbiente($id)));

@@ -58,12 +58,12 @@ function listaAmbientes(ambientes, accion) {
     accion?.(a))));
 }
 
-/** Inventarios que la persona debe revisar antes de recibir el ambiente (o como cuentadante). */
+/** Cuentas antes que la persona debe revisar antes de recibir el ambiente (o como responsable). */
 function avisosRevision(revisiones) {
   return revisiones.map((r) => h('a', { class: 'accion-grande accion-grande--alerta', href: `#/revision-inventario?id=${r.id}`, 'data-anim': '' },
     h('span', { class: 'accion-grande-icono' }, icono('caja')),
-    h('span', {}, h('strong', {}, `${r.tipo === 'cuentadante' ? 'Recibe como cuentadante' : 'Revisa el inventario'} · ambiente ${r.ambiente.codigo}`),
-      h('span', {}, `${r.conteo.total - r.conteo.pendientes} de ${r.conteo.total} ítems revisados. ${r.tipo === 'cuentadante' ? 'Quedas como cuentadante al aceptarlo.' : 'Hazlo antes de tu primera entrega.'}`)),
+    h('span', {}, h('strong', {}, `${r.tipo === 'cuentadante' ? 'Recibe la cuenta antes como responsable' : 'Revisa la cuenta antes'} · ambiente ${r.ambiente.codigo}`),
+      h('span', {}, `${r.conteo.total - r.conteo.pendientes} de ${r.conteo.total} ítems revisados. ${r.tipo === 'cuentadante' ? 'Quedas como responsable al aceptarla.' : '¿Es conforme a lo que hay? Hazlo antes de tu primera entrega.'}`)),
     icono('flecha')));
 }
 
