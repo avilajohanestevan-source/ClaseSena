@@ -30,7 +30,8 @@ test('flujo completo: el instructor revisa y reporta daños, el portero genera e
   const usuarios = (await pedir('GET', '/users', { token: admin.token })).datos;
   const cuenta = (rol) => usuarios.filter((u) => u.rol === rol).length;
   // Administrativos: administrativo y coordinación; almacén es su propio rol
-  assert.deepEqual([cuenta('instructor'), cuenta('portero'), cuenta('administrativo'), cuenta('almacen')], [3, 2, 2, 1]);
+  assert.deepEqual([cuenta('portero'), cuenta('administrativo'), cuenta('almacen')], [2, 2, 1]);
+  assert.ok(cuenta('instructor') >= 3); // más los que registre api-asistencia.mjs si corre antes
   // 15 aprendices de prueba (más los que importe api-asistencia.mjs si corre antes)
   assert.ok(cuenta('aprendiz') >= 15);
   assert.deepEqual(usuarios.filter((u) => u.rol === 'administrativo').map((u) => u.area).sort(), ['administrativo', 'coordinacion']);

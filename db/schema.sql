@@ -37,7 +37,7 @@ USE sena_ambientes;
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS audit_events, instructor_assignments, item_history, notifications, inspection_items, persistent_issues,
                      inspections, inventory_items, item_families, inventory_categories, environments, especialidades_ambiente,
-                     api_tokens, users, fichas, competencias, clases, clase_qr, asistencias, excusas, p004, correos;
+                     api_tokens, users, fichas, competencias, clases, clase_qr, asistencias, excusas, p004, correos, plantillas_correo;
 SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE users (
@@ -453,10 +453,23 @@ CREATE TABLE correos (
   user_id     INT UNSIGNED NULL,
   para        VARCHAR(160) NOT NULL,
   asunto      VARCHAR(200) NOT NULL,
-  cuerpo      TEXT         NOT NULL,
+  cuerpo      TEXT         NOT NULL,              -- texto plano
+  html        MEDIUMTEXT   NULL,                  -- versión HTML (con el botón "Ingresar a Ambientes SENA")
   estado      ENUM('registrado','enviado','error') NOT NULL,
   error       VARCHAR(300) NULL,
   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY ix_correos_user (user_id),
   CONSTRAINT fk_correo_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Plantillas editables del correo de credenciales (credenciales_aprendiz,
+-- credenciales_instructor). Sin fila, se usa la de fábrica (api/lib/correo.php).
+-- Campos: {nombre} {nombre_completo} {tipo_documento} {documento} {rol} {ficha} {programa} {clave} {enlace}
+CREATE TABLE plantillas_correo (
+  clave            VARCHAR(40)   NOT NULL PRIMARY KEY,
+  asunto           VARCHAR(200)  NOT NULL,
+  cuerpo           TEXT          NOT NULL,
+  actualizado_por  INT UNSIGNED  NULL,
+  actualizado_en   DATETIME      NOT NULL,
+  CONSTRAINT fk_plantilla_user FOREIGN KEY (actualizado_por) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;

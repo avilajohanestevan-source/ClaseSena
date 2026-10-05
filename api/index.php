@@ -22,6 +22,7 @@ require __DIR__ . '/modulos/asignaciones.php';
 require __DIR__ . '/modulos/notificaciones.php';
 require __DIR__ . '/modulos/reportes.php';
 require __DIR__ . '/modulos/fichas.php';
+require __DIR__ . '/modulos/instructores.php';
 require __DIR__ . '/modulos/asistencia.php';
 
 header('Cache-Control: no-store');
@@ -118,7 +119,17 @@ $RUTAS = [
     ['PATCH',  '#^/fichas/(\d+)$#',                      'rutaEditarFicha'],
     ['POST',   '#^/fichas/(\d+)/students/import$#',      'rutaImportarAprendices'],
     ['POST',   '#^/fichas/(\d+)/students/(\d+)/credentials$#', 'rutaReenviarCredenciales'],
+    ['POST',   '#^/fichas/(\d+)/students$#',             'rutaAgregarAprendiz'],
     ['GET',    '#^/mail-outbox$#',                       'rutaCorreos'],
+    ['GET',    '#^/mail-templates$#',                    'rutaPlantillasCorreo'],
+    ['PUT',    '#^/mail-templates/(credenciales_(?:aprendiz|instructor))$#', 'rutaGuardarPlantillaCorreo'],
+    ['POST',   '#^/mail-templates/(credenciales_(?:aprendiz|instructor))/preview$#', 'rutaVistaPreviaCorreo'],
+
+    // Instructores (administrativo): registro y credenciales
+    ['GET',    '#^/instructors$#',                       'rutaInstructores'],
+    ['POST',   '#^/instructors$#',                       'rutaCrearInstructor'],
+    ['PATCH',  '#^/instructors/(\d+)$#',                 'rutaEditarInstructor'],
+    ['POST',   '#^/instructors/(\d+)/credentials$#',     'rutaCredencialesInstructor'],
 
     // Asistencia a clases (contratos de la primera parte de API.md)
     ['GET',    '#^/catalogs$#',                          'rutaCatalogosAsistencia'],

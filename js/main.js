@@ -42,6 +42,7 @@ const RUTAS = {
   'primer-ingreso': { vista: () => import('./vistas/primer-ingreso.js'), roles: TODOS, titulo: 'Primer ingreso' },
   // Asistencia a clases (backend real: api/modulos/asistencia.php y fichas.php).
   fichas: { vista: () => import('./vistas/fichas.js'), roles: ['administrativo', 'instructor'], titulo: 'Fichas', icono: 'usuarios', grupo: 'asistencia' },
+  instructores: { vista: () => import('./vistas/instructores.js'), roles: ['administrativo'], titulo: 'Instructores', icono: 'instructor', grupo: 'asistencia' },
   clases: { vista: () => import('./vistas/instructor.js'), roles: ['instructor'], titulo: 'Asistencia a clases', icono: 'qr', grupo: 'asistencia' },
   horario: { vista: () => import('./vistas/horario.js'), roles: ['aprendiz'], titulo: 'Mi horario', icono: 'calendario', grupo: 'asistencia' },
   asistencia: { vista: () => import('./vistas/aprendiz.js'), roles: ['aprendiz'], titulo: 'Registrar asistencia', icono: 'escanear', grupo: 'asistencia' },

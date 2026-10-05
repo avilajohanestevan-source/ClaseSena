@@ -180,25 +180,39 @@ desde Laura) y un turno anulado en el 111.
     concepto no salen a internet: `CORREO_MODO = 'registro'` en
     `api/config.php`; con `'mail'` se envían con `mail()` de PHP). Desde la
     ficha se reenvían credenciales.
-11. **Primer ingreso** (Valentina, 1122334470 / `Temporal2026`): la app no
+    **Antes de enviar se puede cambiar el correo**: la contraseña temporal
+    (generada para cada uno o escrita por ti, la misma para todos en una
+    importación), el asunto y el cuerpo, con campos `{nombre}`,
+    `{nombre_completo}`, `{tipo_documento}`, `{documento}`, `{rol}`, `{ficha}`,
+    `{programa}`, `{clave}` y `{enlace}` (el cuerpo debe incluir `{clave}`),
+    con **vista previa** tal como llega. Se puede guardar como plantilla
+    (*Plantillas de correo*). El correo trae el botón **Ingresar a Ambientes
+    SENA**, que abre la página de ingreso con el rol y el documento ya
+    puestos (solo falta la contraseña). En la ficha también se **agrega un
+    aprendiz** a mano y se reenvían credenciales con el mismo editor.
+11. **Instructores** (administrativo): registrar un instructor (documento,
+    nombre, correo, teléfono) con el mismo editor del correo y de la
+    contraseña temporal; editarlo, desactivarlo o reenviarle credenciales.
+    Ve sus fichas y asignaciones vigentes. También hace el primer ingreso.
+12. **Primer ingreso** (Valentina, 1122334470 / `Temporal2026`): la app no
     deja hacer nada más hasta **confirmar el correo** (código de 6 dígitos;
     en modo registro la pantalla muestra el código de demostración) y
     **cambiar la contraseña** temporal. El backend responde
     `403 PRIMER_INGRESO` a cualquier otra ruta.
-12. **Asistencia a clases** (instructor) → la clase de hoy → **Generar QR**.
+13. **Asistencia a clases** (instructor) → la clase de hoy → **Generar QR**.
     El aprendiz (Camila) → **Registrar asistencia** → escanea el QR (o pega
     su texto): queda *presente* (o *tarde* después de 5 minutos). Laura ve
     el registro en el modal. **Programar clase** crea otra sesión para una de
     sus fichas.
-13. **Excusas**: el aprendiz sube la excusa con **foto** y el **periodo** que
+14. **Excusas**: el aprendiz sube la excusa con **foto** y el **periodo** que
     cubre; el instructor líder de la ficha (o coordinación) la **aprueba** o la
     **rechaza** con motivo. Aprobada, las faltas de esos días quedan
     *justificadas* y no cuentan en el semáforo.
-14. **Semáforo de faltas** (administrativo): filtro por **ficha**, ambiente y
+15. **Semáforo de faltas** (administrativo): filtro por **ficha**, ambiente y
     competencia, conteos de faltas consecutivas y totales (las justificadas
     aparte) y **Listado de riesgo** en CSV (naranja, rojo claro y rojo). Cuando
     un aprendiz llega a rojo se avisa a coordinación y a su instructor líder.
-15. **Mi horario** (aprendiz): sus clases de las próximas dos semanas con el
+16. **Mi horario** (aprendiz): sus clases de las próximas dos semanas con el
     **profesor**, el ambiente y la competencia.
 
 Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
@@ -274,7 +288,8 @@ pulsan Enter). El código puede ser el consecutivo (`AMB107-012`), uno propio
 | Asignaciones | Tablero y mis turnos | — | Asignar, reasignar y anular por jornada | — |
 | Auditoría | — | — | Eventos de novedades y asignaciones | — |
 | Reportes | — | — | ✓ | — |
-| Fichas | Las suyas (consulta) | — | Crear, importar aprendices, credenciales, correos | — |
+| Fichas | Las suyas (consulta) | — | Crear, importar o agregar aprendices, credenciales con correo editable, plantillas, correos | — |
+| Instructores | — | — | Registrar, editar, desactivar, credenciales con correo editable | — |
 | Asistencia | Clases (QR, programar), excusas, historial | — | Semáforo y riesgo, excusas, P004, historial | Mi horario, registrar asistencia, excusas |
 
 ### Rol Almacén

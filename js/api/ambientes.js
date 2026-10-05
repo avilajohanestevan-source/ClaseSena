@@ -55,8 +55,19 @@ export const apiAmb = {
   crearFicha: (datos) => p('POST', '/fichas', datos),                 // {codigo, programa, jornada, ambienteId?, instructorId?, fechaInicio?, fechaFin?}
   editarFicha: (id, datos) => p('PATCH', `/fichas/${id}`, datos),
   importarAprendices: (id, datos) => p('POST', `/fichas/${id}/students/import`, datos), // {nombre, archivo (data URL), simular}
-  reenviarCredenciales: (fichaId, userId) => p('POST', `/fichas/${fichaId}/students/${userId}/credentials`),
+  agregarAprendiz: (fichaId, datos) => p('POST', `/fichas/${fichaId}/students`, datos), // {tipoDocumento, documento, nombre, email, telefono?, clave?, correo?, guardarPlantilla?}
+  reenviarCredenciales: (fichaId, userId, datos = {}) => p('POST', `/fichas/${fichaId}/students/${userId}/credentials`, datos), // {clave?, correo?, guardarPlantilla?}
   correos: (userId) => p('GET', '/mail-outbox', { userId }),
+  // Plantillas del correo de credenciales (credenciales_aprendiz | credenciales_instructor)
+  plantillasCorreo: () => p('GET', '/mail-templates'),                // → {plantillas, campos}
+  guardarPlantillaCorreo: (clave, datos) => p('PUT', `/mail-templates/${clave}`, datos), // {asunto, cuerpo} | {restablecer: true}
+  vistaPreviaCorreo: (clave, datos) => p('POST', `/mail-templates/${clave}/preview`, datos), // → {asunto, texto, html, enlace}
+
+  // Instructores (administrativo)
+  instructores: () => p('GET', '/instructors'),
+  crearInstructor: (datos) => p('POST', '/instructors', datos),       // {tipoDocumento, documento, nombre, email, telefono?, clave?, correo?, guardarPlantilla?}
+  editarInstructor: (id, datos) => p('PATCH', `/instructors/${id}`, datos),
+  credencialesInstructor: (id, datos = {}) => p('POST', `/instructors/${id}/credentials`, datos),
   usuarios: (rol) => p('GET', '/users', { rol }),                     // → Usuario[] (administrativo)
 
   // Catálogos: especialidades de ambiente y categorías del inventario

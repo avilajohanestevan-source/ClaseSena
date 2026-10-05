@@ -152,15 +152,19 @@ function normalizarTituloAprendiz(string $t): string
 /**
  * POST /fichas/{id}/students/import (administrativo): aprendices desde
  * Excel/CSV (archivo como en recibirTabla(); con simular es una vista previa).
+ * Opcional: clave (contraseña temporal para todos los nuevos; vacía = una por
+ * aprendiz), correo {asunto, cuerpo} para este envío y guardarPlantilla.
  * Nuevos: usuario aprendiz con contraseña temporal + correo con credenciales;
  * existentes (mismo documento): se actualizan y pasan a esta ficha.
  * → {total, nuevos, actualizados, sinCambios, correos, errores:[{fila, mensaje}], filas:[{fila, documento, nombre, email, accion}]}
  */
 function rutaImportarAprendices(int $fichaId): never
 {
-    exigirRol('administrativo');
+    $admin = exigirRol('administrativo');
     $f = buscarFicha($fichaId);
     ['tabla' => $tabla, 'simular' => $simular] = recibirTabla();
+    $d = !empty($_FILES['archivo']) ? $_POST : cuerpo();
+    $op = opcionesCredenciales($simular ? array_diff_key($d, ['guardarPlantilla' => 1]) : $d, 'credenciales_aprendiz', (int) $admin['id']);
     $filas = filasDeTabla($tabla, COLUMNAS_APRENDICES, ['documento', 'nombre', 'email'], 'normalizarTituloAprendiz', 1000);
     if (!$filas) fallar(422, 'El archivo no tiene filas con datos debajo de los títulos.', 'ARCHIVO');
 
@@ -191,10 +195,10 @@ function rutaImportarAprendices(int $fichaId): never
             $r['nuevos']++;
             $r['filas'][] = ['fila' => $x['fila'], 'documento' => $doc, 'nombre' => $nombre, 'email' => $email, 'accion' => 'nuevo'];
             if ($simular) continue;
-            $clave = passwordTemporal();
+            $clave = $op['clave'] ?? passwordTemporal();
             $id = insertar("INSERT INTO users (tipo_documento, documento, nombre, email, telefono, rol, ficha, password_hash, debe_cambiar_password)
                             VALUES (?, ?, ?, ?, ?, 'aprendiz', ?, ?, 1)", [$tipo, $doc, $nombre, $email, $tel, $f['codigo'], password_hash($clave, PASSWORD_BCRYPT)]);
-            enviarCredenciales(fila('SELECT * FROM users WHERE id = ?', [$id]), $clave, $f);
+            enviarCredenciales(fila('SELECT * FROM users WHERE id = ?', [$id]), $clave, $f, $op['plantilla']);
             $r['correos']++;
             continue;
         }
@@ -221,17 +225,41 @@ function rutaImportarAprendices(int $fichaId): never
     responder($r);
 }
 
-/** POST /fichas/{id}/students/{userId}/credentials (administrativo): nueva contraseña temporal y correo; vuelve a pedir el primer ingreso. */
+/**
+ * POST /fichas/{id}/students (administrativo): agrega un aprendiz a mano.
+ * {tipoDocumento?, documento, nombre, email, telefono?, clave?, correo?, guardarPlantilla?}
+ */
+function rutaAgregarAprendiz(int $fichaId): never
+{
+    $admin = exigirRol('administrativo');
+    $f = buscarFicha($fichaId);
+    $d = cuerpo();
+    [$tipo, $doc, $nombre, $email, $tel] = datosPersona($d);
+    $op = opcionesCredenciales($d, 'credenciales_aprendiz', (int) $admin['id']);
+    $clave = $op['clave'] ?? passwordTemporal();
+    db()->begin_transaction();
+    $id = insertar("INSERT INTO users (tipo_documento, documento, nombre, email, telefono, rol, ficha, password_hash, debe_cambiar_password)
+                    VALUES (?, ?, ?, ?, ?, 'aprendiz', ?, ?, 1)", [$tipo, $doc, $nombre, $email, $tel, $f['codigo'], password_hash($clave, PASSWORD_BCRYPT)]);
+    $correo = enviarCredenciales(fila('SELECT * FROM users WHERE id = ?', [$id]), $clave, $f, $op['plantilla']);
+    db()->commit();
+    responder(['aprendiz' => aprendizPublico(fila('SELECT u.*, NULL AS p004_estado FROM users u WHERE u.id = ?', [$id])), 'correo' => $correo], 201);
+}
+
+/**
+ * POST /fichas/{id}/students/{userId}/credentials {clave?, correo?, guardarPlantilla?} (administrativo):
+ * nueva contraseña temporal (escrita o generada) y correo; vuelve a pedir el primer ingreso.
+ */
 function rutaReenviarCredenciales(int $fichaId, int $userId): never
 {
-    exigirRol('administrativo');
+    $admin = exigirRol('administrativo');
     $f = buscarFicha($fichaId);
     $a = fila("SELECT * FROM users WHERE id = ? AND rol = 'aprendiz' AND ficha = ?", [$userId, $f['codigo']]);
     if (!$a) fallar(404, 'El aprendiz no está en esta ficha.', 'NO_ENCONTRADO');
     if (!$a['email']) fallar(422, 'El aprendiz no tiene correo registrado.', 'VALIDACION');
-    $clave = passwordTemporal();
+    $op = opcionesCredenciales(cuerpo(), 'credenciales_aprendiz', (int) $admin['id']);
+    $clave = $op['clave'] ?? passwordTemporal();
     consulta('UPDATE users SET password_hash = ?, debe_cambiar_password = 1 WHERE id = ?', [password_hash($clave, PASSWORD_BCRYPT), $userId]);
     consulta('DELETE FROM api_tokens WHERE user_id = ?', [$userId]);
-    $correo = enviarCredenciales(fila('SELECT * FROM users WHERE id = ?', [$userId]), $clave, $f);
+    $correo = enviarCredenciales(fila('SELECT * FROM users WHERE id = ?', [$userId]), $clave, $f, $op['plantilla']);
     responder(['aprendiz' => aprendizPublico(fila('SELECT u.*, NULL AS p004_estado FROM users u WHERE u.id = ?', [$userId])), 'correo' => $correo]);
 }

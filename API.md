@@ -341,7 +341,23 @@ ambiente, se crea igual y la respuesta trae `advertencias`.
 | POST / PATCH | `/fichas`, `/fichas/{id}` | administrativo | `{codigo (5–12 dígitos), programa, jornada, ambienteId?, instructorId?, fechaInicio?, fechaFin?, activo?}`. Número repetido → `409` |
 | POST | `/fichas/{id}/students/import` | administrativo | Carga masiva con PhpSpreadsheet (JSON `{nombre, archivo: data URL, simular}` o multipart, como `/inventory/import`). Columnas `tipo_documento, documento*, nombre*, email*, telefono`. Nuevos: usuario aprendiz con contraseña temporal y `debe_cambiar_password`, y correo con credenciales; existentes (mismo documento): se actualizan y pasan a la ficha. → `{total, nuevos, actualizados, sinCambios, correos, errores, filas}` |
 | POST | `/fichas/{id}/students/{userId}/credentials` | administrativo | Contraseña temporal nueva, correo y primer ingreso de nuevo |
-| GET | `/mail-outbox?userId` | administrativo | Correos registrados o enviados (`CORREO_MODO` en `api/config.php`) |
+| POST | `/fichas/{id}/students` | administrativo | Agrega un aprendiz: `{tipoDocumento?, documento, nombre, email, telefono?, clave?, correo?, guardarPlantilla?}` → `{aprendiz, correo}` |
+| GET | `/mail-outbox?userId` | administrativo | Correos registrados o enviados (`CORREO_MODO` en `api/config.php`): `{asunto, cuerpo (texto), html, estado…}` |
+| GET | `/mail-templates` | administrativo | `{plantillas: [{clave (credenciales_aprendiz \| credenciales_instructor), nombre, asunto, cuerpo, porDefecto, personalizada}], campos}` |
+| PUT | `/mail-templates/{clave}` | administrativo | `{asunto, cuerpo}` (el cuerpo debe tener `{clave}`; campo desconocido → `422`) o `{restablecer: true}` |
+| POST | `/mail-templates/{clave}/preview` | administrativo | `{asunto?, cuerpo?, clave?, nombre?, documento?, tipoDocumento?, fichaId?}` → `{asunto, texto, html, enlace}` |
+| GET | `/instructors` | administrativo | `[{id, tipoDocumento, documento, nombre, email, telefono, activo, primerIngresoPendiente, emailVerificado, credencialesEnviadasEn, fichas, asignacionesVigentes}]` |
+| POST | `/instructors` | administrativo | `{tipoDocumento?, documento, nombre, email, telefono?, clave?, correo?, guardarPlantilla?}` → `{instructor, correo}`. Documento o correo repetido → `409` |
+| PATCH | `/instructors/{id}` | administrativo | `{documento, nombre, email, telefono?, activo?}`; desactivado no puede ingresar (`423`) |
+| POST | `/instructors/{id}/credentials` | administrativo | `{clave?, correo?, guardarPlantilla?}`: contraseña temporal nueva, correo y primer ingreso de nuevo |
+
+**Envío de credenciales** (importar, agregar, reenviar, instructores): `clave`
+= contraseña temporal escrita (8+ caracteres con letras y números; vacía =
+se genera una por persona); `correo` = `{asunto, cuerpo}` solo para este
+envío (vacío = la plantilla guardada); `guardarPlantilla` además lo deja como
+plantilla. El correo va en texto y HTML con el botón **Ingresar a Ambientes
+SENA** → `index.html#/login?documento=…&tipo=…&rol=…` (el login llega con el
+rol y el documento puestos).
 | POST | `/me/first-login/code` | el usuario con primer ingreso pendiente | `{email?}` (corrige el correo) → envía un código de 6 dígitos que vence en 15 min → `{enviadoA, expiraEn, codigoDemo?}` (`codigoDemo` solo en modo registro) |
 | POST | `/me/first-login` | el mismo | `{codigo, nueva}` → confirma el correo y cambia la contraseña (distinta de la temporal) → `usuario` |
 

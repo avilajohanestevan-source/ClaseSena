@@ -3,17 +3,21 @@
 //    habitual, instructor líder), importa aprendices desde Excel/CSV con
 //    vista previa (los nuevos reciben sus credenciales por correo y deben
 //    confirmar el correo y cambiar la contraseña en su primer ingreso),
-//    reenvía credenciales y consulta los correos enviados.
+//    agrega aprendices uno a uno, reenvía credenciales y consulta los correos
+//    enviados. Antes de enviar se puede cambiar el correo (asunto, cuerpo y
+//    contraseña temporal) y guardarlo como plantilla (js/ui/editor-correo.js).
 //  · Instructor: consulta las fichas que dirige o en las que dicta clase.
 // Desde cada ficha se va al semáforo de faltas y a las excusas de la ficha.
 import { h, anexar, icono, vaciar, errorCampo, descargar } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
-import { toast, abrirModal, confirmar } from '../ui/avisos.js';
+import { toast, abrirModal } from '../ui/avisos.js';
 import { cargando, tarjetaError } from '../ui/componentes.js';
 import { cabecera, vacio, fecha } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado } from '../estado.js';
 import { JORNADAS, ETIQUETA_JORNADA } from '../reglas.js';
+import { crearEditorCorreo } from '../ui/editor-correo.js';
+import { formularioPersona, enviarCredenciales, abrirPlantillas, abrirCorreos } from '../ui/credenciales.js';
 
 const COLUMNAS = ['tipo_documento', 'documento', 'nombre', 'email', 'telefono'];
 
@@ -28,7 +32,8 @@ export async function render(raiz) {
       subtitulo: admin ? 'Carga los cursos y sus aprendices. Cada aprendiz nuevo recibe por correo su usuario y una contraseña temporal; en su primer ingreso confirma el correo y la cambia.'
         : 'Las fichas que diriges o en las que dictas clase.',
       acciones: admin ? [
-        h('button', { class: 'btn btn-outline', type: 'button', onclick: () => correos() }, icono('campana'), 'Correos enviados'),
+        h('button', { class: 'btn btn-outline', type: 'button', onclick: () => abrirPlantillas('credenciales_aprendiz') }, icono('lapiz'), 'Plantillas de correo'),
+        h('button', { class: 'btn btn-outline', type: 'button', onclick: () => abrirCorreos() }, icono('campana'), 'Correos enviados'),
         h('button', { class: 'btn btn-primary', type: 'button', onclick: () => formulario() }, icono('mas'), 'Nueva ficha')] : [],
     }),
     lista);
@@ -120,18 +125,47 @@ export async function render(raiz) {
           h('td', {}, a.p004 ? h('span', { class: `status-chip ${['EN FORMACION', 'CONDICIONADO'].includes(a.p004) ? 'neutro' : 'error'}` }, a.p004) : '—'),
           admin && h('td', {}, h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: () => reenviar(a) }, icono('reintentar'), 'Reenviar credenciales')))))))
         : vacio('La ficha no tiene aprendices', admin ? 'Impórtalos desde Excel o CSV.' : '', 'usuarios'));
-    async function reenviar(a) {
-      if (!await confirmar({ titulo: `¿Reenviar credenciales a ${a.nombre}?`, mensaje: `Se genera una contraseña temporal nueva y se envía a ${a.email}. En su próximo ingreso deberá cambiarla.`, textoAceptar: 'Reenviar' })) return;
-      try {
-        const r = await apiAmb.reenviarCredenciales(f.id, a.id);
-        Object.assign(a, r.aprendiz);
-        pintar();
-        toast('exito', 'Credenciales enviadas', a.email);
-      } catch (e) { toast('error', 'No se enviaron', e.message); }
+    function reenviar(a) {
+      enviarCredenciales({
+        titulo: 'Reenviar credenciales', persona: a, plantilla: 'credenciales_aprendiz', fichaId: f.id,
+        enviar: (datos) => apiAmb.reenviarCredenciales(f.id, a.id, datos),
+        alTerminar: (r) => { Object.assign(a, r.aprendiz); pintar(); },
+      });
     }
     pintar();
     abrirModal({ titulo: `Ficha ${f.codigo}`, subtitulo: `${f.programa} · ${f.listaAprendices.length} aprendices`, ancho: 'ancho', contenido: cuerpo,
-      acciones: admin ? [({ cerrar }) => h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { cerrar(); importar(f); } }, icono('subir'), 'Importar aprendices')] : [] });
+      acciones: admin ? [
+        ({ cerrar }) => h('button', { class: 'btn btn-outline', type: 'button', onclick: () => { cerrar(); agregar(f); } }, icono('mas'), 'Agregar aprendiz'),
+        ({ cerrar }) => h('button', { class: 'btn btn-primary', type: 'button', onclick: () => { cerrar(); importar(f); } }, icono('subir'), 'Importar aprendices')] : [] });
+  }
+
+  /* --- agregar un aprendiz a mano (con su correo de credenciales) --- */
+  function agregar(f) {
+    const persona = formularioPersona({ prefijo: 'ag', alCambiar: () => editor.refrescar() });
+    const editor = crearEditorCorreo({ plantilla: 'credenciales_aprendiz', fichaId: f.id, prefijo: 'ag-correo', persona: () => persona.valores() });
+    const boton = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => ir() }, icono('check'), 'Agregar y enviar credenciales');
+    const { cerrar } = abrirModal({
+      titulo: `Agregar aprendiz · ficha ${f.codigo}`, subtitulo: f.programa, ancho: 'ancho',
+      contenido: h('div', { class: 'form-grid' }, persona.el, editor.el),
+      acciones: [({ cerrar: x }) => h('button', { class: 'btn btn-outline', type: 'button', onclick: () => x() }, 'Cancelar'), boton],
+    });
+    async function ir() {
+      const p = persona.leer();
+      const op = editor.datos();
+      if (!p || !op) return;
+      boton.disabled = true;
+      try {
+        await apiAmb.agregarAprendiz(f.id, { ...p, ...op });
+        editor.despuesDeEnviar();
+        toast('exito', 'Aprendiz agregado', `Se enviaron las credenciales a ${p.email}.`);
+        cerrar();
+        cargar();
+      } catch (e) {
+        if (e.codigo === 'DUPLICADO') errorCampo(e.message.includes('correo') ? persona.campos.email : persona.campos.documento, e.message);
+        else toast('error', 'No se agregó', e.message);
+        boton.disabled = false;
+      }
+    }
   }
 
   /* --- importación masiva de aprendices --- */
@@ -140,6 +174,8 @@ export async function render(raiz) {
     const entrada = h('input', { type: 'file', id: 'ia-archivo', accept: '.xlsx,.xls,.ods,.csv', onchange: () => elegir(entrada.files[0]) });
     const resultado = h('div', { class: 'carga-resultado', 'aria-live': 'polite' });
     const cargarBtn = h('button', { class: 'btn btn-primary', type: 'button', disabled: true, onclick: () => enviar(false) }, icono('subir'), h('span', {}, 'Importar'));
+    // Correo que reciben los nuevos: contraseña temporal (una por aprendiz o la misma para todos), asunto y cuerpo.
+    const editor = crearEditorCorreo({ plantilla: 'credenciales_aprendiz', fichaId: f.id, prefijo: 'ia-correo', variasPersonas: true });
     const plantilla = () => descargar(`aprendices-ficha-${f.codigo}.csv`, '﻿' + [COLUMNAS.join(';'), 'CC;1099887766;Nombre Apellido Apellido;correo@soy.sena.edu.co;3001234567'].join('\r\n'), 'text/csv;charset=utf-8');
     const { cerrar } = abrirModal({
       titulo: `Importar aprendices · ficha ${f.codigo}`, subtitulo: f.programa, ancho: 'ancho',
@@ -150,7 +186,8 @@ export async function render(raiz) {
           h('li', {}, 'Súbelo y revisa la vista previa: nuevos, actualizados y filas con error.'),
           h('li', {}, 'Al confirmar, cada aprendiz nuevo recibe por correo su usuario y una contraseña temporal.')),
         h('div', { class: 'campo' }, h('label', { for: 'ia-archivo' }, 'Archivo'), entrada),
-        resultado),
+        resultado,
+        h('div', { class: 'form-grid' }, editor.el)),
       acciones: [({ cerrar: x }) => h('button', { class: 'btn btn-outline', type: 'button', onclick: () => x() }, 'Cancelar'), cargarBtn],
     });
 
@@ -165,11 +202,14 @@ export async function render(raiz) {
 
     async function enviar(simular) {
       if (!archivo) return;
+      const op = simular ? {} : editor.datos();
+      if (!op) return; // el correo tiene algo por corregir (se marca en el editor)
       cargarBtn.disabled = true;
       vaciar(resultado, cargando(simular ? 'Leyendo el archivo…' : 'Importando y enviando credenciales…'));
       let r;
-      try { r = await apiAmb.importarAprendices(f.id, { ...archivo, simular }); } catch (e) { vaciar(resultado, h('div', { class: 'banner error' }, e.message)); return; }
+      try { r = await apiAmb.importarAprendices(f.id, { ...archivo, simular, ...op }); } catch (e) { vaciar(resultado, h('div', { class: 'banner error' }, e.message)); cargarBtn.disabled = false; return; }
       if (!simular) {
+        editor.despuesDeEnviar();
         cerrar();
         toast('exito', 'Aprendices importados', `${r.nuevos} nuevos (${r.correos} correos con credenciales), ${r.actualizados} actualizados${r.errores.length ? `, ${r.errores.length} filas omitidas` : ''}.`, 8000);
         cargar();
@@ -191,20 +231,6 @@ export async function render(raiz) {
       cargarBtn.disabled = !validas;
       cargarBtn.lastChild.textContent = validas ? `Importar ${validas} aprendiz(es)` : 'Nada para importar';
     }
-  }
-
-  /* --- correos enviados (bandeja de salida de la prueba de concepto) --- */
-  async function correos() {
-    const cuerpo = h('div', {}, cargando());
-    abrirModal({ titulo: 'Correos enviados', subtitulo: 'Credenciales y códigos de verificación. En la prueba de concepto quedan registrados aquí (api/config.php → CORREO_MODO).', ancho: 'ancho', contenido: cuerpo });
-    let lista;
-    try { lista = await apiAmb.correos(); } catch (e) { vaciar(cuerpo, tarjetaError(e)); return; }
-    vaciar(cuerpo, lista.length ? h('ul', { class: 'correos-lista' }, lista.map((c) => h('li', { class: 'correo' },
-      h('details', {},
-        h('summary', {}, h('strong', {}, c.asunto), h('span', { class: 'text-muted' }, ` · ${c.para} · ${fecha.completa(c.fecha)}`),
-          h('span', { class: `status-chip ${c.estado === 'error' ? 'error' : c.estado === 'enviado' ? 'in' : 'neutro'}` }, c.estado === 'registrado' ? 'Registrado' : c.estado === 'enviado' ? 'Enviado' : 'Error')),
-        h('pre', { class: 'correo-cuerpo' }, c.cuerpo), c.error && h('p', { class: 'field-error' }, c.error)))))
-      : vacio('Aún no se han enviado correos', '', 'campana'));
   }
 
   await cargar();

@@ -49,8 +49,11 @@ const DEMO_ASISTENCIA = { instructor: '1010101010', administrativo: '2020202020'
 
 const TIPOS_DOCUMENTO = [['CC', 'Cédula de ciudadanía'], ['TI', 'Tarjeta de identidad'], ['CE', 'Cédula de extranjería'], ['PPT', 'Permiso por protección temporal']];
 
-export function render(raiz, { desdeSalida = false } = {}) {
-  let rol = 'instructor';
+export function render(raiz, { desdeSalida = false, params } = {}) {
+  // El botón "Ingresar a Ambientes SENA" del correo de credenciales abre
+  // #/login?documento=…&tipo=…&rol=…: llegan escritos y solo falta la contraseña.
+  const desdeCorreo = /^\d{6,12}$/.test(params?.get('documento') || '');
+  let rol = ROLES.some((r) => r.clave === params?.get('rol')) ? params.get('rol') : 'instructor';
 
   /* --- campos --- */
   const tipoDocumento = h('select', { class: 'campo-flotante-prefijo', id: 'login-tipo', 'aria-label': 'Tipo de documento' },
@@ -90,6 +93,15 @@ export function render(raiz, { desdeSalida = false } = {}) {
       } }, 'Olvidé mi contraseña')),
     errorGeneral,
     enviar);
+
+  if (desdeCorreo) {
+    identificacion.value = params.get('documento');
+    if (TIPOS_DOCUMENTO.some(([v]) => v === params.get('tipo'))) tipoDocumento.value = params.get('tipo');
+    errorGeneral.textContent = 'Escribe la contraseña temporal que te llegó al correo. Al entrar te pediremos confirmar el correo y cambiarla.';
+    errorGeneral.className = 'banner info login-error';
+    errorGeneral.hidden = false;
+    setTimeout(() => password.focus({ preventScroll: true }), 400);
+  }
 
   // Soltar el error de un campo apenas se corrige.
   identificacion.addEventListener('input', () => { identificacion.value = identificacion.value.replace(/\D/g, ''); errorCampo(identificacion, null); });

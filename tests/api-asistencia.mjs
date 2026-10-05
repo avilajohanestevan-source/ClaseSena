@@ -203,3 +203,77 @@ test('excusas con foto y periodo; aprobada justifica las faltas; semáforo y P00
   assert.equal(cambio.datos.actualizadoPor, 'Carlos Méndez Ruiz');
   assert.equal((await pedir('GET', '/p004', { token: diana })).status, 403);
 });
+
+test('instructores y correo de credenciales editable: contraseña temporal propia, plantilla y botón de ingreso', async (t) => {
+  if (!await disponible()) { t.skip('API no disponible (enciende Apache y MySQL en XAMPP)'); return; }
+  const admin = await ingresar('2020202020', 'administrativo');
+  const laura = await ingresar('1010101010', 'instructor');
+  const sufijo = String(Date.now()).slice(-6);
+  const doc = `55${sufijo}`;
+  const correo = { asunto: 'Bienvenida, {nombre}', cuerpo: 'Hola {nombre_completo}.\n\nTu documento: {documento}\nTu clave temporal: {clave}' };
+
+  // Solo el administrativo registra instructores; el cuerpo debe traer {clave} y campos que existan
+  const base = { tipoDocumento: 'CC', documento: doc, nombre: 'Instructora De Prueba', email: `inst.${sufijo}@sena.edu.co` };
+  assert.equal((await pedir('POST', '/instructors', { token: laura, cuerpo: base })).status, 403);
+  assert.equal((await pedir('POST', '/instructors', { token: admin, cuerpo: { ...base, correo: { asunto: 'Hola', cuerpo: 'Sin contraseña' } } })).status, 422);
+  assert.equal((await pedir('POST', '/instructors', { token: admin, cuerpo: { ...base, correo: { asunto: 'Hola {apodo}', cuerpo: '{clave}' } } })).status, 422);
+  assert.equal((await pedir('POST', '/instructors', { token: admin, cuerpo: { ...base, clave: 'corta' } })).status, 422);
+  const creado = await pedir('POST', '/instructors', { token: admin, cuerpo: { ...base, clave: 'Bienvenida2026', correo } });
+  assert.equal(creado.status, 201, JSON.stringify(creado.datos));
+  assert.equal(creado.datos.instructor.primerIngresoPendiente, true);
+  assert.equal((await pedir('POST', '/instructors', { token: admin, cuerpo: { ...base, email: `otro.${sufijo}@sena.edu.co` } })).status, 409);
+
+  // El correo sale con el texto editado, la contraseña escrita y el botón con el enlace directo al ingreso
+  const enviado = (await pedir('GET', `/mail-outbox?userId=${creado.datos.instructor.id}`, { token: admin })).datos[0];
+  assert.equal(enviado.asunto, 'Bienvenida, Instructora');
+  assert.match(enviado.cuerpo, /Tu clave temporal: Bienvenida2026/);
+  assert.match(enviado.html, /Ingresar a Ambientes SENA/);
+  assert.ok(enviado.html.includes(`#/login?documento=${doc}&amp;tipo=CC&amp;rol=instructor`), 'el botón abre el ingreso con documento y rol');
+
+  // Con esa contraseña entra como instructor y debe hacer el primer ingreso
+  const sesion = await login(doc, 'instructor', 'Bienvenida2026');
+  assert.equal(sesion.status, 200);
+  assert.equal(sesion.datos.usuario.debeCambiarPassword, true);
+  assert.equal((await pedir('GET', '/inspections', { token: sesion.datos.token })).datos.codigo, 'PRIMER_INGRESO');
+
+  // Reenviar con otra contraseña escrita; la anterior deja de servir
+  const re = await pedir('POST', `/instructors/${creado.datos.instructor.id}/credentials`, { token: admin, cuerpo: { clave: 'OtraClave2026' } });
+  assert.equal(re.status, 200, JSON.stringify(re.datos));
+  assert.equal((await login(doc, 'instructor', 'Bienvenida2026')).status, 401);
+  assert.equal((await login(doc, 'instructor', 'OtraClave2026')).status, 200);
+  // Sin texto propio usa la plantilla guardada de instructores
+  assert.match((await pedir('GET', `/mail-outbox?userId=${creado.datos.instructor.id}`, { token: admin })).datos[0].asunto, /instructor/i);
+
+  // Editar y desactivar
+  const ed = await pedir('PATCH', `/instructors/${creado.datos.instructor.id}`, { token: admin, cuerpo: { ...base, nombre: 'Instructora Editada Prueba', activo: false } });
+  assert.equal(ed.status, 200, JSON.stringify(ed.datos));
+  assert.equal(ed.datos.activo, false);
+  assert.equal((await login(doc, 'instructor', 'OtraClave2026')).status, 423);
+  assert.ok((await pedir('GET', '/instructors', { token: admin })).datos.some((i) => i.documento === doc && !i.activo));
+
+  // Plantilla de aprendices: guardar, vista previa con datos de la ficha, y volver a la de fábrica
+  const plantillas = (await pedir('GET', '/mail-templates', { token: admin })).datos;
+  assert.deepEqual(plantillas.plantillas.map((p) => p.clave), ['credenciales_aprendiz', 'credenciales_instructor']);
+  assert.ok(plantillas.campos.includes('enlace'));
+  const guardada = await pedir('PUT', '/mail-templates/credenciales_aprendiz', { token: admin, cuerpo: { asunto: 'Ficha {ficha}: tus datos', cuerpo: 'Hola {nombre}, clave {clave}' } });
+  assert.equal(guardada.status, 200, JSON.stringify(guardada.datos));
+  const previa = (await pedir('POST', '/mail-templates/credenciales_aprendiz/preview', { token: admin, cuerpo: { fichaId: 1, nombre: 'Ana María Ruiz', clave: 'Prueba2026' } })).datos;
+  assert.equal(previa.asunto, 'Ficha 2758432: tus datos');
+  assert.match(previa.texto, /Hola Ana, clave Prueba2026/);
+
+  // Agregar un aprendiz a mano usa la plantilla guardada; importar con la misma contraseña para todos
+  const docA = `66${sufijo}`;
+  const ag = await pedir('POST', '/fichas/1/students', { token: admin, cuerpo: { documento: docA, nombre: 'Aprendiz Agregado Prueba', email: `agregado.${sufijo}@soy.sena.edu.co`, clave: 'Agregado2026' } });
+  assert.equal(ag.status, 201, JSON.stringify(ag.datos));
+  assert.equal((await pedir('GET', `/mail-outbox?userId=${ag.datos.aprendiz.id}`, { token: admin })).datos[0].asunto, 'Ficha 2758432: tus datos');
+  assert.equal((await login(docA, 'aprendiz', 'Agregado2026')).status, 200);
+  const archivo = csv(['documento;nombre;email', `67${sufijo}1;Primero Masivo Prueba;m1.${sufijo}@soy.sena.edu.co`, `67${sufijo}2;Segundo Masivo Prueba;m2.${sufijo}@soy.sena.edu.co`]);
+  const imp = await pedir('POST', '/fichas/1/students/import', { token: admin, cuerpo: { nombre: 'm.csv', archivo, clave: 'Comun2026x', correo: { asunto: 'Masivo {documento}', cuerpo: '{nombre}: {clave}' } } });
+  assert.equal(imp.status, 200, JSON.stringify(imp.datos));
+  assert.equal(imp.datos.correos, 2);
+  assert.equal((await login(`67${sufijo}1`, 'aprendiz', 'Comun2026x')).status, 200);
+  assert.equal((await login(`67${sufijo}2`, 'aprendiz', 'Comun2026x')).status, 200);
+
+  assert.equal((await pedir('PUT', '/mail-templates/credenciales_aprendiz', { token: admin, cuerpo: { restablecer: true } })).status, 200);
+  assert.match((await pedir('GET', '/mail-templates', { token: admin })).datos.plantillas[0].asunto, /Tus credenciales/);
+});

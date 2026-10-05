@@ -738,3 +738,19 @@ button.asig-boton:hover{ border-color:var(--color-border-strong); background:var
 .pi-correo .campo{ flex:1 1 260px; }
 .pi-codigo{ font-size:22px; letter-spacing:.3em; max-width:220px; }
 .pi-demo{ display:block; margin-top:4px; color:var(--c-azul-900); }
+
+/* ================= Correo de credenciales (editor y vista previa) ================= */
+.editor-correo{ display:grid; gap:14px; border:1px solid var(--color-border); border-radius:var(--r-md); padding:14px 16px 16px; margin:0; min-width:0; }
+.editor-correo legend{ font-weight:700; color:var(--color-heading); padding:0 6px; display:flex; align-items:center; gap:6px; }
+.editor-correo-clave{ display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+.editor-correo-clave input{ flex:1 1 200px; max-width:280px; font-size:16px; }
+.editor-correo-cuerpo{ min-height:220px; font:14px/1.5 var(--font-body, inherit); }
+.editor-correo-campos{ display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
+.chip-campo{ border:1px solid var(--c-verde-200); background:var(--c-verde-50); color:var(--c-verde-800); border-radius:var(--r-pill); padding:3px 10px; font:600 12px var(--font-mono, monospace); cursor:pointer; }
+.chip-campo:hover{ background:var(--c-verde-100); }
+.editor-correo-previa summary{ cursor:pointer; font-weight:600; display:flex; align-items:center; gap:6px; }
+.editor-correo-previa p{ margin:8px 0; font-size:14px; }
+.editor-correo-marco{ width:100%; height:440px; border:1px solid var(--color-border); border-radius:12px; background:#F4F6F5; display:block; margin-top:8px; }
+.instructor-fila{ grid-template-columns:auto minmax(0, 1fr) auto; }
+.instructor-fila .inv-fila-acciones{ grid-column:2 / -1; }
+@media (max-width: 599px){ .instructor-fila .reporte-chips{ grid-column:2; } }
