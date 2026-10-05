@@ -6,12 +6,14 @@
 //  · Portero, revisión terminada sin QR: resumen y "Generar QR de entrega".
 //  · Portero con el QR generado: QR grande; se consulta cada pocos segundos
 //    y, cuando el instructor lo escanea, cambia a "Ambiente entregado".
-//  · Instructor esperando el QR: "Escanear QR del portero".
+//  · Instructor esperando el QR: "Escanear QR del portero" o, al revés,
+//    "Mostrar mi QR de entrega" para que el portero lo escanee.
+//  · Portero: también puede "Escanear QR del instructor".
 //  · Instructor que acaba de escanear (?recibida=1): aviso de recepción.
 import { h, icono, vaciar, vibrar } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { toast, confirmar } from '../ui/avisos.js';
-import { escanearEntrega } from '../ui/recibir.js';
+import { escanearEntrega, escanearQrInstructor } from '../ui/recibir.js';
 import { chipInspeccion, chipResultado, chipItem, chipSeveridad, chipNaturaleza, etiquetaTipoDano, fecha, qr } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado, emitir, escuchar } from '../estado.js';
@@ -26,13 +28,15 @@ export async function render(raiz, { params, alSalir }) {
     location.replace(`#/inspeccion?id=${id}`);
     return;
   }
-  let aviso = u.rol === 'instructor' && params.get('recibida') && d.estado === 'recibida' ? 'recibida' : null;
+  let aviso = d.estado !== 'recibida' ? null
+    : u.rol === 'instructor' && params.get('recibida') ? 'recibida'
+      : u.rol === 'portero' && params.get('entregada') ? 'entregada' : null;
 
   function pintar() {
     const pendiente = d.estado === 'pendiente_recepcion';
     const panel = !pendiente ? null
       : u.rol === 'portero' ? (d.qr ? panelQr() : panelGenerar())
-        : u.rol === 'instructor' ? panelInstructor() : null;
+        : u.rol === 'instructor' ? (d.qrInstructor ? panelQrInstructor() : panelInstructor()) : null;
     const acciones = h('div', { class: 'planilla-acciones no-imprimir' },
       h('button', { class: 'btn btn-outline', type: 'button', onclick: () => window.print() }, icono('imprimir'), 'Imprimir planilla'),
       h('a', { class: 'btn btn-outline', href: '#/inspecciones' }, 'Volver'));
@@ -141,8 +145,9 @@ export async function render(raiz, { params, alSalir }) {
       h('h2', { class: 'entrega-qr-titulo', id: 'entrega-gen-t' }, `${d.instructor.nombre.split(' ')[0]} terminó la revisión`),
       h('div', { class: 'planilla-chips' }, chipResultado(d.resultado),
         d.danos ? h('span', { class: 'status-chip error' }, `${d.danos} daño${d.danos === 1 ? '' : 's'} con foto`) : null),
-      h('p', { class: 'text-muted' }, 'Revisa la planilla de abajo. Si estás de acuerdo, genera el QR y muéstraselo al instructor para que lo escanee y reciba el ambiente.'),
-      boton);
+      h('p', { class: 'text-muted' }, 'Revisa la planilla de abajo. Si estás de acuerdo, genera el QR y muéstraselo al instructor para que lo escanee y reciba el ambiente, o escanea el QR de entrega que te muestre él.'),
+      boton,
+      h('button', { class: 'btn btn-outline btn-block', type: 'button', onclick: escanearQrInstructor }, icono('escanear'), 'Escanear QR del instructor'));
   }
 
   /* --- portero: QR grande mientras el instructor no lo escanea --- */
@@ -168,7 +173,25 @@ export async function render(raiz, { params, alSalir }) {
       h('h2', { class: 'entrega-qr-titulo', id: 'entrega-ins-t' }, 'Revisión terminada'),
       h('p', { class: 'text-muted' }, `Pide a ${d.ambiente.portero || 'portería'} que genere el QR de entrega y escanéalo para recibir oficialmente el ambiente.`),
       h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', onclick: escanearEntrega }, icono('escanear'), 'Escanear QR del portero'),
+      h('button', { class: 'btn btn-outline btn-block', type: 'button', onclick: mostrarMiQr }, icono('qr'), 'Mostrar mi QR de entrega'),
       h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: cancelarRevision }, 'Cancelar revisión'));
+  }
+
+  /* --- instructor: su QR de entrega, para que el portero lo escanee y confirme --- */
+  async function mostrarMiQr() {
+    try { d = await apiAmb.qrInstructor(id); pintar(); vigilar(); } catch (e) { toast('error', 'No se generó tu QR', e.message); }
+  }
+  function panelQrInstructor() {
+    const tamano = Math.min(280, Math.round(window.innerWidth * 0.7));
+    return h('section', { class: 'card entrega-qr no-imprimir', 'aria-labelledby': 'entrega-qri-t' },
+      h('span', { class: 'eyebrow eyebrow-verde' }, `Ambiente ${d.ambiente.codigo} · ${d.ambiente.portero || 'portería'}`),
+      h('h2', { class: 'entrega-qr-titulo', id: 'entrega-qri-t' }, 'Muéstrale este QR al portero'),
+      h('p', { class: 'text-muted' }, 'Al escanearlo confirma la entrega y queda registrado quién entregó y quién recibió.'),
+      h('div', { class: 'entrega-qr-marco' }, qr(d.qrInstructor, tamano, 'QR de entrega del instructor')),
+      h('p', { class: 'entrega-qr-estado', role: 'status' }, h('span', { class: 'entrega-qr-pulso', 'aria-hidden': 'true' }), 'Esperando que el portero lo escanee…'),
+      h('div', { class: 'form-actions' },
+        h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: mostrarMiQr }, icono('reintentar'), 'Generar otro QR'),
+        h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: escanearEntrega }, icono('escanear'), 'Escanear el del portero')));
   }
 
   async function cancelarRevision() {
@@ -186,7 +209,7 @@ export async function render(raiz, { params, alSalir }) {
       h('circle', { __svg: true, cx: 32, cy: 32, r: 28 }), h('path', { __svg: true, d: 'M19 33l9 9 17-19' }));
     const texto = aviso === 'recibida'
       ? [h('strong', {}, `Recibiste el ambiente ${d.ambiente.codigo}`),
-        h('span', {}, `Entregado por ${d.portero.nombre} · ${fecha.hora(d.recibidaEn)}`),
+        h('span', {}, `Entregado por ${d.portero.nombre} · ${fecha.hora(d.recibidaEn)}${d.recibidaVia === 'qr_instructor' ? ' (escaneó tu QR)' : ''}`),
         h('span', {}, d.resultado === 'con_danos' ? 'Con novedades: se avisó a coordinación, administrativo e inventario; las permanentes quedan activas hasta que las resuelvan.' : 'En buen estado, sin novedades.')]
       : [h('strong', {}, `Ambiente ${d.ambiente.codigo} entregado`),
         h('span', {}, `${d.instructor.nombre} lo recibió a las ${fecha.hora(d.recibidaEn)}`),
@@ -206,7 +229,7 @@ export async function render(raiz, { params, alSalir }) {
       clearInterval(sondeo);
       d = nuevo;
       if (d.estado === 'recibida') {
-        aviso = 'entregada';
+        aviso = u.rol === 'instructor' ? 'recibida' : 'entregada';
         vibrar([60, 40, 60]);
         emitir('inspecciones');
       }
@@ -215,7 +238,7 @@ export async function render(raiz, { params, alSalir }) {
     }, CONSULTA_MS);
   }
   alSalir(() => clearInterval(sondeo));
-  if (u.rol === 'portero' && d.estado === 'pendiente_recepcion' && d.qr) vigilar();
+  if (d.estado === 'pendiente_recepcion' && ((u.rol === 'portero' && d.qr) || (u.rol === 'instructor' && d.qrInstructor))) vigilar();
 
   function mostrarAviso() {
     const el = raiz.querySelector('.entrega-aviso');

@@ -243,6 +243,8 @@ administrativo, y solo mientras la entrega está pendiente.
 | POST | `/inspections/{id}/confirm` | instructor dueño | `{checklist, observaciones?, itemsOk?}` termina la revisión. Checklist completo; observaciones obligatorias si hay novedad; `itemsOk` deben ser del ambiente (los que tienen novedad se descartan). Notifica al portero del ambiente (o a todos si no tiene) |
 | POST | `/inspections/{id}/qr` | portero | Genera (o renueva) el QR de entrega; guarda `portero_id`. Antes de que el instructor termine → `409` |
 | POST | `/inspections/by-qr/{token}/receive` | instructor | Sin cuerpo. → `recibida`; guarda `estado_salon` (ítems por estado, marcados OK, novedades por naturaleza, novedades en curso); las permanentes ya quedaron en curso al reportarlas. Avisa al portero y, si hay novedades, a coordinación, administrativo e inventario. QR de otro instructor → `403`; QR viejo o inexistente → `404` |
+| POST | `/inspections/{id}/delivery-qr` | instructor dueño | Sentido inverso: genera (o renueva) el QR de entrega del instructor, `qrInstructor: "SENA-ENT:<token>"` (solo lo recibe él). Antes de terminar la revisión → `409` |
+| POST | `/inspections/by-delivery-qr/{token}/confirm` | portero | El portero escanea el QR del instructor: guarda `portero_id` (quien escanea), cierra la entrega igual que `receive` (`recibidaVia: "qr_instructor"`) y avisa al instructor. QR usado o inexistente → `404` |
 | POST | `/inspections/{id}/cancel` | instructor dueño | Mientras no haya recibido el ambiente. Deshace los reportes |
 
 `tipoDano` ∈ `rotura | no_funciona | faltante | suciedad | otro`;

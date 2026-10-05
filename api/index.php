@@ -79,6 +79,8 @@ $RUTAS = [
     ['POST',   '#^/inspections/(\d+)/confirm$#',         'rutaConfirmarInspeccion'],
     ['POST',   '#^/inspections/(\d+)/qr$#',              'rutaGenerarQr'],
     ['POST',   '#^/inspections/by-qr/([A-Z0-9]{16})/receive$#', 'rutaRecibirPorQr'],
+    ['POST',   '#^/inspections/(\d+)/delivery-qr$#',      'rutaQrInstructor'],
+    ['POST',   '#^/inspections/by-delivery-qr/([A-Z0-9]{16})/confirm$#', 'rutaConfirmarQrInstructor'],
     ['POST',   '#^/inspections/(\d+)/cancel$#',          'rutaCancelarInspeccion'],
 
     ['GET',    '#^/persistent-issues$#',                 'rutaNovedades'],

@@ -1,14 +1,15 @@
 // Inspecciones (entrega de ambientes) según el rol:
-//  · Instructor: elige el ambiente y pulsa "Iniciar revisión"; si ya la
-//    terminó, "Escanear QR del portero" para recibirlo. Lista de sus revisiones.
+//  · Instructor: elige el ambiente y pulsa "Ingresé" (se registra la hora y
+//    empieza la revisión); si ya la terminó, "Escanear QR del portero" o
+//    mostrar su QR de entrega. Lista de sus revisiones.
 //  · Portero: pestañas "Por entregar" (revisiones terminadas: generar o
-//    mostrar el QR) y "Entregados hoy".
+//    mostrar el QR) y "Entregados hoy"; "Escanear QR del instructor".
 //  · Administrativo: historial con filtros.
 import { h, anexar, icono, vaciar } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { toast } from '../ui/avisos.js';
 import { cargando, tarjetaError } from '../ui/componentes.js';
-import { escanearEntrega } from '../ui/recibir.js';
+import { escanearEntrega, escanearQrInstructor } from '../ui/recibir.js';
 import { cabecera, tarjetaInspeccion, chipInspeccion, fecha, esHoy, vacio } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado, escuchar, emitir } from '../estado.js';
@@ -34,7 +35,7 @@ async function instructor(raiz, params) {
   let elegido = Number(params.get('ambiente')) || null;
 
   const iniciar = h('button', { class: 'btn btn-primary btn-block btn-lg inicio-inspeccion', type: 'button', disabled: !elegido, onclick: () => arrancar() },
-    icono('inspeccion'), h('span', {}, 'Iniciar revisión'));
+    icono('check'), h('span', {}, 'Ingresé'));
   const opciones = h('div', { class: 'amb-selector', role: 'radiogroup', 'aria-label': 'Ambiente a revisar' },
     ambientes.filter((a) => a.activo).map((a) => {
       const ult = a.ultimaInspeccion;
@@ -54,7 +55,7 @@ async function instructor(raiz, params) {
   function actualizar() {
     iniciar.disabled = !elegido;
     const a = ambientes.find((x) => x.id === elegido);
-    iniciar.lastChild.textContent = a ? `Iniciar revisión · ${a.codigo}` : 'Iniciar revisión';
+    iniciar.lastChild.textContent = a ? `Ingresé al ${a.codigo} · iniciar revisión` : 'Ingresé';
   }
 
   async function arrancar() {
@@ -64,7 +65,7 @@ async function instructor(raiz, params) {
       const s = await apiAmb.iniciarInspeccion(elegido);
       emitir('inspecciones');
       if (s.estado === 'pendiente_recepcion') { location.hash = `#/planilla?id=${s.id}`; return; }
-      toast('exito', `Revisión iniciada · ambiente ${s.ambiente.codigo}`, `Inicio registrado a las ${fecha.hora(s.iniciadaEn)}`);
+      toast('exito', `Ingresaste al ambiente ${s.ambiente.codigo}`, `Ingreso registrado a las ${fecha.hora(s.iniciadaEn)}: revisa el salón.`);
       location.hash = `#/inspeccion?id=${s.id}`;
     } catch (e) {
       toast('error', 'No se pudo iniciar', e.message);
@@ -79,7 +80,7 @@ async function instructor(raiz, params) {
     porRecibir.map((s) => h('button', { class: 'accion-grande accion-grande--alerta', type: 'button', onclick: escanearEntrega, 'data-anim': '' },
       h('span', { class: 'accion-grande-icono' }, icono('escanear')),
       h('span', {}, h('strong', {}, `Escanear QR del portero · ambiente ${s.ambiente.codigo}`),
-        h('span', {}, s.qrGeneradoEn ? 'El portero ya generó el QR de entrega' : 'Revisión terminada: pide al portero que genere el QR')),
+        h('span', {}, s.qrGeneradoEn ? 'El portero ya generó el QR de entrega' : 'Revisión terminada: pide al portero que genere el QR, o muéstrale el tuyo desde la planilla')),
       icono('flecha'))),
     enCurso && h('a', { class: 'accion-grande accion-grande--continuar', href: `#/inspeccion?id=${enCurso.id}`, 'data-anim': '' },
       h('span', { class: 'accion-grande-icono' }, icono('inspeccion')),
@@ -107,8 +108,9 @@ async function portero(raiz, alSalir) {
 
   anexar(raiz,
     cabecera({ eyebrow: 'Entrega de ambientes', titulo: 'Inspecciones',
-      subtitulo: 'Cuando el instructor termine la revisión, genera el QR de entrega y muéstraselo para que lo escanee.' }),
-    h('div', { class: 'barra-filtros', 'data-anim': '' }, pestanas),
+      subtitulo: 'Cuando el instructor termine la revisión, genera el QR de entrega y muéstraselo para que lo escanee, o escanea el QR que te muestre él.' }),
+    h('div', { class: 'barra-filtros', 'data-anim': '' }, pestanas,
+      h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: escanearQrInstructor }, icono('escanear'), 'Escanear QR del instructor')),
     cuerpo);
 
   async function cargar() {

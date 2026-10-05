@@ -84,7 +84,7 @@ desde Laura) y un turno anulado en el 111.
 ## Flujo de la demostración
 
 1. **Instructor** (1010101010) → *Inspecciones* → elige el ambiente 107 →
-   **Iniciar revisión** (se registra la hora). La cabecera muestra los
+   **Ingresé** (se registra la hora de ingreso y empieza la revisión). La cabecera muestra los
    **instructores asignados hoy** en cada jornada (tú resaltado, o un aviso si
    no estás asignado). Las **novedades permanentes en curso** del ambiente
    aparecen arriba y, **resaltadas en amarillo, en su área del checklist** (el
@@ -114,8 +114,12 @@ desde Laura) y un turno anulado en el 111.
    escanee…".
 4. El instructor pulsa **Escanear QR del portero** (en Inicio, Inspecciones
    o la planilla) y lo escanea (o escribe `SENA-INSP:…`).
+   **Al revés también sirve:** en la planilla el instructor pulsa **Mostrar mi
+   QR de entrega** (`SENA-ENT:…`) y el portero lo lee con **Escanear QR del
+   instructor** (en *Inspecciones* o en la planilla). La pantalla del
+   instructor cambia sola a "Recibiste el ambiente".
 5. Queda guardado quién revisó y recibió (`instructor_id`), quién entregó
-   (`portero_id`), las horas de cada paso, el **estado del salón**
+   (`portero_id`), con qué QR se cerró (`recibida_via`), las horas de cada paso, el **estado del salón**
    (`estado_salon`: ítems por estado, marcados OK, novedades por naturaleza)
    y los reportes con foto.
 6. **Novedades** (instructores y administrativos): las permanentes en curso,

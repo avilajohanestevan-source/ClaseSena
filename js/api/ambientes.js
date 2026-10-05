@@ -95,6 +95,8 @@ export const apiAmb = {
   confirmarInspeccion: (id, datos) => p('POST', `/inspections/${id}/confirm`, datos), // instructor termina: {checklist, observaciones, itemsOk}
   generarQr: (id) => p('POST', `/inspections/${id}/qr`),                     // portero: QR de entrega
   recibirPorQr: (token) => p('POST', `/inspections/by-qr/${token}/receive`), // instructor: escanea el QR del portero
+  qrInstructor: (id) => p('POST', `/inspections/${id}/delivery-qr`),        // instructor: muestra su QR de entrega (SENA-ENT:…)
+  confirmarQrInstructor: (token) => p('POST', `/inspections/by-delivery-qr/${token}/confirm`), // portero: escanea el QR del instructor
   cancelarInspeccion: (id) => p('POST', `/inspections/${id}/cancel`),
 
   // Novedades permanentes e historial de novedades

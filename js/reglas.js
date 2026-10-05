@@ -344,6 +344,14 @@ export function leerQrInspeccion(texto) {
   return m ? m[1] : null;
 }
 
+export const PREFIJO_QR_ENTREGA = 'SENA-ENT:';
+
+/** Token del QR de entrega que muestra el instructor ("SENA-ENT:<16 caracteres>"); lo escanea el portero. */
+export function leerQrEntrega(texto) {
+  const m = String(texto ?? '').trim().toUpperCase().match(/^SENA-ENT:([A-Z0-9]{16})$/);
+  return m ? m[1] : null;
+}
+
 /** Mismas reglas que el backend (api/modulos/inspecciones.php → rutaReportarDano). */
 export function validarReporteDano({ itemId, familiaId, ubicacion, naturaleza, tipoDano, severidad, comentario, foto }) {
   const errores = {};

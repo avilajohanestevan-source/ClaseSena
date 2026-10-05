@@ -113,3 +113,46 @@ test('flujo completo: el instructor revisa y reporta daños, el portero genera e
   const rep = (await pedir('GET', '/reports', { token: admin.token })).datos;
   assert.ok(rep.danos.some((d) => d.inspeccionId === insp.id && d.codigo === item.codigo));
 });
+
+test('al revés: el instructor muestra su QR de entrega y el portero lo escanea; se guardan instructor_id y portero_id', async (t) => {
+  let disponible = true;
+  await fetch(API + '/me').catch(() => { disponible = false; });
+  if (!disponible) { t.skip('API no disponible (enciende Apache y MySQL en XAMPP)'); return; }
+
+  const instructor = await ingresar('1010101011', 'instructor'); // Andrés
+  const portero = await ingresar('4040404040', 'portero');       // Jorge
+  const otroPortero = await ingresar('4040404041', 'portero');
+  const ambientes = (await pedir('GET', '/environments', { token: instructor.token })).datos;
+  const amb = ambientes.find((x) => x.codigo === '110');
+  const insp = (await pedir('POST', '/inspections', { token: instructor.token, cuerpo: { ambienteId: amb.id } })).datos;
+  assert.equal(insp.estado, 'en_curso');
+
+  // Antes de terminar la revisión no hay QR de entrega del instructor
+  assert.equal((await pedir('POST', `/inspections/${insp.id}/delivery-qr`, { token: instructor.token })).status, 409);
+  const checklist = insp.checklist.map((c) => ({ clave: c.clave, ok: true }));
+  assert.equal((await pedir('POST', `/inspections/${insp.id}/confirm`, { token: instructor.token, cuerpo: { checklist } })).status, 200);
+
+  // Solo el instructor dueño genera y ve su QR; el portero no lo recibe por la API
+  assert.equal((await pedir('POST', `/inspections/${insp.id}/delivery-qr`, { token: portero.token })).status, 403);
+  const gen = await pedir('POST', `/inspections/${insp.id}/delivery-qr`, { token: instructor.token });
+  assert.equal(gen.status, 200, JSON.stringify(gen.datos));
+  assert.match(gen.datos.qrInstructor, /^SENA-ENT:[A-F0-9]{16}$/);
+  assert.equal((await pedir('GET', `/inspections/${insp.id}`, { token: portero.token })).datos.qrInstructor, null);
+  const token = gen.datos.qrInstructor.replace('SENA-ENT:', '');
+
+  // El instructor no puede confirmarse a sí mismo; el portero escanea y se cierra la entrega
+  assert.equal((await pedir('POST', `/inspections/by-delivery-qr/${token}/confirm`, { token: instructor.token })).status, 403);
+  const conf = await pedir('POST', `/inspections/by-delivery-qr/${token}/confirm`, { token: portero.token });
+  assert.equal(conf.status, 200, JSON.stringify(conf.datos));
+  assert.equal(conf.datos.estado, 'recibida');
+  assert.equal(conf.datos.recibidaVia, 'qr_instructor');
+  assert.equal(conf.datos.instructor.nombre, 'Andrés Felipe Castro');
+  assert.equal(conf.datos.portero.nombre, 'Jorge Enrique Salazar');
+  assert.equal(conf.datos.entrega.nombre, 'Jorge Enrique Salazar');
+  assert.ok(conf.datos.recibidaEn && conf.datos.estadoSalon);
+
+  // El QR ya no sirve otra vez; el instructor recibe el aviso
+  assert.equal((await pedir('POST', `/inspections/by-delivery-qr/${token}/confirm`, { token: otroPortero.token })).status, 404);
+  const bandeja = (await pedir('GET', '/inbox', { token: instructor.token })).datos;
+  assert.ok(bandeja.notificaciones.some((n) => n.inspeccionId === insp.id && n.tipo === 'entrega_recibida'));
+});

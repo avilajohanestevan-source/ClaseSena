@@ -8,6 +8,8 @@
  *   2. Termina la revisión (checklist + ítems OK); se avisa al portero → pendiente_recepcion
  *   3. El portero genera el QR de entrega                    → pendiente_recepcion + qr_generado_en
  *   4. El instructor escanea el QR y confirma la recepción   → recibida + estado_salon
+ *      (o el instructor muestra su QR de entrega SENA-ENT:<token> y el
+ *      portero lo escanea para confirmar                       → recibida, recibida_via = qr_instructor)
  *   en_curso | pendiente_recepcion ──cancel (instructor)──▶ cancelada
  *
  * instructor_id = quien revisa y recibe; portero_id = quien genera el QR
@@ -41,6 +43,8 @@ const UBICACIONES = [
     'electrica' => 'Instalación eléctrica', 'estructura' => 'Estructura', 'otro' => 'Otro (salón)',
 ];
 
+const PREFIJO_QR_ENTREGA = 'SENA-ENT:';
+
 const SQL_INSPECCIONES = "
     SELECT s.*, e.codigo AS amb_codigo, e.nombre AS amb_nombre, e.portero_id AS amb_portero_id,
            pa.nombre AS amb_portero, i.nombre AS instructor_nombre, p.nombre AS portero_nombre,
@@ -61,12 +65,17 @@ function resumenInspeccion(array $s): array
 {
     // El instructor nunca recibe el texto del QR: tiene que escanearlo en el celular del portero.
     $verQr = $s['qr_generado_en'] && $s['estado'] === 'pendiente_recepcion' && usuario()['rol'] !== 'instructor';
+    // Y el portero nunca recibe el del instructor: solo lo ve el instructor dueño, para mostrarlo.
+    $verQrInstructor = $s['qr_instructor_token'] && $s['estado'] === 'pendiente_recepcion' && (int) usuario()['id'] === (int) $s['instructor_id'];
     return [
         'id' => (int) $s['id'],
         'estado' => $s['estado'],
         'resultado' => $s['resultado'],
         'qr' => $verQr ? 'SENA-INSP:' . $s['qr_token'] : null,
         'qrGeneradoEn' => iso($s['qr_generado_en']),
+        'qrInstructor' => $verQrInstructor ? PREFIJO_QR_ENTREGA . $s['qr_instructor_token'] : null,
+        'qrInstructorEn' => iso($s['qr_instructor_en']),
+        'recibidaVia' => $s['recibida_via'],
         'ambiente' => [
             'id' => (int) $s['environment_id'], 'codigo' => $s['amb_codigo'], 'nombre' => $s['amb_nombre'],
             'porteroId' => $s['amb_portero_id'] !== null ? (int) $s['amb_portero_id'] : null,
@@ -130,7 +139,9 @@ function detalleInspeccion(array $s): array
         // Foto del estado del salón al recibirlo (null hasta que se recibe).
         'estadoSalon' => $s['estado_salon'] ? json_decode($s['estado_salon'], true) : null,
         // Constancias: el portero al generar el QR (entrega) y el instructor al escanearlo (recibe).
-        'entrega' => $s['qr_generado_en'] ? ['nombre' => $s['firma_portero_nombre'], 'fecha' => iso($s['qr_generado_en'])] : null,
+        // Si el portero escaneó el QR del instructor, su constancia es la hora de la recepción.
+        'entrega' => $s['portero_id'] && ($s['qr_generado_en'] || $s['recibida_en'])
+            ? ['nombre' => $s['firma_portero_nombre'], 'fecha' => iso($s['qr_generado_en'] ?? $s['recibida_en']), 'via' => $s['recibida_via']] : null,
         'recibe' => $s['recibida_en'] ? ['nombre' => $s['firma_instructor_nombre'], 'fecha' => iso($s['recibida_en'])] : null,
         'reportes' => array_map(fn($d) => [
             'id' => (int) $d['id'],
@@ -456,22 +467,63 @@ function rutaRecibirPorQr(string $token): never
     }
     if ($s['estado'] === 'recibida') responder(detalleInspeccion($s));
     if ($s['estado'] !== 'pendiente_recepcion') fallar(409, 'Esta revisión fue cancelada.', 'ESTADO');
-    $id = (int) $s['id'];
+    cerrarEntrega($s, $u['nombre'], ['id' => (int) $s['portero_id'], 'nombre' => $s['portero_nombre']], 'qr_portero');
+}
 
+/** POST /inspections/{id}/delivery-qr: el instructor genera (o renueva) su QR de entrega para que el portero lo escanee. */
+function rutaQrInstructor(int $id): never
+{
+    $u = exigirRol('instructor');
+    $s = buscarInspeccion($id);
+    if ((int) $s['instructor_id'] !== (int) $u['id']) fallar(403, 'Solo el instructor que hizo la revisión puede mostrar su QR de entrega.', 'PERMISO');
+    if ($s['estado'] !== 'pendiente_recepcion') {
+        fallar(409, $s['estado'] === 'en_curso' ? 'Primero termina la revisión.' : 'Este ambiente ya fue entregado o la revisión se canceló.', 'ESTADO');
+    }
+    consulta("UPDATE inspections SET qr_instructor_token = ?, qr_instructor_en = NOW() WHERE id = ? AND estado = 'pendiente_recepcion'", [nuevoToken(), $id]);
+    responder(detalleInspeccion(buscarInspeccion($id)));
+}
+
+/**
+ * POST /inspections/by-delivery-qr/{token}/confirm: el portero escanea el QR
+ * que le muestra el instructor y confirma la entrega. Queda guardado
+ * instructor_id (el de la revisión) y portero_id (quien escaneó).
+ */
+function rutaConfirmarQrInstructor(string $token): never
+{
+    $u = exigirRol('portero');
+    $s = fila(SQL_INSPECCIONES . ' WHERE s.qr_instructor_token = ?', [$token]);
+    if (!$s) fallar(404, 'El QR no corresponde a ninguna entrega pendiente. Pide al instructor que lo muestre de nuevo.', 'NO_ENCONTRADO');
+    if ($s['estado'] !== 'pendiente_recepcion') fallar(409, 'Esta revisión fue cancelada.', 'ESTADO');
+    consulta('UPDATE inspections SET portero_id = ?, firma_portero_nombre = ? WHERE id = ?', [(int) $u['id'], $u['nombre'], (int) $s['id']]);
+    $s = fila(SQL_INSPECCIONES . ' WHERE s.id = ?', [(int) $s['id']]);
+    cerrarEntrega($s, $s['instructor_nombre'], ['id' => (int) $u['id'], 'nombre' => $u['nombre']], 'qr_instructor');
+}
+
+/**
+ * Cierra la entrega (con cualquiera de los dos QR): recibida, horas, estado
+ * del salón y avisos. Las novedades permanentes ya están en curso desde que
+ * se reportaron; si hubo novedades se avisa el resumen a coordinación,
+ * administrativo, inventario y almacén. Cada QR sirve una sola vez.
+ */
+function cerrarEntrega(array $s, string $instructorNombre, array $portero, string $via): never
+{
+    $id = (int) $s['id'];
     db()->begin_transaction();
     consulta(
-        "UPDATE inspections SET estado = 'recibida', firma_instructor_nombre = ?, recibida_en = NOW()
+        "UPDATE inspections SET estado = 'recibida', firma_instructor_nombre = ?, recibida_en = NOW(), recibida_via = ?, qr_instructor_token = NULL
          WHERE id = ? AND estado = 'pendiente_recepcion'",
-        [$u['nombre'], $id]
+        [$instructorNombre, $via, $id]
     );
     consulta("UPDATE notifications SET leida = 1 WHERE inspection_id = ? AND tipo = 'revision_lista'", [$id]);
-    notificar((int) $s['portero_id'], 'entrega_recibida', "{$u['nombre']} recibió el ambiente {$s['amb_codigo']}",
-        'Escaneó el QR de entrega' . ((int) $s['danos'] ? " · {$s['danos']} novedad(es) registrada(s)" : ' · sin novedades'), $id);
-    // Novedades permanentes: abren una persistent_issue (o se suman a la que ya estaba activa) y avisan.
-    // Las novedades permanentes ya quedaron en curso al reportarlas: aquí solo se cuentan para el resumen.
+    $resumen = (int) $s['danos'] ? " · {$s['danos']} novedad(es) registrada(s)" : ' · sin novedades';
+    if ($via === 'qr_portero') {
+        notificar($portero['id'], 'entrega_recibida', "$instructorNombre recibió el ambiente {$s['amb_codigo']}", 'Escaneó el QR de entrega' . $resumen, $id);
+    } else {
+        notificar((int) $s['instructor_id'], 'entrega_recibida', "{$portero['nombre']} confirmó la entrega del ambiente {$s['amb_codigo']}", 'Escaneó tu QR de entrega' . $resumen, $id);
+    }
     $nuevas = (int) fila("SELECT COUNT(*) n FROM persistent_issues WHERE inspection_id = ? AND estado <> 'anulada'", [$id])['n'];
     if ($s['resultado'] === 'con_danos') {
-        // Resumen para coordinación, administrativo e inventario: qué pasó a "Dañado", qué es del salón y qué fue temporal.
+        // Resumen: qué pasó a "Dañado", qué es del salón y qué fue temporal.
         $reportes = filas('SELECT d.ubicacion, d.naturaleza, COALESCE(it.codigo, f.codigo) codigo FROM inspection_items d
                            LEFT JOIN inventory_items it ON it.id = d.inventory_item_id LEFT JOIN item_families f ON f.id = d.family_id
                            WHERE d.inspection_id = ?', [$id]);
@@ -487,7 +539,7 @@ function rutaRecibirPorQr(string $token): never
             (int) $s['danos_graves'] ? "{$s['danos_graves']} grave(s)" : null,
         ]);
         notificarAdministrativos((int) $s['danos_graves'] ? 'dano_grave' : 'dano_reportado', "Novedades en el ambiente {$s['amb_codigo']}",
-            "Recibió {$u['nombre']} · entregó {$s['portero_nombre']} · " . implode(' · ', $partes), $id);
+            "Recibió $instructorNombre · entregó {$portero['nombre']} · " . implode(' · ', $partes), $id);
     }
     consulta('UPDATE inspections SET estado_salon = ? WHERE id = ?', [json_encode(estadoSalon($s), JSON_UNESCAPED_UNICODE), $id]);
     db()->commit();

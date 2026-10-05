@@ -10,6 +10,8 @@
 --   termina la revisión                                → inspections (pendiente_recepcion, items_ok) + notifications al portero
 --   el portero genera el QR de entrega                 → inspections (portero_id, qr_token nuevo, qr_generado_en)
 --   el instructor escanea el QR y confirma que recibe  → inspections (recibida, recibida_en, estado_salon)
+--   (o al revés: el instructor muestra su QR de entrega → inspections (qr_instructor_token)
+--    y el portero lo escanea para confirmar             → inspections (recibida, portero_id, recibida_via))
 --                                                        + persistent_issues por cada novedad permanente
 --                                                        + notifications al portero y a coordinación, administrativo e inventario
 --   el instructor o un administrativo la marca resuelta → persistent_issues (resuelta) + ítems de nuevo operativos
@@ -149,12 +151,16 @@ CREATE TABLE inspections (
   iniciada_en              DATETIME     NOT NULL,
   confirmada_en            DATETIME     NULL,       -- el instructor termina la revisión
   qr_generado_en           DATETIME     NULL,       -- el portero genera el QR de entrega
+  qr_instructor_token      CHAR(16)     NULL,       -- o el instructor muestra su QR (SENA-ENT:<token>) y el portero lo escanea
+  qr_instructor_en         DATETIME     NULL,
+  recibida_via             ENUM('qr_portero','qr_instructor') NULL, -- quién escaneó: el instructor el QR del portero o al revés
   recibida_en              DATETIME     NULL,       -- el instructor escanea el QR
   firma_portero            MEDIUMTEXT   NULL,       -- (sin uso: la constancia es el QR)
   firma_portero_nombre     VARCHAR(120) NULL,       -- nombre de quien entregó
   firma_instructor         MEDIUMTEXT   NULL,       -- (sin uso: la constancia es el QR)
   firma_instructor_nombre  VARCHAR(120) NULL,       -- nombre de quien recibió
   UNIQUE KEY uq_insp_qr (qr_token),
+  UNIQUE KEY uq_insp_qr_instructor (qr_instructor_token),
   KEY ix_insp_env (environment_id, iniciada_en),
   KEY ix_insp_estado (estado),
   CONSTRAINT fk_insp_env        FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE RESTRICT,
