@@ -1,10 +1,14 @@
 <?php
 /**
- * Asignación de instructores a ambientes por jornada (mañana, tarde, noche).
+ * Asignación de instructores a ambientes por jornada (mañana, tarde, noche y
+ * fines de semana, que solo aplica sábados y domingos).
  *
  *   dia         un solo día (fecha_inicio = fecha_fin)
- *   periodo     un rango de fechas
+ *   periodo     un rango de fechas (o "por semanas": de un lunes a un domingo)
  *   permanente  sin fecha final: vale hasta que se reasigne o se anule
+ *
+ * Periodo y permanente pueden limitarse a algunos días de la semana
+ * (dias_semana = "1,3,5": lunes, miércoles y viernes).
  *
  * Para cada ambiente, jornada y día vale la asignación vigente más
  * específica: día > periodo > permanente (así un reemplazo de un día no
@@ -34,8 +38,48 @@ function asignadosHoyPara(array $u, int $ambienteId, array $efectivas): array
     return veTodasLasAsignaciones($u) ? $hoy : array_values(array_filter($hoy, fn($j) => $j['instructorId'] === (int) $u['id']));
 }
 
-const JORNADAS = ['manana' => 'mañana', 'tarde' => 'tarde', 'noche' => 'noche'];
-const HORARIO_JORNADA = ['manana' => '6:00 a 12:00', 'tarde' => '12:00 a 18:00', 'noche' => '18:00 a 22:00'];
+const JORNADAS = ['manana' => 'mañana', 'tarde' => 'tarde', 'noche' => 'noche', 'fin_semana' => 'fin de semana'];
+const HORARIO_JORNADA = ['manana' => '6:00 a 12:00', 'tarde' => '12:00 a 18:00', 'noche' => '18:00 a 22:00', 'fin_semana' => 'sábado y domingo, 7:00 a 17:00'];
+const NOMBRE_DIA = [1 => 'lun', 2 => 'mar', 3 => 'mié', 4 => 'jue', 5 => 'vie', 6 => 'sáb', 7 => 'dom'];
+
+/** Días de la semana (1 = lunes … 7 = domingo) en que aplica una asignación; [] = todos. */
+function diasDe(array $a): array
+{
+    return $a['dias_semana'] ? array_map('intval', explode(',', $a['dias_semana'])) : [];
+}
+
+/** ¿La asignación aplica ese día? Respeta sus días de la semana y la jornada de fin de semana. */
+function aplicaEnDia(array $a, string $dia): bool
+{
+    $n = (int) (new DateTime($dia))->format('N');
+    if ($a['jornada'] === 'fin_semana' && $n < 6) return false;
+    $dias = diasDe($a);
+    return !$dias || in_array($n, $dias, true);
+}
+
+/** ¿Hay algún día en que apliquen las dos? (con días de la semana distintos no chocan) */
+function compartenDia(array $x, array $y): bool
+{
+    $desde = max($x['fecha_inicio'], $y['fecha_inicio']);
+    $hasta = min($x['fecha_fin'] ?? '9999-12-31', $y['fecha_fin'] ?? '9999-12-31');
+    for ($f = new DateTime($desde), $i = 0; $i < 7 && $f->format('Y-m-d') <= $hasta; $f->modify('+1 day'), $i++) {
+        if (aplicaEnDia($x, $f->format('Y-m-d')) && aplicaEnDia($y, $f->format('Y-m-d'))) return true;
+    }
+    return false;
+}
+
+/** diasSemana recibido ([1..7]) → "1,3,5" o null (todos). */
+function diasSemanaRecibidos($v, string $tipo, string $jornada): ?string
+{
+    if ($v === null || $v === '' || $v === []) return null;
+    if (!is_array($v)) fallar(422, 'Los días de la semana deben ser una lista (1 = lunes … 7 = domingo).', 'VALIDACION');
+    if ($tipo === 'dia') fallar(422, 'Los días de la semana solo aplican a periodos o asignaciones sin tiempo definido.', 'VALIDACION');
+    $dias = array_values(array_unique(array_map('intval', $v)));
+    sort($dias);
+    if (array_diff($dias, range(1, 7))) fallar(422, 'Los días de la semana van de 1 (lunes) a 7 (domingo).', 'VALIDACION');
+    if ($jornada === 'fin_semana' && !array_intersect($dias, [6, 7])) fallar(422, 'La jornada de fin de semana solo aplica sábados y domingos.', 'VALIDACION');
+    return count($dias) === 7 ? null : implode(',', $dias);
+}
 const TIPOS_ASIGNACION = ['dia', 'periodo', 'permanente'];
 const PRIORIDAD_TIPO = ['dia' => 3, 'periodo' => 2, 'permanente' => 1];
 
@@ -57,6 +101,7 @@ function asignacionPublica(array $a): array
         'tipo' => $a['tipo'],
         'fechaInicio' => $a['fecha_inicio'],
         'fechaFin' => $a['fecha_fin'],
+        'diasSemana' => diasDe($a),
         'estado' => $a['estado'],
         'motivo' => $a['motivo'],
         'reemplazaId' => $a['reemplaza_id'] !== null ? (int) $a['reemplaza_id'] : null,
@@ -97,24 +142,28 @@ function describirAsignacion(array $a): string
         'periodo' => "del {$a['fecha_inicio']} al {$a['fecha_fin']}",
         default => "permanente desde el {$a['fecha_inicio']}" . ($a['fecha_fin'] ? " hasta el {$a['fecha_fin']}" : ''),
     };
-    return "{$a['instructor_nombre']} · " . JORNADAS[$a['jornada']] . " · $cuando";
+    $dias = diasDe($a) ? ' · ' . implode(', ', array_map(fn($n) => NOMBRE_DIA[$n], diasDe($a))) : '';
+    return "{$a['instructor_nombre']} · " . JORNADAS[$a['jornada']] . " · $cuando$dias";
 }
 
 /**
  * Vigentes que se cruzan con [inicio, fin] (fin null = sin final). Con
  * $mismoTipo filtra por tipo; $excepto excluye una asignación.
  */
-function asignacionesQueSeCruzan(string $donde, array $params, string $inicio, ?string $fin, int $excepto = 0): array
+function asignacionesQueSeCruzan(string $donde, array $params, string $inicio, ?string $fin, int $excepto = 0, ?array $nueva = null): array
 {
-    return filas(SQL_ASIGNACIONES . " WHERE a.estado = 'vigente' AND a.id <> ? AND $donde
+    $filas = filas(SQL_ASIGNACIONES . " WHERE a.estado = 'vigente' AND a.id <> ? AND $donde
                  AND a.fecha_inicio <= COALESCE(?, '9999-12-31') AND COALESCE(a.fecha_fin, '9999-12-31') >= ?",
         [$excepto, ...$params, $fin, $inicio]);
+    // Con días de la semana o fines de semana, solo chocan si comparten algún día.
+    return $nueva ? array_values(array_filter($filas, fn($o) => compartenDia($nueva, $o))) : $filas;
 }
 
 /** Valida que no choque con otra del mismo tipo (409) y devuelve advertencias si el instructor ya tiene esa jornada en otro ambiente. */
-function revisarCruces(int $ambienteId, int $instructorId, string $jornada, string $tipo, string $inicio, ?string $fin, int $excepto = 0): array
+function revisarCruces(int $ambienteId, int $instructorId, string $jornada, string $tipo, string $inicio, ?string $fin, int $excepto = 0, ?string $diasSemana = null): array
 {
-    $duplicada = asignacionesQueSeCruzan('a.environment_id = ? AND a.jornada = ? AND a.tipo = ?', [$ambienteId, $jornada, $tipo], $inicio, $fin, $excepto);
+    $nueva = ['jornada' => $jornada, 'fecha_inicio' => $inicio, 'fecha_fin' => $fin, 'dias_semana' => $diasSemana];
+    $duplicada = asignacionesQueSeCruzan('a.environment_id = ? AND a.jornada = ? AND a.tipo = ?', [$ambienteId, $jornada, $tipo], $inicio, $fin, $excepto, $nueva);
     if ($duplicada) {
         $d = $duplicada[0];
         fallar(409, "El ambiente {$d['ambiente_codigo']} ya tiene asignada la jornada de la " . JORNADAS[$jornada] . ' (' . describirAsignacion($d)
@@ -122,7 +171,7 @@ function revisarCruces(int $ambienteId, int $instructorId, string $jornada, stri
     }
     return array_map(fn($o) => "{$o['instructor_nombre']} también tiene la jornada de la " . JORNADAS[$jornada] . " en el ambiente {$o['ambiente_codigo']} ("
         . ($o['tipo'] === 'dia' ? "el {$o['fecha_inicio']}" : ($o['fecha_fin'] ? "del {$o['fecha_inicio']} al {$o['fecha_fin']}" : "desde el {$o['fecha_inicio']}")) . ')',
-        asignacionesQueSeCruzan('a.instructor_id = ? AND a.jornada = ? AND a.environment_id <> ?', [$instructorId, $jornada, $ambienteId], $inicio, $fin, $excepto));
+        asignacionesQueSeCruzan('a.instructor_id = ? AND a.jornada = ? AND a.environment_id <> ?', [$instructorId, $jornada, $ambienteId], $inicio, $fin, $excepto, $nueva));
 }
 
 function instructorActivo($id): array
@@ -163,7 +212,7 @@ function asignacionesEfectivas(string $desde, string $hasta, ?int $ambienteId = 
     for ($f = new DateTime($desde); $f->format('Y-m-d') <= $hasta; $f->modify('+1 day')) {
         $dia = $f->format('Y-m-d');
         foreach ($filas as $a) {
-            if ($a['fecha_inicio'] > $dia || ($a['fecha_fin'] !== null && $a['fecha_fin'] < $dia)) continue;
+            if ($a['fecha_inicio'] > $dia || ($a['fecha_fin'] !== null && $a['fecha_fin'] < $dia) || !aplicaEnDia($a, $dia)) continue;
             $actual = $r[(int) $a['environment_id']][$dia][$a['jornada']] ?? null;
             if (!$actual || PRIORIDAD_TIPO[$a['tipo']] > PRIORIDAD_TIPO[$actual['tipo']] || (PRIORIDAD_TIPO[$a['tipo']] === PRIORIDAD_TIPO[$actual['tipo']] && $a['id'] > $actual['id'])) {
                 $r[(int) $a['environment_id']][$dia][$a['jornada']] = $a;
@@ -177,8 +226,10 @@ function asignacionesEfectivas(string $desde, string $hasta, ?int $ambienteId = 
 function asignadosHoy(int $ambienteId, array $efectivas): array
 {
     $hoy = $efectivas[$ambienteId][hoy()] ?? [];
-    return array_map(fn($j) => isset($hoy[$j]) ? ['jornada' => $j, 'instructorId' => (int) $hoy[$j]['instructor_id'], 'instructor' => $hoy[$j]['instructor_nombre'], 'tipo' => $hoy[$j]['tipo']]
-        : ['jornada' => $j, 'instructorId' => null, 'instructor' => null, 'tipo' => null], array_keys(JORNADAS));
+    return array_values(array_map(fn($j) => isset($hoy[$j]) ? ['jornada' => $j, 'instructorId' => (int) $hoy[$j]['instructor_id'], 'instructor' => $hoy[$j]['instructor_nombre'], 'tipo' => $hoy[$j]['tipo']]
+        : ['jornada' => $j, 'instructorId' => null, 'instructor' => null, 'tipo' => null],
+        // La jornada de fin de semana solo existe sábados y domingos.
+        array_filter(array_keys(JORNADAS), fn($j) => $j !== 'fin_semana' || (int) date('N') >= 6)));
 }
 
 /**
@@ -190,7 +241,8 @@ function rutaTableroAsignaciones(): never
     $u = exigirRol('administrativo', 'instructor', 'portero');
     $soloMias = !veTodasLasAsignaciones($u);
     $desde = fechaValida($_GET['desde'] ?? null, 'la fecha', false) ?? hoy();
-    $dias = max(1, min(31, (int) ($_GET['dias'] ?? 7)));
+    // Hasta 42 días: la vista mensual pide las 6 semanas que se ven en el calendario.
+    $dias = max(1, min(42, (int) ($_GET['dias'] ?? 7)));
     $hasta = (new DateTime($desde))->modify('+' . ($dias - 1) . ' day')->format('Y-m-d');
     $ambienteId = entero($_GET, 'ambienteId', false);
     $efectivas = asignacionesEfectivas($desde, $hasta, $ambienteId);
@@ -207,7 +259,7 @@ function rutaTableroAsignaciones(): never
                 // El instructor solo ve sus propios turnos.
                 if ($a && $soloMias && (int) $a['instructor_id'] !== (int) $u['id']) $a = null;
                 return $a ? ['id' => (int) $a['id'], 'instructorId' => (int) $a['instructor_id'], 'instructor' => $a['instructor_nombre'], 'tipo' => $a['tipo'],
-                             'fechaInicio' => $a['fecha_inicio'], 'fechaFin' => $a['fecha_fin']] : null;
+                             'fechaInicio' => $a['fecha_inicio'], 'fechaFin' => $a['fecha_fin'], 'diasSemana' => diasDe($a)] : null;
             }, array_keys(JORNADAS))), $fechas)),
         ], $ambientes),
     ];
@@ -231,7 +283,7 @@ function rutaAsignaciones(): never
     if ($f = fechaValida($_GET['fecha'] ?? null, 'la fecha', false)) { $where[] = "a.fecha_inicio <= ? AND COALESCE(a.fecha_fin, '9999-12-31') >= ?"; array_push($params, $f, $f); }
     elseif (($_GET['estado'] ?? 'vigente') !== 'todas') { $where[] = "COALESCE(a.fecha_fin, '9999-12-31') >= ?"; $params[] = hoy(); }
     $sql = SQL_ASIGNACIONES . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
-        . " ORDER BY e.codigo, FIELD(a.jornada, 'manana', 'tarde', 'noche'), a.fecha_inicio DESC LIMIT 500";
+        . " ORDER BY e.codigo, FIELD(a.jornada, 'manana', 'tarde', 'noche', 'fin_semana'), a.fecha_inicio DESC LIMIT 500";
     responder(array_map('asignacionPublica', filas($sql, $params)));
 }
 
@@ -246,11 +298,13 @@ function rutaAsignacion(int $id): never
 /* ---------------- cambios (administrativo) ---------------- */
 
 /**
- * POST /assignments {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, fechas?, motivo?}
+ * POST /assignments {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, fechas?, diasSemana?, motivo?}
  *   → {asignacion, asignaciones, advertencias}
  * Con tipo "dia" y fechas: [aaaa-mm-dd, …] se asignan varios días sueltos de
  * una vez (una asignación por día); con "periodo", de fechaInicio a fechaFin;
- * con "permanente", desde fechaInicio sin fecha final.
+ * con "permanente", desde fechaInicio sin fecha final. diasSemana ([1..7])
+ * limita un periodo o una permanente a esos días (p. ej. "por semanas", lunes
+ * a viernes). La jornada de fin de semana solo aplica sábados y domingos.
  */
 function rutaCrearAsignacion(): never
 {
@@ -262,6 +316,7 @@ function rutaCrearAsignacion(): never
     $jornada = opcion($d, 'jornada', array_keys(JORNADAS), true, 'la jornada');
     $tipo = opcion($d, 'tipo', TIPOS_ASIGNACION, true, 'si es por días, por un periodo o sin tiempo definido');
     $motivo = texto($d, 'motivo', 300, false, 'el motivo');
+    $diasSemana = diasSemanaRecibidos($d['diasSemana'] ?? null, $tipo, $jornada);
     if ($tipo === 'dia' && !empty($d['fechas'])) {
         if (!is_array($d['fechas']) || count($d['fechas']) > 62) fallar(422, 'Indica entre 1 y 62 días.', 'VALIDACION');
         $rangos = array_map(fn($f) => [fechaValida($f, 'cada día'), $f], array_values(array_unique($d['fechas'])));
@@ -272,20 +327,21 @@ function rutaCrearAsignacion(): never
     $advertencias = [];
     foreach ($rangos as [$inicio, $fin]) {
         if (($fin ?? '9999-12-31') < hoy()) fallar(422, $tipo === 'dia' ? "El $inicio ya pasó." : 'No se puede asignar en fechas que ya pasaron.', 'VALIDACION');
-        $advertencias = [...$advertencias, ...revisarCruces((int) $amb['id'], (int) $instructor['id'], $jornada, $tipo, $inicio, $fin)];
+        if ($tipo === 'dia' && $jornada === 'fin_semana' && (int) (new DateTime($inicio))->format('N') < 6) fallar(422, "El $inicio no es sábado ni domingo.", 'VALIDACION');
+        $advertencias = [...$advertencias, ...revisarCruces((int) $amb['id'], (int) $instructor['id'], $jornada, $tipo, $inicio, $fin, 0, $diasSemana)];
     }
 
     db()->begin_transaction();
     $creadas = [];
     foreach ($rangos as [$inicio, $fin]) {
         $id = insertar(
-            'INSERT INTO instructor_assignments (environment_id, instructor_id, jornada, tipo, fecha_inicio, fecha_fin, motivo, creada_por, creada_en)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-            [(int) $amb['id'], (int) $instructor['id'], $jornada, $tipo, $inicio, $fin, $motivo, (int) $u['id']]
+            'INSERT INTO instructor_assignments (environment_id, instructor_id, jornada, tipo, fecha_inicio, fecha_fin, dias_semana, motivo, creada_por, creada_en)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+            [(int) $amb['id'], (int) $instructor['id'], $jornada, $tipo, $inicio, $fin, $diasSemana, $motivo, (int) $u['id']]
         );
         $a = buscarAsignacion($id);
         auditar('asignacion', $id, (int) $amb['id'], 'creada', describirAsignacion($a) . ($motivo ? " · $motivo" : ''), (int) $u['id'], null,
-            ['instructorId' => (int) $instructor['id'], 'jornada' => $jornada, 'tipo' => $tipo, 'fechaInicio' => $inicio, 'fechaFin' => $fin]);
+            ['instructorId' => (int) $instructor['id'], 'jornada' => $jornada, 'tipo' => $tipo, 'fechaInicio' => $inicio, 'fechaFin' => $fin, 'diasSemana' => $diasSemana]);
         $creadas[] = $a;
     }
     $resumen = count($creadas) === 1 ? describirAsignacion($creadas[0])
@@ -319,6 +375,7 @@ function rutaEditarAsignacion(int $id): never
         'fechaFin' => array_key_exists('fechaFin', $d) ? $d['fechaFin'] : $a['fecha_fin'],
     ]);
     $motivo = array_key_exists('motivo', $d) ? texto($d, 'motivo', 300, false, 'el motivo') : $a['motivo'];
+    $diasSemana = array_key_exists('diasSemana', $d) ? diasSemanaRecibidos($d['diasSemana'], $tipo, $a['jornada']) : ($tipo === 'dia' ? null : $a['dias_semana']);
     if ($empezo) {
         if ($inicio !== $a['fecha_inicio']) fallar(422, 'La asignación ya empezó: no se puede cambiar la fecha de inicio. Cambia la fecha final o anúlala desde una fecha.', 'VALIDACION');
         if ($instructorId !== (int) $a['instructor_id']) fallar(422, 'La asignación ya empezó: para cambiar el instructor usa Reasignar, así los días anteriores conservan a quien los tuvo.', 'USAR_REASIGNAR');
@@ -328,17 +385,17 @@ function rutaEditarAsignacion(int $id): never
     }
     $nuevo = $instructorId !== (int) $a['instructor_id'] ? instructorActivo($instructorId) : null;
 
-    $antes = ['instructor' => $a['instructor_nombre'], 'tipo' => $a['tipo'], 'fechaInicio' => $a['fecha_inicio'], 'fechaFin' => $a['fecha_fin'], 'motivo' => $a['motivo']];
-    $despues = ['instructor' => $nuevo['nombre'] ?? $a['instructor_nombre'], 'tipo' => $tipo, 'fechaInicio' => $inicio, 'fechaFin' => $fin, 'motivo' => $motivo];
+    $antes = ['instructor' => $a['instructor_nombre'], 'tipo' => $a['tipo'], 'fechaInicio' => $a['fecha_inicio'], 'fechaFin' => $a['fecha_fin'], 'diasSemana' => $a['dias_semana'], 'motivo' => $a['motivo']];
+    $despues = ['instructor' => $nuevo['nombre'] ?? $a['instructor_nombre'], 'tipo' => $tipo, 'fechaInicio' => $inicio, 'fechaFin' => $fin, 'diasSemana' => $diasSemana, 'motivo' => $motivo];
     $cambios = array_filter(array_keys($antes), fn($k) => (string) $antes[$k] !== (string) $despues[$k]);
     if (!$cambios) fallar(422, 'No hay cambios.', 'VALIDACION');
-    $advertencias = revisarCruces((int) $a['environment_id'], $instructorId, $a['jornada'], $tipo, $inicio, $fin, $id);
+    $advertencias = revisarCruces((int) $a['environment_id'], $instructorId, $a['jornada'], $tipo, $inicio, $fin, $id, $diasSemana);
 
     db()->begin_transaction();
-    consulta('UPDATE instructor_assignments SET instructor_id = ?, tipo = ?, fecha_inicio = ?, fecha_fin = ?, motivo = ? WHERE id = ?',
-        [$instructorId, $tipo, $inicio, $fin, $motivo, $id]);
+    consulta('UPDATE instructor_assignments SET instructor_id = ?, tipo = ?, fecha_inicio = ?, fecha_fin = ?, dias_semana = ?, motivo = ? WHERE id = ?',
+        [$instructorId, $tipo, $inicio, $fin, $diasSemana, $motivo, $id]);
     $editada = buscarAsignacion($id);
-    $texto = implode(' · ', array_map(fn($k) => ['instructor' => 'instructor', 'tipo' => 'tipo', 'fechaInicio' => 'inicio', 'fechaFin' => 'fin', 'motivo' => 'motivo'][$k]
+    $texto = implode(' · ', array_map(fn($k) => ['instructor' => 'instructor', 'tipo' => 'tipo', 'fechaInicio' => 'inicio', 'fechaFin' => 'fin', 'diasSemana' => 'días', 'motivo' => 'motivo'][$k]
         . ': ' . ($antes[$k] ?? 'sin fecha') . ' → ' . ($despues[$k] ?? 'sin fecha'), $cambios));
     auditar('asignacion', $id, (int) $a['environment_id'], 'modificada', $texto, (int) $u['id'], null,
         ['antes' => array_intersect_key($antes, array_flip($cambios)), 'despues' => array_intersect_key($despues, array_flip($cambios))]);
@@ -395,14 +452,14 @@ function rutaReasignar(int $id): never
     if ((int) $nuevo['id'] === (int) $a['instructor_id']) fallar(422, 'Elige un instructor distinto al actual.', 'VALIDACION');
     $motivo = texto($d, 'motivo', 300, true, 'el motivo de la reasignación');
     $desde = desdeDelCambio($a, $d['desde'] ?? null);
-    $advertencias = revisarCruces((int) $a['environment_id'], (int) $nuevo['id'], $a['jornada'], $a['tipo'], $desde, $a['fecha_fin'], (int) $a['id']);
+    $advertencias = revisarCruces((int) $a['environment_id'], (int) $nuevo['id'], $a['jornada'], $a['tipo'], $desde, $a['fecha_fin'], (int) $a['id'], $a['dias_semana']);
 
     db()->begin_transaction();
     $resultado = cerrarAsignacionDesde($a, $desde, 'reasignada', "Reasignada a {$nuevo['nombre']}: $motivo", (int) $u['id']);
     $nuevaId = insertar(
-        'INSERT INTO instructor_assignments (environment_id, instructor_id, jornada, tipo, fecha_inicio, fecha_fin, motivo, reemplaza_id, creada_por, creada_en)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-        [(int) $a['environment_id'], (int) $nuevo['id'], $a['jornada'], $a['tipo'], $desde, $a['fecha_fin'], $motivo, (int) $a['id'], (int) $u['id']]
+        'INSERT INTO instructor_assignments (environment_id, instructor_id, jornada, tipo, fecha_inicio, fecha_fin, dias_semana, motivo, reemplaza_id, creada_por, creada_en)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+        [(int) $a['environment_id'], (int) $nuevo['id'], $a['jornada'], $a['tipo'], $desde, $a['fecha_fin'], $a['dias_semana'], $motivo, (int) $a['id'], (int) $u['id']]
     );
     $nueva = buscarAsignacion($nuevaId);
     $texto = "{$a['instructor_nombre']} → {$nuevo['nombre']} · " . JORNADAS[$a['jornada']] . " desde el $desde · $motivo";

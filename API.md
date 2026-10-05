@@ -163,7 +163,7 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 | `inspections` | `environment_id`, `instructor_id` (revisa y recibe), `portero_id` (entrega), estado, resultado, `qr_token`, checklist (JSON), **`items_ok`** (ítems marcados OK), **`estado_salon`** (JSON guardado al recibir), observaciones, horas de cada paso, nombres de quien entregó y recibió |
 | `inspection_items` | novedad reportada: `inspection_id` → `inventory_item_id`, **`family_id`** (familia completa) o `ubicacion` del salón; **`naturaleza`** (`permanente`, `temporal`, `limpieza`), tipo, severidad, comentario, foto, `persistent_issue_id` |
 | `persistent_issues` | novedades permanentes: ambiente, ítem / familia / ubicación, tipo, severidad, descripción, foto, `estado` (`en_curso`, `resuelta`, `anulada`), quién la reportó y en qué revisión, `resuelta_por`, `resuelta_en`, `resolucion`, `foto_resolucion`, `anulada_en` |
-| `instructor_assignments` | asignación de instructores: ambiente, instructor, `jornada` (`manana`, `tarde`, `noche`), `tipo` (`dia`, `periodo`, `permanente`), `fecha_inicio`, `fecha_fin` (NULL = permanente), `estado` (`vigente`, `reasignada`, `anulada`), motivo, `reemplaza_id`, quién la creó y quién la cerró |
+| `instructor_assignments` | asignación de instructores: ambiente, instructor, `jornada` (`manana`, `tarde`, `noche`, `fin_semana`), `tipo` (`dia`, `periodo`, `permanente`), `fecha_inicio`, `fecha_fin` (NULL = permanente), `dias_semana` ("1,3,5"; NULL = todos), `estado` (`vigente`, `reasignada`, `anulada`), motivo, `reemplaza_id`, quién la creó y quién la cerró |
 | `audit_events` | historial para auditoría: `entidad` (`novedad`, `asignacion`), `entidad_id`, ambiente, `accion`, detalle, `foto` (evidencia), `datos` (antes/después), usuario y fecha |
 | `notifications` | `revision_lista` (al portero: genera el QR), `entrega_recibida` (al portero), `dano_reportado` / `dano_grave` (resumen a coordinación, administrativo y almacén), `novedad_permanente` y `novedad_resuelta` (con `persistent_issue_id`), `asignacion` (al instructor asignado, reasignado o cuyo turno se anuló) |
 
@@ -277,8 +277,11 @@ se retira antes de entregar el ambiente (o se cancela la revisión), queda
 ## Asignación de instructores por jornada
 
 Se gestiona en el formulario *Editar ambiente* (y se consulta en el tablero
-de Asignaciones). Jornadas: `manana` (6:00 a 12:00), `tarde` (12:00 a 18:00),
-`noche` (18:00 a 22:00). Tipos: `dia` (por días: uno o varios días sueltos),
+de Asignaciones, por semana o por mes). Jornadas: `manana` (6:00 a 12:00), `tarde` (12:00 a 18:00),
+`noche` (18:00 a 22:00) y `fin_semana` (solo sábados y domingos). Periodo y
+permanente aceptan `diasSemana` ([1..7], 1 = lunes): la asignación solo vale
+esos días ("por semanas" en el front es un periodo de lunes a domingo con sus
+días); dos asignaciones del mismo tipo con días distintos no chocan. Tipos: `dia` (por días: uno o varios días sueltos),
 `periodo` (fecha inicio — fecha fin, máximo un año) y `permanente` (sin tiempo
 definido, hasta que se cambie o se anule). Para cada
 ambiente, jornada y día vale la vigente más específica: **día > periodo >
@@ -288,11 +291,11 @@ ambiente, se crea igual y la respuesta trae `advertencias`.
 
 | Método | Ruta | Rol | Notas |
 |---|---|---|---|
-| GET | `/assignments/board?desde=aaaa-mm-dd&dias=7&ambienteId` | personal | Tablero (hasta 31 días): `{desde, hasta, fechas, jornadas, ambientes:[{id, codigo, nombre, celdas:{"2026-10-02": {manana: {id, instructorId, instructor, tipo, fechaInicio, fechaFin} \| null, tarde, noche}}}]}` |
+| GET | `/assignments/board?desde=aaaa-mm-dd&dias=7&ambienteId` | personal | Tablero (hasta 42 días: la vista mensual pide las semanas completas del mes; `fin_semana` es null entre semana): `{desde, hasta, fechas, jornadas, ambientes:[{id, codigo, nombre, celdas:{"2026-10-02": {manana: {id, instructorId, instructor, tipo, fechaInicio, fechaFin} \| null, tarde, noche}}}]}` |
 | GET | `/assignments?ambienteId&instructorId&estado=vigente\|todas&fecha` | instructor, administrativo | Lista (el instructor solo ve las suyas). Por defecto, las vigentes desde hoy |
 | GET | `/assignments/{id}` | instructor (las suyas), administrativo | + `eventos` (auditoría) |
-| POST | `/assignments` | administrativo | `{ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin? (solo periodo), fechas? (solo dia: varios días sueltos), motivo?}` → `{asignacion, asignaciones, advertencias}`. Fechas ya pasadas → `422`. Avisa al instructor |
-| PATCH | `/assignments/{id}` | administrativo | `{instructorId?, tipo?, fechaInicio?, fechaFin?, motivo?}` → `{asignacion, advertencias}`. Si aún no empieza se cambia todo; si ya empezó, solo la fecha final, el tipo (periodo ↔ sin tiempo definido) y el motivo: cambiar el instructor → `422 USAR_REASIGNAR` (se usa `/reassign` desde una fecha). Evento `modificada` con el antes y el después |
+| POST | `/assignments` | administrativo | `{ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin? (solo periodo), fechas? (solo dia: varios días sueltos), diasSemana? (periodo o permanente), motivo?}`. `fin_semana` por días en un día entre semana → `422` → `{asignacion, asignaciones, advertencias}`. Fechas ya pasadas → `422`. Avisa al instructor |
+| PATCH | `/assignments/{id}` | administrativo | `{instructorId?, tipo?, fechaInicio?, fechaFin?, diasSemana? (null = todos), motivo?}` → `{asignacion, advertencias}`. Si aún no empieza se cambia todo; si ya empezó, solo la fecha final, el tipo (periodo ↔ sin tiempo definido) y el motivo: cambiar el instructor → `422 USAR_REASIGNAR` (se usa `/reassign` desde una fecha). Evento `modificada` con el antes y el después |
 | POST | `/assignments/{id}/reassign` | administrativo | `{instructorId, motivo, desde?}`: el nuevo instructor toma la jornada desde `desde` (por defecto hoy) hasta donde iba la original. Si `desde` es su primer día, la original queda `reasignada`; si no, se recorta al día anterior. → `{asignacion, anterior, advertencias}`. Avisa a ambos |
 | POST | `/assignments/{id}/cancel` | administrativo | `{motivo, desde?}`: anula el turno desde esa fecha (primer día → `anulada`; si no, se recorta). Avisa al instructor |
 

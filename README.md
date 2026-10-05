@@ -134,16 +134,20 @@ desde Laura) y un turno anulado en el 111.
    novedades: equipo o ambiente, fecha, usuario, evidencia, naturaleza,
    estado y fecha de resolución (con CSV).
 7. **Instructores asignados** en *Ambientes → Editar ambiente* (administrativo):
-   en el mismo formulario se ven las asignaciones por jornada y quién está hoy,
-   y se asigna **por periodo** (inicio — fin), **por días** (uno o varios días
-   sueltos) o **sin tiempo definido**; cada asignación se **edita** o se
+   en el mismo formulario se ven las asignaciones por jornada (mañana, tarde,
+   noche y **fin de semana**, que solo aplica sábados y domingos) y quién está
+   hoy, y se asigna **sin definir** (sin fecha final, opcionalmente solo
+   algunos días de la semana), **por semanas** (semana de inicio, número de
+   semanas y días de la semana: p. ej. lunes, miércoles y viernes), **por
+   días** (uno o varios días sueltos) o **por rango de fechas** (inicio — fin); cada asignación se **edita** o se
    **anula** desde ahí (si ya empezó, cambiar de instructor la reasigna desde
    una fecha y los días anteriores se conservan). Al crear un ambiente, las
    asignaciones que agregues se crean al guardarlo. El tablero de
-   **Asignaciones** muestra la semana completa de quién está en cada
-   ambiente en cada jornada (mañana, tarde, noche). Se asigna por **un día**,
-   por **un periodo** o **permanente** (vale la más específica: día > periodo
-   > permanente), y se **reasigna** o **anula** un turno desde una fecha. El
+   **Asignaciones** se ve **por semana** (tabla de ambientes × jornadas) o
+   **por mes** (calendario de lunes a domingo; en el celular, la jornada es una
+   barra de color con las iniciales del instructor), con **filtro por jornada**
+   y por ambiente. Se asigna con los mismos cuatro modos (vale la más
+   específica: por días > por semanas o rango > sin definir), y se **reasigna** o **anula** un turno desde una fecha. El
    instructor recibe el aviso y ve el tablero y sus turnos.
 8. **Auditoría** (administrativo): todos los eventos de novedades y
    asignaciones (reportes, resoluciones, reasignaciones, anulaciones) con

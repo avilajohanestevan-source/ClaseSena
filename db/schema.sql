@@ -17,9 +17,10 @@
 --   el instructor o un administrativo la marca resuelta → persistent_issues (resuelta) + ítems de nuevo operativos
 --   cada cambio de una novedad o de una asignación      → audit_events (fecha, usuario, detalle y evidencia)
 --
--- Asignación de instructores por jornada (mañana, tarde, noche): por un día,
--- por un periodo (rango de fechas) o permanente (sin fecha final, hasta que
--- se cambie). Para cada ambiente, jornada y día vale la más específica:
+-- Asignación de instructores por jornada (mañana, tarde, noche o fines de
+-- semana): por días, por un periodo (rango de fechas o por semanas) o
+-- permanente (sin fecha final, hasta que se cambie). Periodo y permanente
+-- pueden limitarse a algunos días de la semana (dias_semana). Para cada ambiente, jornada y día vale la más específica:
 -- día > periodo > permanente. Se reasignan o anulan; todo queda en audit_events.
 --
 -- Inventario: cada ítem tiene un código único y un qr_value (lo que lleva su
@@ -278,10 +279,11 @@ CREATE TABLE instructor_assignments (
   id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   environment_id  INT UNSIGNED NOT NULL,
   instructor_id   INT UNSIGNED NOT NULL,
-  jornada         ENUM('manana','tarde','noche') NOT NULL,
+  jornada         ENUM('manana','tarde','noche','fin_semana') NOT NULL, -- fin_semana: solo sábados y domingos
   tipo            ENUM('dia','periodo','permanente') NOT NULL,
   fecha_inicio    DATE         NOT NULL,
   fecha_fin       DATE         NULL,
+  dias_semana     VARCHAR(13)  NULL,               -- "1,3,5" (ISO: 1 = lunes … 7 = domingo): solo esos días; NULL = todos
   estado          ENUM('vigente','reasignada','anulada') NOT NULL DEFAULT 'vigente',
   motivo          VARCHAR(300) NULL,
   reemplaza_id    INT UNSIGNED NULL,               -- asignación a la que reemplaza (reasignación)

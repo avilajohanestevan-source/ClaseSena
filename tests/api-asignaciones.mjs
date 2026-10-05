@@ -170,3 +170,45 @@ test('permisos: el administrativo ve y cambia todo; el portero ve todo sin cambi
   assert.deepEqual(ambAndres.asignadosHoy.map((j) => j.jornada), ['tarde'], 'Andrés solo ve su tarde en el 107');
   assert.equal((await pedir('POST', '/assignments', { token: laura, cuerpo: { ambienteId: amb107.id, instructorId: 1, jornada: 'noche', tipo: 'dia', fechaInicio: dia(1) } })).status, 403);
 });
+
+test('fines de semana, por semanas con días de la semana y tablero mensual', async (t) => {
+  if (!await disponible()) { t.skip('API no disponible (enciende Apache y MySQL en XAMPP)'); return; }
+  const admin = await ingresar('2020202020', 'administrativo');
+  const usuarios = (await pedir('GET', '/users?rol=instructor', { token: admin })).datos;
+  const id = (nombre) => usuarios.find((u) => u.nombre.startsWith(nombre)).id;
+  const amb = (await pedir('GET', '/environments', { token: admin })).datos.find((a) => a.codigo === '108');
+  const isoDia = (iso) => { const d = new Date(`${iso}T12:00:00`).getDay(); return d === 0 ? 7 : d; };
+  // Próximo lunes (al menos dentro de una semana, para no chocar con hoy)
+  let lunes = dia(7); while (isoDia(lunes) !== 1) lunes = (() => { const d = new Date(`${lunes}T12:00:00`); d.setDate(d.getDate() + 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  const sumar = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+  // Fin de semana: un día entre semana no se acepta; el sábado sí
+  const base = { ambienteId: amb.id, instructorId: id('Laura'), jornada: 'fin_semana', tipo: 'dia' };
+  assert.equal((await pedir('POST', '/assignments', { token: admin, cuerpo: { ...base, fechaInicio: lunes } })).status, 422);
+  const sab = await pedir('POST', '/assignments', { token: admin, cuerpo: { ...base, fechaInicio: sumar(lunes, 5) } });
+  assert.equal(sab.status, 201, JSON.stringify(sab.datos));
+
+  // Por semanas: 2 semanas, lunes y miércoles (Andrés) y martes y jueves (Diana) en la misma jornada: no chocan
+  const semanas = { ambienteId: amb.id, jornada: 'manana', tipo: 'periodo', fechaInicio: lunes, fechaFin: sumar(lunes, 13) };
+  const lm = await pedir('POST', '/assignments', { token: admin, cuerpo: { ...semanas, instructorId: id('Andrés'), diasSemana: [1, 3] } });
+  assert.equal(lm.status, 201, JSON.stringify(lm.datos));
+  assert.deepEqual(lm.datos.asignacion.diasSemana, [1, 3]);
+  const mj = await pedir('POST', '/assignments', { token: admin, cuerpo: { ...semanas, instructorId: id('Diana'), diasSemana: [2, 4] } });
+  assert.equal(mj.status, 201, JSON.stringify(mj.datos));
+  // Pero otro periodo el lunes sí choca
+  assert.equal((await pedir('POST', '/assignments', { token: admin, cuerpo: { ...semanas, instructorId: id('Laura'), diasSemana: [1] } })).status, 409);
+  // Días de la semana inválidos
+  assert.equal((await pedir('POST', '/assignments', { token: admin, cuerpo: { ...semanas, instructorId: id('Laura'), diasSemana: [9] } })).status, 422);
+
+  // Tablero mensual (42 días): cada día muestra quien corresponde según el día de la semana
+  const tab = (await pedir('GET', `/assignments/board?desde=${lunes}&dias=42&ambienteId=${amb.id}`, { token: admin })).datos;
+  assert.equal(tab.fechas.length, 42);
+  assert.ok(tab.jornadas.some((j) => j.clave === 'fin_semana'));
+  const celdas = tab.ambientes[0].celdas;
+  assert.equal(celdas[lunes].manana.instructor, 'Andrés Felipe Castro');
+  assert.equal(celdas[sumar(lunes, 1)].manana.instructor, 'Diana Marcela Ruiz');
+  assert.equal(celdas[sumar(lunes, 4)].manana, null);           // viernes: nadie
+  assert.equal(celdas[sumar(lunes, 14)].manana, null);          // tercera semana: ya terminó
+  assert.equal(celdas[sumar(lunes, 5)].fin_semana.instructor, 'Laura Gómez Patiño');
+  assert.equal(celdas[lunes].fin_semana, null);                 // fin de semana no aplica el lunes
+});

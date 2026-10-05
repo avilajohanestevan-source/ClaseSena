@@ -283,25 +283,79 @@ export const JORNADAS = [
   { clave: 'manana', etiqueta: 'Mañana', horario: '6:00 a 12:00' },
   { clave: 'tarde', etiqueta: 'Tarde', horario: '12:00 a 18:00' },
   { clave: 'noche', etiqueta: 'Noche', horario: '18:00 a 22:00' },
+  // Solo aplica sábados y domingos.
+  { clave: 'fin_semana', etiqueta: 'Fin de semana', horario: 'sáb. y dom., 7:00 a 17:00' },
 ];
 export const ETIQUETA_JORNADA = Object.fromEntries(JORNADAS.map((j) => [j.clave, j.etiqueta]));
 
 export const TIPOS_ASIGNACION = [
-  { clave: 'periodo', etiqueta: 'Por periodo', ayuda: 'De una fecha de inicio a una fecha final (máximo un año).' },
+  { clave: 'periodo', etiqueta: 'Por rango de fechas', ayuda: 'De una fecha de inicio a una fecha final (máximo un año).' },
   { clave: 'dia', etiqueta: 'Por días', ayuda: 'Uno o varios días sueltos (reemplazos, clases puntuales). Ese día tienen prioridad.' },
-  { clave: 'permanente', etiqueta: 'Sin tiempo definido', ayuda: 'Sin fecha final: vale hasta que se cambie o se anule.' },
+  { clave: 'permanente', etiqueta: 'Sin definir', ayuda: 'Sin fecha final: vale hasta que se cambie o se anule.' },
 ];
+
+/**
+ * Cómo se elige el tiempo en el formulario. "Por semanas" se guarda como un
+ * periodo de lunes a domingo (con los días de la semana elegidos).
+ */
+export const MODOS_ASIGNACION = [
+  { clave: 'permanente', etiqueta: 'Sin definir', ayuda: 'Sin fecha final: vale hasta que se cambie o se anule. Puedes limitarla a algunos días de la semana.' },
+  { clave: 'semanas', etiqueta: 'Por semanas', ayuda: 'Una o varias semanas completas desde la semana elegida, en los días de la semana que marques.' },
+  { clave: 'dia', etiqueta: 'Por días', ayuda: 'Uno o varios días sueltos (reemplazos, clases puntuales). Ese día tienen prioridad.' },
+  { clave: 'periodo', etiqueta: 'Por rango de fechas', ayuda: 'De una fecha de inicio a una fecha final (máximo un año).' },
+];
+
+/** Días de la semana ISO (1 = lunes … 7 = domingo). */
+export const DIAS_SEMANA = [
+  { n: 1, corto: 'Lun', nombre: 'lunes' }, { n: 2, corto: 'Mar', nombre: 'martes' }, { n: 3, corto: 'Mié', nombre: 'miércoles' },
+  { n: 4, corto: 'Jue', nombre: 'jueves' }, { n: 5, corto: 'Vie', nombre: 'viernes' }, { n: 6, corto: 'Sáb', nombre: 'sábado' },
+  { n: 7, corto: 'Dom', nombre: 'domingo' },
+];
+
+/** Día ISO de la semana de una fecha aaaa-mm-dd (1 = lunes … 7 = domingo). */
+export function diaSemana(iso) {
+  const d = new Date(`${iso}T12:00:00`).getDay();
+  return d === 0 ? 7 : d;
+}
+
+function sumarDiasIso(iso, n) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return fechaIso(d);
+}
+
+/**
+ * "Por semanas": del lunes de la semana elegida (o desde hoy si ese lunes ya
+ * pasó) al domingo de la última semana.
+ */
+export function rangoSemanas(inicio, semanas, hoy = fechaIso()) {
+  const lunes = sumarDiasIso(inicio, 1 - diaSemana(inicio));
+  return { fechaInicio: lunes < hoy ? hoy : lunes, fechaFin: sumarDiasIso(lunes, 7 * Math.max(1, semanas) - 1) };
+}
+
+/** "lun, mié, vie" (vacío = todos los días). */
+export function describirDiasSemana(dias = []) {
+  return dias.length && dias.length < 7 ? DIAS_SEMANA.filter((d) => dias.includes(d.n)).map((d) => d.corto.toLowerCase()).join(', ') : '';
+}
 
 /**
  * Valida el formulario de una asignación (mismas reglas que el backend,
  * api/modulos/asignaciones.php). Fechas en aaaa-mm-dd; hoy para comparar.
  */
-export function validarAsignacion({ ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin, fechas }, hoy = fechaIso()) {
+export function validarAsignacion({ ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin, fechas, diasSemana }, hoy = fechaIso()) {
   const errores = {};
+  if (Array.isArray(diasSemana)) {
+    if (!diasSemana.length) errores.diasSemana = 'Marca al menos un día de la semana.';
+    else if (jornada === 'fin_semana' && !diasSemana.some((d) => d >= 6)) errores.diasSemana = 'La jornada de fin de semana solo aplica sábados y domingos.';
+  }
+  if (tipo === 'dia' && jornada === 'fin_semana') {
+    const entreSemana = (Array.isArray(fechas) ? fechas : [fechaInicio]).filter((f) => f && diaSemana(f) < 6);
+    if (entreSemana.length) errores[Array.isArray(fechas) ? 'fechas' : 'fechaInicio'] = 'La jornada de fin de semana solo aplica sábados y domingos.';
+  }
   if (!ambienteId) errores.ambienteId = 'Elige el ambiente.';
   if (!instructorId) errores.instructorId = 'Elige el instructor.';
   if (!JORNADAS.some((j) => j.clave === jornada)) errores.jornada = 'Elige la jornada.';
-  if (!TIPOS_ASIGNACION.some((t) => t.clave === tipo)) errores.tipo = 'Elige si es por periodo, por días o sin tiempo definido.';
+  if (!TIPOS_ASIGNACION.some((t) => t.clave === tipo)) errores.tipo = 'Elige sin definir, por semanas, por días o por rango de fechas.';
   // Por días: varios días sueltos.
   if (tipo === 'dia' && Array.isArray(fechas)) {
     if (!fechas.length) errores.fechas = 'Agrega al menos un día.';

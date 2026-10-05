@@ -190,12 +190,22 @@ INSERT INTO instructor_assignments (id, environment_id, instructor_id, jornada, 
   (8, 5, 1, 'noche', 'dia', CURDATE() - INTERVAL 2 DAY, CURDATE() - INTERVAL 2 DAY, 'anulada', 'Taller de edición', NULL,
      6, TIMESTAMP(CURDATE() - INTERVAL 5 DAY, '10:00:00'), 6, TIMESTAMP(CURDATE() - INTERVAL 3 DAY, '11:00:00'), 'Se aplazó el taller');
 
+-- Fines de semana (solo sábados y domingos) y "por semanas": 4 semanas desde el
+-- lunes de esta semana, solo lunes, miércoles y viernes.
+INSERT INTO instructor_assignments (id, environment_id, instructor_id, jornada, tipo, fecha_inicio, fecha_fin, dias_semana, estado, motivo,
+                                    creada_por, creada_en) VALUES
+  (9, 5, 2, 'fin_semana', 'permanente', CURDATE() - INTERVAL 14 DAY, NULL, NULL, 'vigente', 'Ficha de fines de semana 3011450 · Fotografía',
+     10, TIMESTAMP(CURDATE() - INTERVAL 15 DAY, '10:00:00')),
+  (10, 4, 1, 'noche', 'periodo', CURDATE() - INTERVAL WEEKDAY(CURDATE()) DAY, CURDATE() - INTERVAL WEEKDAY(CURDATE()) DAY + INTERVAL 27 DAY, '1,3,5', 'vigente',
+     'Curso complementario de panadería (lun, mié y vie)', 6, TIMESTAMP(CURDATE() - INTERVAL 7 DAY, '15:00:00'));
+
 INSERT INTO audit_events (entidad, entidad_id, environment_id, accion, detalle, user_id, created_at)
   SELECT 'asignacion', a.id, a.environment_id, 'creada',
-         CONCAT(u.nombre, ' · ', ELT(FIELD(a.jornada, 'manana', 'tarde', 'noche'), 'mañana', 'tarde', 'noche'), ' · ',
+         CONCAT(u.nombre, ' · ', ELT(FIELD(a.jornada, 'manana', 'tarde', 'noche', 'fin_semana'), 'mañana', 'tarde', 'noche', 'fin de semana'), ' · ',
                 CASE a.tipo WHEN 'dia' THEN CONCAT('solo el ', DATE_FORMAT(a.fecha_inicio, '%Y-%m-%d'))
                             WHEN 'periodo' THEN CONCAT('del ', DATE_FORMAT(a.fecha_inicio, '%Y-%m-%d'), ' al ', DATE_FORMAT(a.fecha_fin, '%Y-%m-%d'))
-                            ELSE CONCAT('permanente desde el ', DATE_FORMAT(a.fecha_inicio, '%Y-%m-%d')) END),
+                            ELSE CONCAT('permanente desde el ', DATE_FORMAT(a.fecha_inicio, '%Y-%m-%d')) END,
+                IF(a.dias_semana IS NULL, '', ' · lun, mié, vie')),
          a.creada_por, a.creada_en
   FROM instructor_assignments a JOIN users u ON u.id = a.instructor_id;
 INSERT INTO audit_events (entidad, entidad_id, environment_id, accion, detalle, user_id, created_at) VALUES
