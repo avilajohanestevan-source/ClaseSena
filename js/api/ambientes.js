@@ -8,7 +8,7 @@ import { pedirAmbientes as p, descargarAmbientes } from './cliente.js';
  * @typedef {{id:number, tipoDocumento:string, identificacion:string, nombre:string, email:?string,
  *   telefono:?string, rol:Rol, area:?('coordinacion'|'administrativo'|'inventario'), ficha:?string}} Usuario
  * @typedef {{id:number, nombre:string, descripcion:?string, activo:boolean, enUso:number}} Catalogo  especialidad o categoría
- * @typedef {{id:number, codigo:string, nombre:string, bloque:?string, capacidadAprendices:?number, especialidadId:?number,
+ * @typedef {{id:number, codigo:string, nombre:string, capacidadAprendices:?number, especialidadId:?number,
  *   especialidad:?string, porteroId:?number, portero:?string, activo:boolean, itemsTotal:number, itemsNovedad:number,
  *   familiasTotal:number, novedadesActivas:number,
  *   ultimaInspeccion:?{id:number, estado:string, resultado:?string, iniciadaEn:string, instructorId:number, instructor:string}}} Ambiente
@@ -29,7 +29,7 @@ import { pedirAmbientes as p, descargarAmbientes } from './cliente.js';
  *   tipoDano:string, severidad:string, descripcion:string, foto:?string, reportadaPor:?string, inspeccionId:?number,
  *   creadaEn:string, resueltaPor:?string, resueltaEn:?string, resolucion:?string, reportes:number}} NovedadPermanente
  * @typedef {{id:number, estado:'en_curso'|'pendiente_recepcion'|'recibida'|'cancelada', resultado:?('ok'|'con_danos'),
- *   qr:?string, qrGeneradoEn:?string, ambiente:{id:number, codigo:string, nombre:string, bloque:?string, porteroId:?number, portero:?string},
+ *   qr:?string, qrGeneradoEn:?string, ambiente:{id:number, codigo:string, nombre:string, porteroId:?number, portero:?string},
  *   instructor:{id:number, nombre:string}, portero:?{id:number, nombre:string},
  *   iniciadaEn:string, confirmadaEn:?string, recibidaEn:?string, danos:number, danosGraves:number}} Inspeccion
  * @typedef {Inspeccion & {checklist:PuntoChecklist[], observaciones:?string, itemsOk:number[], estadoSalon:?object,
@@ -60,7 +60,7 @@ export const apiAmb = {
   // Ambientes
   ambientes: (filtros) => p('GET', '/environments', filtros),         // → Ambiente[]  {asignados?, especialidadId?}
   ambiente: (id) => p('GET', `/environments/${id}`),
-  crearAmbiente: (datos) => p('POST', '/environments', datos),        // {codigo, nombre, bloque?, capacidadAprendices?, especialidadId?, porteroId?, activo?}
+  crearAmbiente: (datos) => p('POST', '/environments', datos),        // {codigo, nombre, capacidadAprendices?, especialidadId?, porteroId?, activo?}
   editarAmbiente: (id, datos) => p('PATCH', `/environments/${id}`, datos),
   borrarAmbiente: (id) => p('DELETE', `/environments/${id}`),
 

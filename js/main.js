@@ -12,7 +12,7 @@ import { aplicarPreferencias, movimientoReducido } from './ui/preferencias.js';
 import { estado, escuchar, cerrarSesion, restaurarSesion, alCerrarSesion } from './estado.js';
 import { alVencerSesion } from './api/cliente.js';
 import { apiAmb } from './api/ambientes.js';
-import { ETIQUETA_ROL, ETIQUETA_AREA } from './reglas.js';
+import { ETIQUETA_ROL } from './reglas.js';
 
 const TODOS = ['instructor', 'portero', 'administrativo', 'aprendiz'];
 const PERSONAL = ['instructor', 'portero', 'administrativo'];
@@ -22,7 +22,8 @@ const PERSONAL = ['instructor', 'portero', 'administrativo'];
 const RUTAS = {
   login: { vista: () => import('./vistas/login.js'), publica: true, titulo: 'Ingreso' },
   inicio: { vista: () => import('./vistas/inicio.js'), roles: TODOS, titulo: 'Inicio', icono: 'inicio', grupo: 'general' },
-  perfil: { vista: () => import('./vistas/perfil.js'), roles: TODOS, titulo: 'Mi perfil', icono: 'perfil', grupo: 'general' },
+  // Sin grupo: el único acceso es la tarjeta con nombre y rol en la cabecera del menú.
+  perfil: { vista: () => import('./vistas/perfil.js'), roles: TODOS, titulo: 'Mi perfil' },
   ambientes: { vista: () => import('./vistas/ambientes.js'), roles: TODOS, titulo: 'Ambientes', icono: 'ambiente', grupo: 'ambientes' },
   inspecciones: { vista: () => import('./vistas/inspecciones.js'), roles: PERSONAL, titulo: 'Inspecciones', icono: 'inspeccion', grupo: 'ambientes' },
   inspeccion: { vista: () => import('./vistas/inspeccion.js'), roles: ['instructor'], titulo: 'Revisión del ambiente', activa: 'inspecciones' },
@@ -84,7 +85,7 @@ document.addEventListener('pointerdown', (e) => {
 function pintarMenu(u) {
   shell.pintar({
     usuario: u,
-    etiquetaRol: ETIQUETA_ROL[u.rol] + (u.area && ETIQUETA_AREA[u.area] !== ETIQUETA_ROL[u.rol] ? ` · ${ETIQUETA_AREA[u.area]}` : ''),
+    etiquetaRol: ETIQUETA_ROL[u.rol],
     grupos: GRUPOS.map((g) => ({
       ...g,
       items: Object.entries(RUTAS).filter(([, r]) => r.grupo === g.clave && r.roles.includes(u.rol))

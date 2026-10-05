@@ -155,7 +155,7 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 | `users` | documento, tipo, nombre, contacto, `rol` (instructor, administrativo, portero, aprendiz), `area` de los administrativos (`coordinacion`, `administrativo`, `inventario`), ficha, `password_hash` |
 | `api_tokens` | sesiones |
 | `especialidades_ambiente` | Cocina, Laboratorio, Audiovisual, Axo, Sistemas, Aula convencional… (`nombre`, `descripcion`, `activo`) |
-| `environments` | `codigo` (107…), nombre, bloque, **`capacidad_aprendices`** (antes `capacidad` en puestos), **`especialidad_id`**, `portero_id` asignado, activo |
+| `environments` | `codigo` (107…), nombre, **`capacidad_aprendices`** (antes `capacidad` en puestos), **`especialidad_id`**, `portero_id` asignado, activo |
 | `inventory_categories` | Inmuebles, Mobiliario, Electrodomésticos, Equipos Informáticos, Periféricos, Audiovisual, Redes, Laboratorio, Herramientas, Utensilios de cocina, Seguridad |
 | `item_families` | familias de ítems por ambiente: `codigo` (FAM107-PC01, va en el QR `SENA-FAM:<codigo>`), `tipo` (PC, Estación de cocina…), `nombre` |
 | `inventory_items` | ítems por ambiente; `codigo` único (código de barras), **`qr_value`** único (contenido del QR; por defecto `SENA-INV:<codigo>`), `category_id`, `family_id`, estado (`operativo`, `danado`, `en_reparacion`, `fuera_servicio`, `baja` = inactivo), `ultimo_escaneo_en` |
@@ -193,7 +193,7 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 |---|---|---|---|
 | GET | `/environments?asignados=1&especialidadId=` | todos | Con portero, especialidad, `capacidadAprendices`, conteo de ítems, familias, `novedadesActivas` y última inspección |
 | GET/PATCH/DELETE | `/environments/{id}` | GET todos; resto administrativo | DELETE → `409 EN_USO` si tiene inventario, familias o inspecciones |
-| POST | `/environments` | administrativo | `{codigo, nombre, bloque?, capacidad_aprendices?, especialidad_id?, porteroId?, activo?}`. Acepta también camelCase (`capacidadAprendices`, `especialidadId`) y la especialidad por nombre (`especialidad: "Cocina"`). Capacidad de 1 a 500 |
+| POST | `/environments` | administrativo | `{codigo, nombre, capacidad_aprendices?, especialidad_id?, porteroId?, activo?}`. Acepta también camelCase (`capacidadAprendices`, `especialidadId`) y la especialidad por nombre (`especialidad: "Cocina"`). Capacidad de 1 a 500 |
 | GET | `/environments/{id}/items?familiaId=` | personal | Ítems del ambiente |
 | GET | `/items/by-code/{codigo}` | personal | Acepta el código, `SENA-INV:<codigo>` o el `qr_value` del ítem |
 | GET | `/inventory/lookup?codigo=` | personal | Lo que se leyó con la cámara o el lector → `{tipo:'item', item}` o `{tipo:'familia', familia}` (con componentes) |

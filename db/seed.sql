@@ -33,12 +33,12 @@ INSERT INTO especialidades_ambiente (id, nombre, descripcion) VALUES
   (6, 'Axo',               'Ambiente Axo');
 
 -- 107, 108 y 110 los recibe Jorge; 109 y 111, Martha.
-INSERT INTO environments (id, codigo, nombre, bloque, capacidad_aprendices, especialidad_id, portero_id) VALUES
-  (1, '107', 'Sistemas y desarrollo de software',   'Bloque A · Piso 1', 30, 1, 4),
-  (2, '108', 'Contabilidad y finanzas',             'Bloque A · Piso 1', 28, 2, 4),
-  (3, '109', 'Electrónica y automatización',        'Bloque A · Piso 1', 24, 3, 5),
-  (4, '110', 'Cocina y gastronomía',                'Bloque B · Piso 1', 20, 4, 4),
-  (5, '111', 'Producción audiovisual y multimedia', 'Bloque B · Piso 2', 18, 5, 5);
+INSERT INTO environments (id, codigo, nombre, capacidad_aprendices, especialidad_id, portero_id) VALUES
+  (1, '107', 'Sistemas y desarrollo de software',   30, 1, 4),
+  (2, '108', 'Contabilidad y finanzas',             28, 2, 4),
+  (3, '109', 'Electrónica y automatización',        24, 3, 5),
+  (4, '110', 'Cocina y gastronomía',                20, 4, 4),
+  (5, '111', 'Producción audiovisual y multimedia', 18, 5, 5);
 
 INSERT INTO inventory_categories (id, nombre, descripcion) VALUES
   (1,  'Inmuebles',            'Puertas, ventanas, divisiones y elementos fijos del salón'),

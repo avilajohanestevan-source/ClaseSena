@@ -339,9 +339,10 @@
 
 /* ================= Perfil y ajustes ================= */
 .perfil-tarjeta{ display:flex; align-items:center; gap:16px; }
-.perfil-tarjeta > div{ display:grid; gap:4px; justify-items:start; }
+.perfil-datos{ display:grid; gap:10px; margin:0; }
+.perfil-datos dt{ font-size:var(--fs-xs); color:var(--color-text-muted); text-transform:uppercase; letter-spacing:.04em; }
+.perfil-datos dd{ margin:2px 0 0; }
 .perfil-tarjeta strong{ font:700 19px var(--font-display); color:var(--color-heading); }
-.perfil-tarjeta .status-chip{ margin-top:2px; }
 .ajuste{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 16px; padding:12px 0; border-bottom:1px solid var(--color-border); }
 .ajuste:last-of-type{ border-bottom:0; }
 .ajuste-etiqueta{ display:block; font-weight:600; font-size:14.5px; color:var(--color-heading); }

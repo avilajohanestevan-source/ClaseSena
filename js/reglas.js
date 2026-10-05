@@ -22,6 +22,12 @@ export function validarLogin({ identificacion, password, rol }) {
   return errores;
 }
 
+/** Contraseña nueva: mínimo 8 caracteres, con letras y números (igual que la API). */
+export function passwordValida(clave) {
+  const v = String(clave ?? '');
+  return v.length >= 8 && /[A-Za-z]/.test(v) && /\d/.test(v);
+}
+
 /* ---------------- ventana horaria ---------------- */
 
 /**

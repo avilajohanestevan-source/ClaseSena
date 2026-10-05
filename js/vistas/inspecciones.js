@@ -45,7 +45,7 @@ async function instructor(raiz, params) {
           h('span', { class: 'amb-numero amb-numero--grande' }, a.codigo),
           h('span', { class: 'amb-opcion-datos' },
             h('strong', {}, a.nombre),
-            h('span', { class: 'text-muted' }, `${a.itemsTotal} ítems · ${a.bloque || ''}`),
+            h('span', { class: 'text-muted' }, [`${a.itemsTotal} ítems`, a.especialidad].filter(Boolean).join(' · ')),
             ocupado(a) ? h('span', { class: 'status-chip azul' }, `${ESTADOS_INSPECCION[ult.estado][0]} · ${ult.instructor}`)
               : hoy ? chipInspeccion(ult.estado) : h('span', { class: 'status-chip neutro' }, 'Sin revisión hoy')),
           h('span', { class: 'amb-opcion-marca', 'aria-hidden': 'true' }, icono('check'))));

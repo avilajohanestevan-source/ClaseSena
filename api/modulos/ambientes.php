@@ -28,7 +28,6 @@ function ambientePublico(array $e): array
         'id' => (int) $e['id'],
         'codigo' => $e['codigo'],
         'nombre' => $e['nombre'],
-        'bloque' => $e['bloque'],
         'capacidadAprendices' => $e['capacidad_aprendices'] !== null ? (int) $e['capacidad_aprendices'] : null,
         'especialidadId' => $e['especialidad_id'] !== null ? (int) $e['especialidad_id'] : null,
         'especialidad' => $e['especialidad_nombre'] ?? null,
@@ -101,7 +100,6 @@ function datosAmbiente(array $d): array
     return [
         strtoupper($codigo),
         texto($d, 'nombre', 120, true, 'el nombre'),
-        texto($d, 'bloque', 60, false, 'el bloque'),
         $capacidad,
         $especialidadId,
         $porteroId,
@@ -121,7 +119,7 @@ function rutaCrearAmbiente(): never
     exigirRol('administrativo');
     $v = datosAmbiente(cuerpo());
     verificarCodigoLibre($v[0]);
-    $id = insertar('INSERT INTO environments (codigo, nombre, bloque, capacidad_aprendices, especialidad_id, portero_id, activo) VALUES (?, ?, ?, ?, ?, ?, ?)', $v);
+    $id = insertar('INSERT INTO environments (codigo, nombre, capacidad_aprendices, especialidad_id, portero_id, activo) VALUES (?, ?, ?, ?, ?, ?)', $v);
     responder(ambientePublico(buscarAmbiente($id)), 201);
 }
 
@@ -131,7 +129,7 @@ function rutaEditarAmbiente(int $id): never
     buscarAmbiente($id);
     $v = datosAmbiente(cuerpo());
     verificarCodigoLibre($v[0], $id);
-    consulta('UPDATE environments SET codigo = ?, nombre = ?, bloque = ?, capacidad_aprendices = ?, especialidad_id = ?, portero_id = ?, activo = ? WHERE id = ?', [...$v, $id]);
+    consulta('UPDATE environments SET codigo = ?, nombre = ?, capacidad_aprendices = ?, especialidad_id = ?, portero_id = ?, activo = ? WHERE id = ?', [...$v, $id]);
     responder(ambientePublico(buscarAmbiente($id)));
 }
 

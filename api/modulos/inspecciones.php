@@ -42,7 +42,7 @@ const UBICACIONES = [
 ];
 
 const SQL_INSPECCIONES = "
-    SELECT s.*, e.codigo AS amb_codigo, e.nombre AS amb_nombre, e.bloque AS amb_bloque, e.portero_id AS amb_portero_id,
+    SELECT s.*, e.codigo AS amb_codigo, e.nombre AS amb_nombre, e.portero_id AS amb_portero_id,
            pa.nombre AS amb_portero, i.nombre AS instructor_nombre, p.nombre AS portero_nombre,
            (SELECT COUNT(*) FROM inspection_items d WHERE d.inspection_id = s.id) AS danos,
            (SELECT COUNT(*) FROM inspection_items d WHERE d.inspection_id = s.id AND d.severidad = 'grave') AS danos_graves
@@ -69,7 +69,7 @@ function resumenInspeccion(array $s): array
         'qrGeneradoEn' => iso($s['qr_generado_en']),
         'ambiente' => [
             'id' => (int) $s['environment_id'], 'codigo' => $s['amb_codigo'], 'nombre' => $s['amb_nombre'],
-            'bloque' => $s['amb_bloque'], 'porteroId' => $s['amb_portero_id'] !== null ? (int) $s['amb_portero_id'] : null,
+            'porteroId' => $s['amb_portero_id'] !== null ? (int) $s['amb_portero_id'] : null,
             'portero' => $s['amb_portero'],
         ],
         'instructor' => ['id' => (int) $s['instructor_id'], 'nombre' => $s['instructor_nombre']],

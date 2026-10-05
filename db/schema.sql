@@ -76,7 +76,6 @@ CREATE TABLE environments (
   id                    INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   codigo                VARCHAR(10)  NOT NULL,      -- número visible: 107, 108…
   nombre                VARCHAR(120) NOT NULL,
-  bloque                VARCHAR(60)  NULL,
   capacidad_aprendices  SMALLINT UNSIGNED NULL,     -- cuántos aprendices caben (antes "capacidad" en puestos)
   especialidad_id       INT UNSIGNED NULL,
   portero_id            INT UNSIGNED NULL,          -- portero asignado (recibe las notificaciones)

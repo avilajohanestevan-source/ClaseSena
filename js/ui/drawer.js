@@ -36,7 +36,8 @@ export function crearShell({ contenido, alSalir }) {
   /* --- estructura --- */
   const indicador = h('span', { class: 'drawer-indicador', 'aria-hidden': 'true' });
   const nav = h('nav', { class: 'drawer-nav', 'aria-label': 'Secciones' });
-  const perfil = h('a', { class: 'drawer-perfil', href: '#/perfil' });
+  // Único acceso al perfil (no hay ítem "Mi perfil" en la lista): nombre y rol.
+  const perfil = h('a', { class: 'drawer-perfil', href: '#/perfil', onclick: () => { if (!mq.matches) cerrar({ devolverFoco: false }); } });
   const salir = h('button', { class: 'drawer-item drawer-salir', type: 'button', onclick: () => alSalir() },
     h('span', { class: 'drawer-icono' }, icono('salir')), h('span', { class: 'drawer-texto' }, 'Cerrar sesión'));
   const cerrarMovil = h('button', { class: 'drawer-cerrar', type: 'button', 'aria-label': 'Cerrar menú', onclick: () => cerrar() }, icono('cerrar'));
@@ -177,6 +178,7 @@ export function crearShell({ contenido, alSalir }) {
     enlaces.forEach((a, r) => {
       if (r === ruta) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
+    if (ruta === 'perfil') perfil.setAttribute('aria-current', 'page'); else perfil.removeAttribute('aria-current');
     titulo.textContent = textoTitulo;
     requestAnimationFrame(moverIndicador);
   }

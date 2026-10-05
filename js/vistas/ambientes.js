@@ -94,7 +94,7 @@ export async function render(raiz) {
     return h('article', { class: `card amb-tarjeta${a.activo ? '' : ' amb-tarjeta--inactivo'}` },
       h('div', { class: 'amb-tarjeta-cab' },
         h('span', { class: 'amb-numero amb-numero--grande' }, a.codigo),
-        h('div', {}, h('h3', {}, a.nombre), h('span', { class: 'text-muted' }, [a.bloque, a.capacidadAprendices && `${a.capacidadAprendices} aprendices`].filter(Boolean).join(' · '))),
+        h('div', {}, h('h3', {}, a.nombre), h('span', { class: 'text-muted' }, a.capacidadAprendices ? `${a.capacidadAprendices} aprendices` : 'Capacidad sin definir')),
         a.especialidad && h('span', { class: 'status-chip azul amb-especialidad' }, a.especialidad),
         !a.activo && h('span', { class: 'status-chip neutro' }, 'Inactivo')),
       h('dl', { class: 'amb-datos' },
@@ -129,7 +129,6 @@ export async function render(raiz) {
     const c = (id, etiqueta, input) => h('div', { class: 'campo' }, h('label', { for: id }, etiqueta), input);
     const codigo = h('input', { type: 'text', id: 'amb-codigo', value: a?.codigo || '', maxlength: 10, inputmode: 'numeric', required: true });
     const nombre = h('input', { type: 'text', id: 'amb-nombre', value: a?.nombre || '', maxlength: 120, required: true });
-    const bloque = h('input', { type: 'text', id: 'amb-bloque', value: a?.bloque || '', maxlength: 60 });
     const capacidad = h('input', { type: 'number', id: 'amb-cap', value: a?.capacidadAprendices ?? '', min: 1, max: 500, inputmode: 'numeric' });
     const especialidad = h('select', { id: 'amb-esp' }, h('option', { value: '' }, 'Sin especialidad'),
       especialidades.map((e) => h('option', { value: e.id, selected: a?.especialidadId === e.id }, e.nombre)));
@@ -139,8 +138,7 @@ export async function render(raiz) {
     const form = h('form', { class: 'form-grid', novalidate: true, onsubmit: (e) => { e.preventDefault(); enviar(); } },
       c('amb-codigo', 'Número del ambiente', codigo), c('amb-cap', 'Capacidad (aprendices)', capacidad),
       h('div', { class: 'full' }, c('amb-nombre', 'Nombre', nombre)),
-      c('amb-esp', 'Especialidad', especialidad), c('amb-bloque', 'Bloque / piso', bloque),
-      h('div', { class: 'full' }, c('amb-portero', 'Portero asignado', portero)),
+      c('amb-esp', 'Especialidad', especialidad), c('amb-portero', 'Portero asignado', portero),
       h('label', { class: 'interruptor full' }, activo, h('span', { class: 'interruptor-pista', 'aria-hidden': 'true' }), 'Ambiente activo (disponible para inspección)'),
       asignaciones.el);
     const guardar = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => enviar() }, icono('check'), a ? 'Guardar cambios' : 'Crear ambiente');
@@ -159,7 +157,7 @@ export async function render(raiz) {
       errorCampo(capacidad, cap === null || (cap >= 1 && cap <= 500) ? null : 'Entre 1 y 500 aprendices.');
       if (cap !== null && (cap < 1 || cap > 500)) return;
       const datos = {
-        codigo: codigo.value.trim(), nombre: nombre.value.trim(), bloque: bloque.value.trim(), capacidadAprendices: cap,
+        codigo: codigo.value.trim(), nombre: nombre.value.trim(), capacidadAprendices: cap,
         especialidadId: especialidad.value || null, porteroId: portero.value || null, activo: activo.checked,
       };
       guardar.disabled = true;

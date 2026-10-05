@@ -204,13 +204,16 @@ pulsan Enter). El código puede ser el consecutivo (`AMB107-012`), uno propio
 - Al **cerrar sesión** el panel se desvanece y el menú sale por la izquierda;
   en el login las dos piezas del fondo regresan y la tarjeta sube con un
   micro-rebote (inverso de la animación de ingreso).
+- **Perfil:** un solo acceso, la tarjeta con el **nombre y el rol** de la
+  cabecera del menú (no hay ítem *Mi perfil* repetido). La página muestra solo
+  nombre y rol, y permite cambiar la contraseña.
 - Ítems según el rol, indicador animado de la sección actual, insignias
   (revisiones por entregar o en proceso), foco atrapado mientras está abierto
   y áreas táctiles de 44 px.
 
 | Sección | Instructor | Portero | Administrativo | Aprendiz |
 |---|---|---|---|---|
-| Inicio, Mi perfil, Ambientes, Ajustes | ✓ | ✓ | ✓ (CRUD de ambientes y especialidades) | ✓ |
+| Inicio, Ambientes, Ajustes | ✓ | ✓ | ✓ (CRUD de ambientes y especialidades) | ✓ |
 | Inspecciones | Revisar, reportar novedades (ítem, familia o salón) y escanear el QR | Generar y mostrar el QR de entrega | Historial | — |
 | Inventario | Consulta y QR | Consulta y QR | CRUD, categorías y familias | — |
 | Novedades | Levantar, seguimiento, resolver, historial | — | Lo mismo + dar de baja | — |

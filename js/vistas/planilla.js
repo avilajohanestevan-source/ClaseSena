@@ -54,7 +54,6 @@ export async function render(raiz, { params, alSalir }) {
 
       h('dl', { class: 'planilla-datos' },
         dato('Ambiente', `${d.ambiente.codigo} · ${d.ambiente.nombre}`),
-        dato('Ubicación', d.ambiente.bloque || '—'),
         dato('Revisó y recibió (instructor)', d.instructor.nombre),
         dato('Entregó (portero)', d.portero?.nombre || 'Pendiente'),
         dato('Inicio de la revisión', fecha.completa(d.iniciadaEn)),

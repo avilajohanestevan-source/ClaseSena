@@ -68,6 +68,7 @@ body:not([data-vista="login"])::before{
   text-decoration:none; color:inherit; transition:border-color var(--dur-micro-1) var(--ease-standard);
 }
 .drawer-perfil:hover{ border-color:var(--c-verde-200); }
+.drawer-perfil[aria-current="page"]{ border-color:var(--c-verde-500); box-shadow:inset 3px 0 0 var(--c-verde-500); }
 .drawer-perfil-datos{ display:grid; min-width:0; line-height:1.25; }
 .drawer-perfil-datos strong{ font-size:14px; color:var(--color-heading); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .drawer-perfil-datos span{ font-size:var(--fs-xs); color:var(--color-text-muted); }
