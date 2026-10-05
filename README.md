@@ -10,7 +10,7 @@ de formación, más el módulo de **asistencia a clases** que ya existía.
   foto), QR de entrega que genera el portero y el instructor escanea para
   recibirlo, novedades permanentes que instructores y administrativos levantan
   y resuelven (en curso hasta su resolución), asignación de instructores por
-  jornada, avisos a coordinación, administrativo e inventario, historial de
+  jornada, avisos a coordinación, administrativo y almacén, historial de
   auditoría y reportes.
 - **Asistencia a clases** (QR de clase, semáforo de faltas, P004): sigue
   con datos simulados en el navegador (`js/api/mock`), como antes.
@@ -66,7 +66,7 @@ que también funciona con el teclado.
 | 4040404041 | Portero (ambiente 109) | Martha Lucía Peña |
 | 2020202020 | Administrativo (área administrativo) | Carlos Méndez Ruiz |
 | 2020202021 | Administrativo (área coordinación) | Patricia Rondón Gil |
-| 2020202022 | Administrativo (área inventario) | Hernán Darío Ospina |
+| 2020202022 | Almacén | Hernán Darío Ospina |
 | 1122334455 (TI) | Aprendiz | Camila Rojas Herrera |
 | 1122334456 | Aprendiz | Mateo Torres Ramírez |
 | 1122334457 | Aprendiz | Sara Cárdenas Vega |
@@ -103,7 +103,7 @@ desde Laura) y un turno anulado en el 111.
      **permanente** (daño que sigue hasta que lo arreglen), **temporal** o de
      **limpieza**, el tipo, la severidad y un comentario. La permanente queda
      **en curso** desde ese momento (visible en *Novedades*, con aviso a
-     coordinación, administrativo e inventario) y deja el ítem *Dañado*; si
+     coordinación, administrativo y almacén) y deja el ítem *Dañado*; si
      se quita el reporte antes de entregar, queda anulada;
    - si el daño no es de un ítem (pared, techo, piso, puerta…), **Daño del
      salón**: se elige dónde está, con foto, y queda asociado al ambiente.
@@ -129,7 +129,7 @@ desde Laura) y un turno anulado en el 111.
    **seguimiento** (nota, foto, severidad, dejar el ítem **fuera de
    servicio** o en reparación hasta su arreglo) y **marcarla resuelta** (con
    foto de la reparación). Dar de baja (inactivo) es solo de administrativos.
-   **Coordinación, administrativo e inventario** (2020202021, 2020202020 y
+   **Coordinación, administrativo y almacén** (2020202021, 2020202020 y
    2020202022) reciben los avisos. La pestaña **Historial** tiene todas las
    novedades: equipo o ambiente, fecha, usuario, evidencia, naturaleza,
    estado y fecha de resolución (con CSV).
@@ -220,11 +220,27 @@ pulsan Enter). El código puede ser el consecutivo (`AMB107-012`), uno propio
 | Inicio, Ambientes, Ajustes | ✓ | ✓ | ✓ (CRUD de ambientes y especialidades) | ✓ |
 | Inspecciones | Revisar, reportar novedades (ítem, familia o salón) y escanear el QR | Generar y mostrar el QR de entrega | Historial | — |
 | Inventario | Consulta y QR | Consulta y QR | CRUD, categorías y familias | — |
-| Novedades | Levantar, seguimiento, resolver, historial | — | Lo mismo + dar de baja | — |
+| Novedades | Levantar, seguimiento, resolver, historial | — | Lo mismo + dar de baja; filtro por categoría | — |
 | Asignaciones | Tablero y mis turnos | — | Asignar, reasignar y anular por jornada | — |
 | Auditoría | — | — | Eventos de novedades y asignaciones | — |
 | Reportes | — | — | ✓ | — |
 | Asistencia (datos simulados) | Clases, historial | — | Semáforo, P004, historial | Registrar asistencia |
+
+### Rol Almacén
+
+**Almacén** (2020202022) es un rol propio (antes era un administrativo del
+área inventario): ve y gestiona **todos los artículos** (crear, editar,
+trasladar, dejar *fuera de servicio* o *de baja* = inactivo), las
+**categorías** y las **familias**, la **carga masiva**, el **registro con
+escáner** (si el código leído no existe, se crea el artículo al escanearlo) y
+la **impresión y reimpresión** de pegatinas con QR y código de barras. Recibe
+los avisos de novedades igual que coordinación y administrativo, y puede darles
+seguimiento y resolverlas. No revisa ni entrega ambientes ni edita ambientes o
+asignaciones. Su menú: Inicio, Ambientes, Inventario, Novedades y Ajustes.
+
+Las novedades (en curso e historial) se **filtran por categoría** del
+inventario: la del ítem, la del primer componente de la familia o
+*Inmuebles* si es un daño del salón. La categoría también sale en el CSV.
 
 ## Estructura
 

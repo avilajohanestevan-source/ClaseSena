@@ -7,6 +7,11 @@
 
 require_once __DIR__ . '/../config.php';
 
+/** Personal de la sede (todos menos aprendices). */
+const ROLES_PERSONAL = ['administrativo', 'instructor', 'portero', 'almacen'];
+/** Gestionan el inventario: artículos, categorías, familias, carga masiva y pegatinas. */
+const ROLES_INVENTARIO = ['administrativo', 'almacen'];
+
 /** Error de la API: se convierte en {mensaje, codigo} con su status HTTP. */
 class ErrorApi extends Exception
 {
@@ -194,7 +199,7 @@ function usuarioPublico(array $u): array
         'email' => $u['email'],
         'telefono' => $u['telefono'],
         'rol' => $u['rol'],
-        // Administrativos: coordinacion | administrativo | inventario (todos reciben los avisos de novedades).
+        // Administrativos: coordinacion | administrativo (reciben los avisos de novedades, igual que almacén).
         'area' => $u['area'] ?? null,
         'ficha' => $u['ficha'],
     ];
@@ -237,12 +242,12 @@ function notificar(int $userId, string $tipo, string $titulo, string $detalle, ?
 }
 
 /**
- * Avisa a coordinación, administrativo e inventario: todos los usuarios con
- * rol administrativo, sea cual sea su área. Devuelve a cuántos se avisó.
+ * Avisa a coordinación, administrativo y almacén: todos los usuarios con rol
+ * administrativo (sea cual sea su área) o almacén. Devuelve a cuántos se avisó.
  */
 function notificarAdministrativos(string $tipo, string $titulo, string $detalle, ?int $inspeccionId, ?int $novedadId = null, int $excepto = 0): int
 {
-    $ids = array_column(filas("SELECT id FROM users WHERE rol = 'administrativo' AND activo = 1 AND id <> ?", [$excepto]), 'id');
+    $ids = array_column(filas("SELECT id FROM users WHERE rol IN ('administrativo', 'almacen') AND activo = 1 AND id <> ?", [$excepto]), 'id');
     foreach ($ids as $id) notificar((int) $id, $tipo, $titulo, $detalle, $inspeccionId, $novedadId);
     return count($ids);
 }

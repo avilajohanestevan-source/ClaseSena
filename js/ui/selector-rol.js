@@ -9,6 +9,7 @@ const DESCRIPCION = {
   portero: 'Revisa y entrega ambientes',
   administrativo: 'Coordinación y reportes',
   aprendiz: 'Registra tu asistencia',
+  almacen: 'Artículos, familias y códigos',
 };
 
 /**

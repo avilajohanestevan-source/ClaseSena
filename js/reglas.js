@@ -7,7 +7,12 @@ export const ROLES = [
   { clave: 'portero', etiqueta: 'Portero' },
   { clave: 'administrativo', etiqueta: 'Administrativo' },
   { clave: 'aprendiz', etiqueta: 'Aprendiz' },
+  { clave: 'almacen', etiqueta: 'Almacén' },
 ];
+
+/** Gestionan el inventario (artículos, categorías, familias, carga masiva, códigos y bajas). */
+export const ROLES_INVENTARIO = ['administrativo', 'almacen'];
+export const gestionaInventario = (u) => ROLES_INVENTARIO.includes(u?.rol);
 
 /* ---------------- login ---------------- */
 
@@ -315,7 +320,7 @@ export function validarAsignacion({ ambienteId, instructorId, jornada, tipo, fec
 }
 
 /** Área de los administrativos (todos reciben los avisos de novedades). */
-export const ETIQUETA_AREA = { coordinacion: 'Coordinación', administrativo: 'Administrativo', inventario: 'Inventario' };
+export const ETIQUETA_AREA = { coordinacion: 'Coordinación', administrativo: 'Administrativo' };
 
 export const PREFIJO_QR_ITEM = 'SENA-INV:';
 export const PREFIJO_QR_FAMILIA = 'SENA-FAM:';

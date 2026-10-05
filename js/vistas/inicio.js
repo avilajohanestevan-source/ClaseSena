@@ -3,6 +3,7 @@
 //  · Portero: ambientes por entregar (generar o mostrar el QR) y sus ambientes asignados.
 //  · Administrativo: indicadores del día y estado de los ambientes.
 //  · Aprendiz: estado de los ambientes y acceso a registrar asistencia.
+//  · Almacén: artículos con novedad, novedades en curso y accesos al inventario.
 import { h, anexar, icono, vaciar } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { cargando, tarjetaError } from '../ui/componentes.js';
@@ -25,7 +26,7 @@ export async function render(raiz, { alSalir }) {
   let primera = true;
   async function cargar() {
     try {
-      vaciar(cuerpo, ...await ({ instructor, portero, administrativo, aprendiz })[u.rol](u));
+      vaciar(cuerpo, ...await ({ instructor, portero, administrativo, aprendiz, almacen })[u.rol](u));
       if (primera) { anim.entrarVista(raiz); primera = false; }
     } catch (e) { vaciar(cuerpo, tarjetaError(e, cargar)); }
   }
@@ -38,6 +39,7 @@ const SUBTITULO = {
   portero: 'Entrega los ambientes con un QR cuando el instructor termine la revisión.',
   administrativo: 'Así van las entregas de ambientes hoy.',
   aprendiz: 'Consulta el estado de los ambientes de formación.',
+  almacen: 'Gestiona los artículos, sus familias y sus códigos QR y de barras.',
 };
 
 /** Estado de hoy de un ambiente, para las listas. */
@@ -143,5 +145,22 @@ async function aprendiz() {
       h('span', {}, h('strong', {}, 'Registrar asistencia'), h('span', {}, 'Escanea el QR que proyecta tu instructor')),
       icono('flecha')),
     h('section', { class: 'card', 'data-anim': '' }, h('h3', { class: 'bloque-titulo' }, 'Ambientes de formación'), listaAmbientes(ambientes)),
+  ];
+}
+
+async function almacen() {
+  const [ambientes, novedades] = await Promise.all([apiAmb.ambientes(), apiAmb.novedades({ estado: 'en_curso' })]);
+  const conNovedad = ambientes.reduce((n, a) => n + a.itemsNovedad, 0);
+  const acceso = (href, ic, titulo, texto) => h('a', { class: 'accion-grande', href, 'data-anim': '' },
+    h('span', { class: 'accion-grande-icono' }, icono(ic)), h('span', {}, h('strong', {}, titulo), h('span', {}, texto)), icono('flecha'));
+  return [
+    h('a', { class: `accion-grande${novedades.length ? ' accion-grande--alerta' : ''}`, href: '#/novedades', 'data-anim': '' },
+      h('span', { class: 'accion-grande-numero' }, String(novedades.length)),
+      h('span', {}, h('strong', {}, novedades.length === 1 ? 'Novedad permanente en curso' : 'Novedades permanentes en curso'),
+        h('span', {}, `${conNovedad} artículo${conNovedad === 1 ? '' : 's'} dañado${conNovedad === 1 ? '' : 's'}, en reparación o fuera de servicio`)),
+      icono('flecha')),
+    acceso('#/inventario', 'caja', 'Inventario', 'Artículos, familias, carga masiva y registro con escáner'),
+    acceso('#/etiquetas', 'qr', 'Pegatinas', 'Imprime o reimprime los códigos QR y de barras'),
+    h('section', { class: 'card', 'data-anim': '' }, h('h3', { class: 'bloque-titulo' }, 'Ambientes'), listaAmbientes(ambientes)),
   ];
 }

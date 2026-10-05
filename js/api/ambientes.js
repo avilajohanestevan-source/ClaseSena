@@ -4,9 +4,9 @@
 import { pedirAmbientes as p, descargarAmbientes } from './cliente.js';
 
 /**
- * @typedef {'instructor'|'administrativo'|'portero'|'aprendiz'} Rol
+ * @typedef {'instructor'|'administrativo'|'portero'|'aprendiz'|'almacen'} Rol
  * @typedef {{id:number, tipoDocumento:string, identificacion:string, nombre:string, email:?string,
- *   telefono:?string, rol:Rol, area:?('coordinacion'|'administrativo'|'inventario'), ficha:?string}} Usuario
+ *   telefono:?string, rol:Rol, area:?('coordinacion'|'administrativo'), ficha:?string}} Usuario
  * @typedef {{id:number, nombre:string, descripcion:?string, activo:boolean, enUso:number}} Catalogo  especialidad o categoría
  * @typedef {{id:number, codigo:string, nombre:string, capacidadAprendices:?number, especialidadId:?number,
  *   especialidad:?string, porteroId:?number, portero:?string, activo:boolean, itemsTotal:number, itemsNovedad:number,
@@ -100,12 +100,12 @@ export const apiAmb = {
   cancelarInspeccion: (id) => p('POST', `/inspections/${id}/cancel`),
 
   // Novedades permanentes e historial de novedades
-  novedades: (filtros) => p('GET', '/persistent-issues', filtros),    // → NovedadPermanente[]  {estado?, ambienteId?}
+  novedades: (filtros) => p('GET', '/persistent-issues', filtros),    // → NovedadPermanente[]  {estado?, ambienteId?, categoriaId?}
   novedad: (id) => p('GET', `/persistent-issues/${id}`),              // → NovedadPermanente & {items, historial}
   crearNovedad: (datos) => p('POST', '/persistent-issues', datos),
   editarNovedad: (id, datos) => p('PATCH', `/persistent-issues/${id}`, datos), // {estadoItem?, severidad?, descripcion?}
   resolverNovedad: (id, datos) => p('POST', `/persistent-issues/${id}/resolve`, datos), // {resolucion, estadoItem?}
-  historialNovedades: (filtros) => p('GET', '/issues', filtros),      // {ambienteId, itemId, naturaleza, estado, desde, hasta}
+  historialNovedades: (filtros) => p('GET', '/issues', filtros),      // {ambienteId, categoriaId, itemId, naturaleza, estado, desde, hasta}
 
   // Asignación de instructores por jornada
   tableroAsignaciones: (filtros) => p('GET', '/assignments/board', filtros), // {desde, dias, ambienteId?} → {fechas, jornadas, ambientes:[{celdas}]}

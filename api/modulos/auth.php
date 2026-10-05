@@ -1,7 +1,7 @@
 <?php
 /** Autenticación, perfil y listado de usuarios. */
 
-const ROLES = ['instructor', 'administrativo', 'portero', 'aprendiz'];
+const ROLES = ['instructor', 'administrativo', 'portero', 'aprendiz', 'almacen'];
 
 function rutaLogin(): never
 {

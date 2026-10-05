@@ -19,7 +19,7 @@
  *     componentes de la familia) pasa a "danado" y, en el momento de
  *     reportarla, queda "en_curso" en persistent_issues hasta que un
  *     instructor o un administrativo la resuelva (modulos/novedades.php), con
- *     aviso a coordinación, administrativo e inventario. Si el reporte se
+ *     aviso a coordinación, administrativo y almacén. Si el reporte se
  *     retira antes de entregar el ambiente, la novedad queda anulada;
  *   · temporal o limpieza: queda en el historial y no cambia el inventario.
  */
@@ -355,7 +355,7 @@ function rutaReportarDano(int $id): never
         if ($permanente) consulta(SQL_MARCAR_DANADO, [$m['id']]);
         historial($m['id'], 'dano', $m['detalle'] . ($permanente ? '. Pasa a Dañado.' : '. El inventario no cambia.'), (int) $u['id'], $id);
     }
-    // La permanente queda en curso desde ya (visible en Novedades) y avisa a coordinación, administrativo e inventario.
+    // La permanente queda en curso desde ya (visible en Novedades) y avisa a coordinación, administrativo y almacén.
     if ($permanente) abrirNovedadDeReporte($reporteId, $s, $u);
     db()->commit();
     responder(detalleInspeccion(buscarInspeccion($id)), 201);
@@ -455,7 +455,7 @@ function rutaGenerarQr(int $id): never
  * (portero_id), quién recibió (instructor_id), las horas, el estado del salón
  * (estado_salon) y sus reportes (las novedades permanentes ya están en curso
  * desde que se reportaron). Si hubo novedades se avisa el resumen a
- * coordinación, administrativo e inventario.
+ * coordinación, administrativo y almacén.
  */
 function rutaRecibirPorQr(string $token): never
 {

@@ -30,7 +30,7 @@ function catalogoPublico(array $c): array
 function listarCatalogo(string $tipo): array
 {
     ['tabla' => $t, 'uso' => $uso, 'columna' => $col] = CATALOGOS[$tipo];
-    $soloActivos = usuario()['rol'] !== 'administrativo' || empty($_GET['todos']);
+    $soloActivos = !in_array(usuario()['rol'], ROLES_INVENTARIO, true) || empty($_GET['todos']);
     return array_map('catalogoPublico', filas(
         "SELECT c.*, (SELECT COUNT(*) FROM $uso x WHERE x.$col = c.id) en_uso FROM $t c"
         . ($soloActivos ? ' WHERE c.activo = 1' : '') . ' ORDER BY c.nombre'
@@ -45,9 +45,15 @@ function buscarCatalogo(string $tipo, int $id): array
     return $c;
 }
 
+/** Especialidades: administrativo. Categorías del inventario: administrativo y almacén. */
+function exigirGestorCatalogo(string $tipo): void
+{
+    $tipo === 'categoria' ? exigirRol(...ROLES_INVENTARIO) : exigirRol('administrativo');
+}
+
 function guardarCatalogo(string $tipo, ?int $id): array
 {
-    exigirRol('administrativo');
+    exigirGestorCatalogo($tipo);
     $cfg = CATALOGOS[$tipo];
     $d = cuerpo();
     $nombre = texto($d, 'nombre', 60, true, 'el nombre');
@@ -68,7 +74,7 @@ function guardarCatalogo(string $tipo, ?int $id): array
 
 function borrarCatalogo(string $tipo, int $id): never
 {
-    exigirRol('administrativo');
+    exigirGestorCatalogo($tipo);
     $cfg = CATALOGOS[$tipo];
     $c = buscarCatalogo($tipo, $id);
     if ((int) $c['en_uso']) {
@@ -130,7 +136,7 @@ function rutaCrearEspecialidad(): never { responder(guardarCatalogo('especialida
 function rutaEditarEspecialidad(int $id): never { responder(guardarCatalogo('especialidad', $id)); }
 function rutaBorrarEspecialidad(int $id): never { borrarCatalogo('especialidad', $id); }
 
-function rutaCategorias(): never { exigirRol('administrativo', 'instructor', 'portero'); responder(listarCatalogo('categoria')); }
+function rutaCategorias(): never { exigirRol(...ROLES_PERSONAL); responder(listarCatalogo('categoria')); }
 function rutaCrearCategoria(): never { responder(guardarCatalogo('categoria', null), 201); }
 function rutaEditarCategoria(int $id): never { responder(guardarCatalogo('categoria', $id)); }
 function rutaBorrarCategoria(int $id): never { borrarCatalogo('categoria', $id); }

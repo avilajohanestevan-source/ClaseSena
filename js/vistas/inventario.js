@@ -16,7 +16,7 @@ import { gestionarCatalogo } from '../ui/catalogo.js';
 import { cabecera, chipItem, qr, codigoBarras, vacio, fecha } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado } from '../estado.js';
-import { ESTADOS_ITEM, leerQrItem } from '../reglas.js';
+import { ESTADOS_ITEM, leerQrItem, gestionaInventario } from '../reglas.js';
 
 const ACCIONES_HISTORIAL = {
   registro: ['Registro', 'mas'], carga_masiva: ['Carga masiva', 'subir'], escaneo: ['Escaneo', 'escanear'], traslado: ['Traslado', 'ambiente'],
@@ -26,7 +26,8 @@ const ACCIONES_HISTORIAL = {
 };
 
 export async function render(raiz, { params }) {
-  const admin = estado.usuario.rol === 'administrativo';
+  // Administrativo y almacén gestionan el inventario; los demás lo consultan.
+  const admin = gestionaInventario(estado.usuario);
   const ambientes = (await apiAmb.ambientes()).filter((a) => admin || a.activo);
   if (!ambientes.length) { anexar(raiz, vacio('No hay ambientes registrados', '', 'ambiente')); return; }
   let categorias = await apiAmb.categorias();
@@ -279,7 +280,7 @@ export async function render(raiz, { params }) {
               if (e.status !== 404) { toast('error', 'No se pudo consultar', e.message); return; }
               cerrar();
               const codigo = leerQrItem(texto);
-              if (!admin) { toast('aviso', `${codigo || texto.slice(0, 40)} no está registrado`, 'Pide a coordinación que lo registre en el inventario.'); return; }
+              if (!admin) { toast('aviso', `${codigo || texto.slice(0, 40)} no está registrado`, 'Pide a almacén que lo registre en el inventario.'); return; }
               if (await confirmar({ titulo: `${codigo || 'Ese código'} no está registrado`, mensaje: `¿Lo registras en el ambiente ${ambienteActual().codigo}?`, textoAceptar: 'Registrar' })) {
                 formulario(null, codigo ? { codigo } : { qr: texto.trim() });
               }

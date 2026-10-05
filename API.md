@@ -152,7 +152,7 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 
 | Tabla | Contenido |
 |---|---|
-| `users` | documento, tipo, nombre, contacto, `rol` (instructor, administrativo, portero, aprendiz), `area` de los administrativos (`coordinacion`, `administrativo`, `inventario`), ficha, `password_hash` |
+| `users` | documento, tipo, nombre, contacto, `rol` (instructor, administrativo, portero, aprendiz, **almacen**), `area` de los administrativos (`coordinacion`, `administrativo`), ficha, `password_hash` |
 | `api_tokens` | sesiones |
 | `especialidades_ambiente` | Cocina, Laboratorio, Audiovisual, Axo, Sistemas, Aula convencional… (`nombre`, `descripcion`, `activo`) |
 | `environments` | `codigo` (107…), nombre, **`capacidad_aprendices`** (antes `capacidad` en puestos), **`especialidad_id`**, `portero_id` asignado, activo |
@@ -165,7 +165,7 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 | `persistent_issues` | novedades permanentes: ambiente, ítem / familia / ubicación, tipo, severidad, descripción, foto, `estado` (`en_curso`, `resuelta`, `anulada`), quién la reportó y en qué revisión, `resuelta_por`, `resuelta_en`, `resolucion`, `foto_resolucion`, `anulada_en` |
 | `instructor_assignments` | asignación de instructores: ambiente, instructor, `jornada` (`manana`, `tarde`, `noche`), `tipo` (`dia`, `periodo`, `permanente`), `fecha_inicio`, `fecha_fin` (NULL = permanente), `estado` (`vigente`, `reasignada`, `anulada`), motivo, `reemplaza_id`, quién la creó y quién la cerró |
 | `audit_events` | historial para auditoría: `entidad` (`novedad`, `asignacion`), `entidad_id`, ambiente, `accion`, detalle, `foto` (evidencia), `datos` (antes/después), usuario y fecha |
-| `notifications` | `revision_lista` (al portero: genera el QR), `entrega_recibida` (al portero), `dano_reportado` / `dano_grave` (resumen a coordinación, administrativo e inventario), `novedad_permanente` y `novedad_resuelta` (con `persistent_issue_id`), `asignacion` (al instructor asignado, reasignado o cuyo turno se anuló) |
+| `notifications` | `revision_lista` (al portero: genera el QR), `entrega_recibida` (al portero), `dano_reportado` / `dano_grave` (resumen a coordinación, administrativo y almacén), `novedad_permanente` y `novedad_resuelta` (con `persistent_issue_id`), `asignacion` (al instructor asignado, reasignado o cuyo turno se anuló) |
 
 ## Sesión y perfil
 
@@ -188,6 +188,12 @@ datos de prueba en `db/seed.sql`, instalación con `php db/instalar.php`.
 | POST / PATCH / DELETE | `/inventory/categories`, `/inventory/categories/{id}` | administrativo | Igual que las especialidades |
 
 ## Ambientes e inventario
+
+**Almacén:** todas las rutas de inventario marcadas *administrativo* (artículos,
+`/items/scan`, categorías, familias, carga masiva, exportar, pegatinas)
+también las puede usar el rol `almacen`. "Personal" = instructor, portero,
+administrativo y almacén. Cada novedad trae `categoria: {id, nombre}` (la del
+ítem, la de la familia o *Inmuebles* si es del salón).
 
 | Método | Ruta | Rol | Notas |
 |---|---|---|---|
@@ -238,11 +244,11 @@ administrativo, y solo mientras la entrega está pendiente.
 | GET | `/inspections/{id}` | personal | Detalle: checklist, `inventario` (con `reportado`, `reportadoPorFamilia`, `novedadActivaId`), `familias` (con `itemIds`, `reportado`), `novedadesActivas` del ambiente (cada una con su `area` del checklist), `asignadosHoy` (`[{jornada, instructorId, instructor, tipo}]`), `reportes`, `itemsOk`, `estadoSalon`, `entrega` y `recibe` |
 | GET | `/inspections/by-qr/{token}` | portero, administrativo | Consulta por el QR `SENA-INSP:<token>` |
 | PATCH | `/inspections/{id}/checklist` | instructor dueño | `{checklist:[{clave, ok}], observaciones}` (guardado automático de lo que el instructor marca a mano) |
-| POST | `/inspections/{id}/items` | instructor dueño | Novedad con foto: `{itemId \| familiaId \| codigo (lo escaneado: ítem o familia) \| ubicacion, naturaleza?, tipoDano, severidad, comentario, foto}`. `naturaleza` ∈ `permanente \| temporal \| limpieza` (sin ella: `suciedad` → limpieza, lo demás → permanente). Solo la permanente deja el ítem (o todos los componentes de la familia) `danado` y abre en ese momento una novedad `en_curso` (o se suma a la que ya tenía), con aviso a coordinación, administrativo e inventario. Quitar el reporte (DELETE) la deja `anulada`. Un componente y su familia no se reportan a la vez (`409 DUPLICADO`). La foto (data URL JPG/PNG/WebP, ≤ 3 MB) siempre es obligatoria |
+| POST | `/inspections/{id}/items` | instructor dueño | Novedad con foto: `{itemId \| familiaId \| codigo (lo escaneado: ítem o familia) \| ubicacion, naturaleza?, tipoDano, severidad, comentario, foto}`. `naturaleza` ∈ `permanente \| temporal \| limpieza` (sin ella: `suciedad` → limpieza, lo demás → permanente). Solo la permanente deja el ítem (o todos los componentes de la familia) `danado` y abre en ese momento una novedad `en_curso` (o se suma a la que ya tenía), con aviso a coordinación, administrativo y almacén. Quitar el reporte (DELETE) la deja `anulada`. Un componente y su familia no se reportan a la vez (`409 DUPLICADO`). La foto (data URL JPG/PNG/WebP, ≤ 3 MB) siempre es obligatoria |
 | DELETE | `/inspections/{id}/items/{reporteId}` | instructor dueño | Quita el reporte y restaura el estado de los ítems |
 | POST | `/inspections/{id}/confirm` | instructor dueño | `{checklist, observaciones?, itemsOk?}` termina la revisión. Checklist completo; observaciones obligatorias si hay novedad; `itemsOk` deben ser del ambiente (los que tienen novedad se descartan). Notifica al portero del ambiente (o a todos si no tiene) |
 | POST | `/inspections/{id}/qr` | portero | Genera (o renueva) el QR de entrega; guarda `portero_id`. Antes de que el instructor termine → `409` |
-| POST | `/inspections/by-qr/{token}/receive` | instructor | Sin cuerpo. → `recibida`; guarda `estado_salon` (ítems por estado, marcados OK, novedades por naturaleza, novedades en curso); las permanentes ya quedaron en curso al reportarlas. Avisa al portero y, si hay novedades, a coordinación, administrativo e inventario. QR de otro instructor → `403`; QR viejo o inexistente → `404` |
+| POST | `/inspections/by-qr/{token}/receive` | instructor | Sin cuerpo. → `recibida`; guarda `estado_salon` (ítems por estado, marcados OK, novedades por naturaleza, novedades en curso); las permanentes ya quedaron en curso al reportarlas. Avisa al portero y, si hay novedades, a coordinación, administrativo y almacén. QR de otro instructor → `403`; QR viejo o inexistente → `404` |
 | POST | `/inspections/{id}/delivery-qr` | instructor dueño | Sentido inverso: genera (o renueva) el QR de entrega del instructor, `qrInstructor: "SENA-ENT:<token>"` (solo lo recibe él). Antes de terminar la revisión → `409` |
 | POST | `/inspections/by-delivery-qr/{token}/confirm` | portero | El portero escanea el QR del instructor: guarda `portero_id` (quien escanea), cierra la entrega igual que `receive` (`recibidaVia: "qr_instructor"`) y avisa al instructor. QR usado o inexistente → `404` |
 | POST | `/inspections/{id}/cancel` | instructor dueño | Mientras no haya recibido el ambiente. Deshace los reportes |
@@ -261,12 +267,12 @@ se retira antes de entregar el ambiente (o se cancela la revisión), queda
 
 | Método | Ruta | Rol | Notas |
 |---|---|---|---|
-| GET | `/persistent-issues?estado=en_curso\|resuelta\|anulada&ambienteId` | personal | `[{id, estado, ambiente, objetivo:{tipo: item\|familia\|salon, id, codigo, nombre}, titulo, itemEstado, tipoDano, severidad, descripcion, foto, reportadaPor, inspeccionId, creadaEn, resueltaPor, resueltaEn, resolucion, fotoResolucion, anuladaEn, reportes}]` |
+| GET | `/persistent-issues?estado=en_curso\|resuelta\|anulada&ambienteId&categoriaId` | personal | `[{id, estado, ambiente, objetivo:{tipo: item\|familia\|salon, id, codigo, nombre}, titulo, itemEstado, tipoDano, severidad, descripcion, foto, reportadaPor, inspeccionId, creadaEn, resueltaPor, resueltaEn, resolucion, fotoResolucion, anuladaEn, reportes}]` |
 | GET | `/persistent-issues/{id}` | personal | + `items` afectados con su estado, `historial` de revisiones que la reportaron y `eventos` (auditoría: creada, reportada_de_nuevo, modificada, resuelta, anulada, reporte_retirado). Cada novedad trae `area`: el punto del checklist donde se resalta en la revisión (`ventilacion` para el aire acondicionado, `equipos`, `mobiliario`, `puertas`, `electrico`, `luces`, `senalizacion`; null si no encaja) |
-| POST | `/persistent-issues` | instructor, administrativo | Levantar sin revisión: `{ambienteId?, itemId \| familiaId \| codigo \| ubicacion, tipoDano, severidad, descripcion, foto, estadoItem?}`. La foto es obligatoria para el instructor. `estadoItem` por defecto `danado` (`fuera_servicio`, `en_reparacion`; `baja` solo administrativo → si no `403`). Si el ítem o la familia ya tiene una en curso → `409 DUPLICADO`. Avisa a coordinación, administrativo e inventario |
+| POST | `/persistent-issues` | instructor, administrativo | Levantar sin revisión: `{ambienteId?, itemId \| familiaId \| codigo \| ubicacion, tipoDano, severidad, descripcion, foto, estadoItem?}`. La foto es obligatoria para el instructor. `estadoItem` por defecto `danado` (`fuera_servicio`, `en_reparacion`; `baja` solo administrativo → si no `403`). Si el ítem o la familia ya tiene una en curso → `409 DUPLICADO`. Avisa a coordinación, administrativo y almacén |
 | PATCH | `/persistent-issues/{id}` | instructor, administrativo | Seguimiento mientras siga en curso: `{estadoItem?, severidad?, descripcion?, nota?, foto?, inspeccionId?}` (con `inspeccionId`, desde la revisión del ambiente: el historial lo indica; debe ser del mismo ambiente y, si es instructor, suya) (p. ej. dejar el ítem **fuera de servicio** hasta su reparación). Sin cambios → `422`. Queda como evento `modificada` con el antes y el después |
-| POST | `/persistent-issues/{id}/resolve` | instructor, administrativo | `{resolucion, estadoItem?, foto?, inspeccionId?}` ("Ya está en funcionamiento" desde la revisión envía `inspeccionId`) (`estadoItem` por defecto `operativo`; `baja` solo administrativo). Avisa a coordinación, administrativo e inventario y a quien la reportó |
-| GET | `/issues?ambienteId&itemId&naturaleza&estado&desde&hasta` | instructor, administrativo | Historial completo: `[{origen: revision\|modulo, id, inspeccionId, novedadId, ambiente, objetivo, itemEstado, naturaleza, tipoDano, severidad, comentario, foto, usuario, fecha, estado, resueltaEn, resueltaPor, resolucion}]`. `estado` ∈ `en_revision \| en_curso \| resuelta \| anulada \| cerrada` (temporales y limpieza se cierran al recibir el ambiente). Con `itemId` incluye las novedades de su familia |
+| POST | `/persistent-issues/{id}/resolve` | instructor, administrativo | `{resolucion, estadoItem?, foto?, inspeccionId?}` ("Ya está en funcionamiento" desde la revisión envía `inspeccionId`) (`estadoItem` por defecto `operativo`; `baja` solo administrativo). Avisa a coordinación, administrativo y almacén y a quien la reportó |
+| GET | `/issues?ambienteId&categoriaId&itemId&naturaleza&estado&desde&hasta` | instructor, administrativo, almacén | Historial completo: `[{origen: revision\|modulo, id, inspeccionId, novedadId, ambiente, objetivo, itemEstado, naturaleza, tipoDano, severidad, comentario, foto, usuario, fecha, estado, resueltaEn, resueltaPor, resolucion}]`. `estado` ∈ `en_revision \| en_curso \| resuelta \| anulada \| cerrada` (temporales y limpieza se cierran al recibir el ambiente). Con `itemId` incluye las novedades de su familia |
 
 ## Asignación de instructores por jornada
 

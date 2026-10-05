@@ -1,4 +1,4 @@
-// Novedades (instructores, coordinación, administrativo e inventario):
+// Novedades (instructores, coordinación, administrativo y almacén):
 //  · En curso: novedades permanentes (persistent_issues) que siguen abiertas
 //    revisión tras revisión. Instructores y administrativos agregan
 //    seguimiento (nota, foto, severidad), dejan el ítem o la familia fuera de
@@ -20,12 +20,13 @@ import { estado, emitir } from '../estado.js';
 import { fechaIso, ESTADOS_ITEM, ESTADOS_NOVEDAD, NATURALEZAS, TIPOS_DANO, PRIORIDADES, UBICACIONES } from '../reglas.js';
 
 export async function render(raiz, { params }) {
-  const admin = estado.usuario.rol === 'administrativo';
-  // Estados en los que se puede dejar el ítem mientras la novedad siga en curso (de baja: solo administrativos).
+  // Administrativo y almacén: dar de baja y levantar sin foto obligatoria.
+  const admin = ['administrativo', 'almacen'].includes(estado.usuario.rol);
+  // Estados en los que se puede dejar el ítem mientras la novedad siga en curso (de baja: administrativo y almacén).
   const estadosItem = ['danado', 'en_reparacion', 'fuera_servicio', ...(admin ? ['baja'] : [])];
-  const ambientes = await apiAmb.ambientes();
+  const [ambientes, categorias] = await Promise.all([apiAmb.ambientes(), apiAmb.categorias().catch(() => [])]);
   let pestana = params.get('ver') === 'historial' ? 'historial' : 'en_curso';
-  const f = { ambienteId: params.get('ambiente') || '', naturaleza: '', estado: '', desde: '', hasta: '' };
+  const f = { ambienteId: params.get('ambiente') || '', categoriaId: params.get('categoria') || '', naturaleza: '', estado: '', desde: '', hasta: '' };
   let enCurso = [], historial = [];
 
   const pestanas = h('div', { class: 'segmentos', role: 'tablist', 'aria-label': 'Ver' });
@@ -42,15 +43,16 @@ export async function render(raiz, { params }) {
 
   anexar(raiz,
     cabecera({
-      eyebrow: admin ? 'Coordinación · Administrativo · Inventario' : 'Novedades de los ambientes', titulo: 'Novedades de los ambientes',
-      subtitulo: 'Las novedades permanentes siguen en curso hasta que un instructor o un administrativo las marca resueltas. Cada cambio queda en su historial.',
+      eyebrow: admin ? 'Coordinación · Administrativo · Almacén' : 'Novedades de los ambientes', titulo: 'Novedades de los ambientes',
+      subtitulo: 'Las novedades permanentes siguen en curso hasta que un instructor, un administrativo o almacén las marca resueltas. Filtra por ambiente o por categoría del inventario. Cada cambio queda en su historial.',
       acciones: [
         h('button', { class: 'btn btn-outline', type: 'button', onclick: () => exportarCsv() }, icono('descargar'), 'CSV historial'),
         h('button', { class: 'btn btn-primary', type: 'button', onclick: () => nuevaNovedad() }, icono('mas'), 'Levantar novedad')],
     }),
     h('div', { 'data-anim': '' }, pestanas),
     h('section', { class: 'card no-imprimir reporte-filtros', 'data-anim': '' },
-      h('div', { class: 'filtros' }, sel('ambienteId', 'Ambiente', ambientes.map((a) => [a.id, `${a.codigo} · ${a.nombre}`]), 'Todos'), filtrosHistorial)),
+      h('div', { class: 'filtros' }, sel('ambienteId', 'Ambiente', ambientes.map((a) => [a.id, `${a.codigo} · ${a.nombre}`]), 'Todos'),
+        sel('categoriaId', 'Categoría', categorias.map((c) => [c.id, c.nombre]), 'Todas'), filtrosHistorial)),
     cuerpo);
 
   function pintarPestanas() {
@@ -66,7 +68,7 @@ export async function render(raiz, { params }) {
     vaciar(cuerpo, cargando());
     try {
       [enCurso, historial] = await Promise.all([
-        apiAmb.novedades({ estado: 'en_curso', ambienteId: f.ambienteId || undefined }),
+        apiAmb.novedades({ estado: 'en_curso', ambienteId: f.ambienteId || undefined, categoriaId: f.categoriaId || undefined }),
         apiAmb.historialNovedades({ ...f }),
       ]);
     } catch (e) { vaciar(cuerpo, tarjetaError(e, cargar)); return; }
@@ -80,7 +82,7 @@ export async function render(raiz, { params }) {
     vaciar(cuerpo, enCurso.length ? h('div', { class: 'novedades-lista' }, enCurso.map((n) => h('article', { class: `card novedad novedad--${n.severidad}` },
       n.foto ? h('img', { class: 'reporte-foto', src: n.foto, alt: `Evidencia de ${n.titulo}`, loading: 'lazy' }) : h('span', { class: 'reporte-foto reporte-foto--vacia', 'aria-hidden': 'true' }, icono('camara')),
       h('div', { class: 'reporte-datos' },
-        h('span', { class: 'inv-categoria' }, `Ambiente ${n.ambiente.codigo} · ${n.objetivo.tipo === 'familia' ? 'Familia completa' : n.objetivo.tipo === 'item' ? 'Ítem' : 'Salón'}`),
+        h('span', { class: 'inv-categoria' }, [`Ambiente ${n.ambiente.codigo}`, n.objetivo.tipo === 'familia' ? 'Familia completa' : n.objetivo.tipo === 'item' ? 'Ítem' : 'Salón', n.categoria?.nombre].filter(Boolean).join(' · ')),
         h('strong', {}, n.titulo),
         h('div', { class: 'reporte-chips' }, chipNovedad(n.estado), chipSeveridad(n.severidad), h('span', { class: 'status-chip neutro' }, etiquetaTipoDano(n.tipoDano)), n.itemEstado && chipItem(n.itemEstado)),
         h('p', {}, n.descripcion),
@@ -90,7 +92,7 @@ export async function render(raiz, { params }) {
         h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: () => detalle(n.id) }, icono('ojo'), 'Detalle e historial'),
         h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: () => modificar(n) }, icono('lapiz'), 'Seguimiento'),
         h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => resolver(n) }, icono('check'), 'Marcar resuelta')))))
-      : vacio('No hay novedades permanentes en curso', f.ambienteId ? 'Este ambiente no tiene novedades abiertas.' : 'Todos los ambientes están al día.', 'check'));
+      : vacio('No hay novedades permanentes en curso', f.ambienteId || f.categoriaId ? 'No hay novedades abiertas con esos filtros.' : 'Todos los ambientes están al día.', 'check'));
     anim.lista(cuerpo.querySelectorAll('.novedad'), { autoAlpha: 0, y: 6 });
   }
 
@@ -171,7 +173,7 @@ export async function render(raiz, { params }) {
         h('div', { class: 'full campo' }, h('label', { for: 'nv-resolucion' }, '¿Qué se hizo?'), resolucion),
         estadoFinal && h('div', { class: 'full campo' }, h('label', { for: 'nv-estado-final' }, n.objetivo.tipo === 'familia' ? 'Los componentes quedan' : 'El ítem queda'), estadoFinal),
         h('div', { class: 'full campo' }, h('label', {}, 'Foto de la reparación ', h('span', { class: 'opt' }, '(opcional)')), captura.el),
-        h('p', { class: 'full text-muted' }, 'Se avisa a coordinación, administrativo e inventario, y a quien la reportó.')),
+        h('p', { class: 'full text-muted' }, 'Se avisa a coordinación, administrativo y almacén, y a quien la reportó.')),
       acciones: [({ cerrar: x }) => h('button', { class: 'btn btn-outline', type: 'button', onclick: () => x() }, 'Cancelar'), guardar],
       alCerrar: () => captura.detener(),
     });
@@ -223,7 +225,7 @@ export async function render(raiz, { params }) {
     const guardar = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => enviar() }, icono('check'), 'Levantar novedad');
     const c = (id, etiqueta, input) => h('div', { class: 'campo' }, h('label', { for: id }, etiqueta), input);
     const { cerrar } = abrirModal({
-      titulo: 'Levantar una novedad permanente', subtitulo: 'Queda en curso hasta que se marque resuelta. Se avisa a coordinación, administrativo e inventario.', ancho: 'normal',
+      titulo: 'Levantar una novedad permanente', subtitulo: 'Queda en curso hasta que se marque resuelta. Se avisa a coordinación, administrativo y almacén.', ancho: 'normal',
       contenido: h('div', { class: 'form-grid' },
         c('nn-amb', 'Ambiente', ambSel), c('nn-obj', '¿Qué tiene la novedad?', objetivo),
         h('div', { class: 'full campo' }, h('label', {}, 'Tipo'), tipos),
@@ -247,7 +249,7 @@ export async function render(raiz, { params }) {
       guardar.disabled = true;
       try {
         const n = await apiAmb.crearNovedad(datos);
-        toast('exito', 'Novedad en curso', `${n.titulo}. Se avisó a coordinación, administrativo e inventario.`);
+        toast('exito', 'Novedad en curso', `${n.titulo}. Se avisó a coordinación, administrativo y almacén.`);
         cerrar();
         pestana = 'en_curso';
         emitir('novedades');
@@ -264,7 +266,8 @@ export async function render(raiz, { params }) {
       h('tbody', {}, historial.map((x) => h('tr', {},
         h('td', {}, fecha.corta(x.fecha)),
         h('td', {}, x.ambiente.codigo),
-        h('td', {}, h('strong', {}, x.objetivo.nombre), x.objetivo.codigo && h('span', { class: 'mono text-muted' }, ` ${x.objetivo.codigo}`)),
+        h('td', {}, h('strong', {}, x.objetivo.nombre), x.objetivo.codigo && h('span', { class: 'mono text-muted' }, ` ${x.objetivo.codigo}`),
+          x.categoria && h('span', { class: 'inv-categoria' }, x.categoria.nombre)),
         h('td', {}, h('div', { class: 'reporte-chips' }, chipNaturaleza(x.naturaleza), chipSeveridad(x.severidad)), h('span', { class: 'text-muted' }, `${etiquetaTipoDano(x.tipoDano)} · ${x.comentario}`)),
         h('td', {}, x.usuario || '—', x.inspeccionId && h('a', { class: 'table-link', href: `#/planilla?id=${x.inspeccionId}` }, ' · planilla')),
         h('td', {}, x.foto ? h('a', { href: x.foto, target: '_blank', rel: 'noopener' }, h('img', { class: 'novedad-miniatura', src: x.foto, alt: `Evidencia de ${x.objetivo.nombre}`, loading: 'lazy' })) : '—'),
@@ -275,8 +278,8 @@ export async function render(raiz, { params }) {
 
   function exportarCsv() {
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const filas = [['fecha', 'ambiente', 'equipo_o_lugar', 'codigo', 'naturaleza', 'tipo', 'severidad', 'comentario', 'reporto', 'evidencia', 'estado', 'resuelta_en', 'resolucion']]
-      .concat(historial.map((x) => [x.fecha, x.ambiente.codigo, x.objetivo.nombre, x.objetivo.codigo, x.naturaleza, x.tipoDano, x.severidad, x.comentario,
+    const filas = [['fecha', 'ambiente', 'equipo_o_lugar', 'codigo', 'categoria', 'naturaleza', 'tipo', 'severidad', 'comentario', 'reporto', 'evidencia', 'estado', 'resuelta_en', 'resolucion']]
+      .concat(historial.map((x) => [x.fecha, x.ambiente.codigo, x.objetivo.nombre, x.objetivo.codigo, x.categoria?.nombre, x.naturaleza, x.tipoDano, x.severidad, x.comentario,
         x.usuario, x.foto ? new URL(x.foto, location.href).href : '', x.estado, x.resueltaEn, x.resolucion]));
     descargar(`novedades-${fechaIso()}.csv`, '﻿' + filas.map((r) => r.map(esc).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
   }

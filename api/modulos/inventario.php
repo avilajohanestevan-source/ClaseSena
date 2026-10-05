@@ -141,7 +141,7 @@ function historial(int $itemId, string $accion, string $detalle, ?int $usuarioId
 /** GET /environments/{id}/items?familiaId */
 function rutaItemsAmbiente(int $id): never
 {
-    exigirRol('administrativo', 'instructor', 'portero');
+    exigirRol(...ROLES_PERSONAL);
     buscarAmbiente($id);
     $familia = entero($_GET, 'familiaId', false);
     responder(array_map('itemPublico', filas(SQL_ITEMS . ' WHERE i.environment_id = ?' . ($familia ? ' AND i.family_id = ?' : '') . ' ORDER BY i.codigo',
@@ -151,7 +151,7 @@ function rutaItemsAmbiente(int $id): never
 /** GET /items/by-code/{codigo}: acepta el código solo, SENA-INV:<codigo> o el qr_value del ítem. */
 function rutaItemPorCodigo(string $texto): never
 {
-    exigirRol('administrativo', 'instructor', 'portero');
+    exigirRol(...ROLES_PERSONAL);
     $l = leerCodigoEscaneado(rawurldecode($texto));
     if (!$l || $l['tipo'] !== 'item') fallar(404, "No hay ningún ítem con el código $texto.", 'NO_ENCONTRADO');
     responder(itemPublico($l['fila']));
@@ -164,7 +164,7 @@ function rutaItemPorCodigo(string $texto): never
  */
 function rutaBuscarEscaneado(): never
 {
-    exigirRol('administrativo', 'instructor', 'portero');
+    exigirRol(...ROLES_PERSONAL);
     $l = leerCodigoEscaneado((string) ($_GET['codigo'] ?? ''));
     if (!$l) fallar(404, 'Ese código no corresponde a ningún ítem ni familia del inventario.', 'NO_ENCONTRADO');
     responder($l['tipo'] === 'item'
@@ -204,7 +204,7 @@ function datosItem(array $d, bool $estadoObligatorio): array
 /** POST /items {ambienteId, codigo?, qr?, nombre, categoriaId|categoria, familiaId?, serial?, estado?}. Sin código se genera el consecutivo. */
 function rutaCrearItem(): never
 {
-    $u = exigirRol('administrativo');
+    $u = exigirRol(...ROLES_INVENTARIO);
     $d = conAlias(cuerpo(), 'familiaId', 'familia_id');
     $amb = buscarAmbiente(entero($d, 'ambienteId'));
     $codigo = siguienteCodigo($amb);
@@ -238,7 +238,7 @@ function rutaCrearItem(): never
  */
 function rutaRegistrarPorEscaneo(): never
 {
-    $u = exigirRol('administrativo');
+    $u = exigirRol(...ROLES_INVENTARIO);
     $d = conAlias(cuerpo(), 'familiaId', 'familia_id');
     $leido = trim((string) ($d['codigo'] ?? ''));
     if ($leido === '' || mb_strlen($leido) > 120) fallar(422, 'El código leído no es válido.', 'VALIDACION');
@@ -291,7 +291,7 @@ function rutaRegistrarPorEscaneo(): never
 /** PATCH /items/{id} {nombre, categoriaId|categoria, serial?, estado, familiaId?, qr?} */
 function rutaEditarItem(int $id): never
 {
-    $u = exigirRol('administrativo');
+    $u = exigirRol(...ROLES_INVENTARIO);
     $antes = buscarItem($id);
     $d = conAlias(cuerpo(), 'familiaId', 'familia_id');
     [$nombre, $categoria, $serial, $estado] = datosItem($d, true);
@@ -320,7 +320,7 @@ function rutaEditarItem(int $id): never
 
 function rutaBorrarItem(int $id): never
 {
-    exigirRol('administrativo');
+    exigirRol(...ROLES_INVENTARIO);
     buscarItem($id);
     if (fila('SELECT id FROM inspection_items WHERE inventory_item_id = ? LIMIT 1', [$id])
         || fila('SELECT id FROM persistent_issues WHERE inventory_item_id = ? LIMIT 1', [$id])) {
@@ -339,7 +339,7 @@ function rutaBorrarItem(int $id): never
  */
 function rutaEtiquetasImpresas(): never
 {
-    $u = exigirRol('administrativo', 'instructor', 'portero');
+    $u = exigirRol(...ROLES_PERSONAL);
     $d = cuerpo();
     $ids = listaIds($d['ids'] ?? []);
     $familiaIds = listaIds($d['familiaIds'] ?? []);
@@ -379,7 +379,7 @@ function rutaEtiquetasImpresas(): never
 /** GET /items/{id}/history: trazabilidad del ítem, lo más reciente primero. */
 function rutaHistorialItem(int $id): never
 {
-    exigirRol('administrativo', 'instructor', 'portero');
+    exigirRol(...ROLES_PERSONAL);
     buscarItem($id);
     $filas = filas(
         'SELECT h.*, u.nombre AS usuario, e.codigo AS ambiente FROM item_history h

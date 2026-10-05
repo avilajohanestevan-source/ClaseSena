@@ -228,7 +228,7 @@ export async function render(raiz, { params, alSalir }) {
 
     async function funciona() {
       if (enviando) return;
-      if (!await confirmar({ titulo: '¿Ya está en funcionamiento?', mensaje: `${n.titulo} quedará resuelta y${n.items.length ? ' el ítem vuelve a Operativo;' : ''} se avisa a coordinación, administrativo e inventario.`, textoAceptar: 'Sí, ya funciona' })) return;
+      if (!await confirmar({ titulo: '¿Ya está en funcionamiento?', mensaje: `${n.titulo} quedará resuelta y${n.items.length ? ' el ítem vuelve a Operativo;' : ''} se avisa a coordinación, administrativo y almacén.`, textoAceptar: 'Sí, ya funciona' })) return;
       enviando = true; funcionaBtn.disabled = true;
       try {
         const texto = comentario.value.trim();

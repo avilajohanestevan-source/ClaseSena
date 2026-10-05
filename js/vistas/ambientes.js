@@ -102,7 +102,7 @@ export async function render(raiz) {
         h('div', {}, h('dt', {}, 'Inventario'), h('dd', {}, `${a.itemsTotal} ítems`, a.familiasTotal ? ` · ${a.familiasTotal} familia${a.familiasTotal === 1 ? '' : 's'}` : '',
           a.itemsNovedad ? h('span', { class: 'amb-novedad' }, ` · ${a.itemsNovedad} con novedad`) : '')),
         a.novedadesActivas ? h('div', { class: 'amb-datos-ancho' }, h('dt', {}, 'Novedades permanentes'), h('dd', {},
-          u.rol === 'administrativo' || u.rol === 'instructor'
+          ['administrativo', 'instructor', 'almacen'].includes(u.rol)
             ? h('a', { class: 'table-link amb-novedad', href: `#/novedades?ambiente=${a.id}` }, `${a.novedadesActivas} en curso`)
             : h('span', { class: 'amb-novedad' }, `${a.novedadesActivas} en curso hasta que se resuelvan`))) : null,
         // El instructor solo recibe sus propias jornadas; portero y administrativo, las de todos.

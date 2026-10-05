@@ -120,11 +120,11 @@ test('familias de ítems e importación por multipart en /inventory/import', asy
   assert.equal(leido.item.familia.tipo, 'Batidora');
 });
 
-test('novedad permanente de una familia: persistent_issues, avisos a coordinación, administrativo e inventario, historial y resolución', async (t) => {
+test('novedad permanente de una familia: persistent_issues, avisos a coordinación, administrativo y almacén, historial y resolución', async (t) => {
   if (!await disponible()) { t.skip('API no disponible'); return; }
   const carlos = await ingresar('2020202020', 'administrativo');   // administrativo
   const patricia = await ingresar('2020202021', 'administrativo'); // coordinación
-  const hernan = await ingresar('2020202022', 'administrativo');   // inventario
+  const hernan = await ingresar('2020202022', 'almacen');          // almacén
   const andres = await ingresar('1010101011', 'instructor');
   const laura = await ingresar('1010101010', 'instructor');
   const martha = await ingresar('4040404041', 'portero');
@@ -176,7 +176,7 @@ test('novedad permanente de una familia: persistent_issues, avisos a coordinaci�
   assert.ok(novedadId, 'la novedad permanente queda en persistent_issues');
   assert.equal(final.reportes.find((r) => r.itemId === fondo.id).novedadId, null, 'la de limpieza no');
 
-  // 3. Avisos a coordinación, administrativo e inventario
+  // 3. Avisos a coordinación, administrativo y almacén
   for (const token of [carlos, patricia, hernan]) {
     const bandeja = (await pedir('GET', '/inbox', { token })).datos;
     assert.ok(bandeja.notificaciones.some((n) => n.tipo === 'novedad_permanente' && n.novedadId === novedadId && n.ambiente === '111'));
@@ -341,4 +341,46 @@ test('en la revisión: novedad permanente en su área del checklist y "ya está 
   const hist = (await pedir('GET', `/items/${despues.inventario.find((i) => i.codigo === 'AMB107-007').id}/history`, { token: laura })).datos[0];
   assert.deepEqual([hist.accion, hist.inspeccionId], ['novedad_resuelta', insp.id]);
   await pedir('POST', `/inspections/${insp.id}/cancel`, { token: laura });
+});
+
+test('almacén: gestiona artículos, familias y categorías, da de baja; no toca ambientes ni revisiones; novedades por categoría', async (t) => {
+  let disponible = true;
+  await fetch(API + '/me').catch(() => { disponible = false; });
+  if (!disponible) { t.skip('API no disponible (enciende Apache y MySQL en XAMPP)'); return; }
+
+  const almacen = await ingresar('2020202022', 'almacen');
+  assert.equal((await pedir('GET', '/me', { token: almacen })).datos.rol, 'almacen');
+  const instructor = await ingresar('1010101010', 'instructor');
+  const ambientes = (await pedir('GET', '/environments', { token: almacen })).datos;
+  const amb = ambientes.find((a) => a.codigo === '108');
+
+  // Crea una categoría y un artículo, lo registra escaneando una pegatina nueva y lo deja fuera de servicio / de baja
+  const cat = await pedir('POST', '/inventory/categories', { token: almacen, cuerpo: { nombre: `Almacén prueba ${Date.now()}` } });
+  assert.equal(cat.status, 201, JSON.stringify(cat.datos));
+  const nuevo = await pedir('POST', '/items/scan', { token: almacen, cuerpo: { codigo: `ALM-${Date.now()}`, ambienteId: amb.id, nombre: 'Proyector de prueba', categoriaId: cat.datos.id } });
+  assert.equal(nuevo.status, 201, JSON.stringify(nuevo.datos));
+  assert.equal(nuevo.datos.creado, true);
+  const item = nuevo.datos.item;
+  const editar = (estado) => pedir('PATCH', `/items/${item.id}`, { token: almacen, cuerpo: { nombre: item.nombre, categoriaId: cat.datos.id, estado } });
+  assert.equal((await editar('fuera_servicio')).datos.estado, 'fuera_servicio');
+  assert.equal((await editar('baja')).datos.estado, 'baja');
+  // Familias y pegatinas
+  const otros = (await pedir('GET', `/environments/${amb.id}/items`, { token: almacen })).datos.filter((i) => !i.familiaId && i.estado === 'operativo').slice(0, 2);
+  const fam = await pedir('POST', '/inventory/families', { token: almacen, cuerpo: { ambienteId: amb.id, tipo: 'Prueba', nombre: 'Familia de almacén', itemIds: otros.map((i) => i.id) } });
+  assert.equal(fam.status, 201, JSON.stringify(fam.datos));
+  assert.equal((await pedir('POST', '/inventory/labels', { token: almacen, cuerpo: { familiaIds: [fam.datos.id] } })).status, 200);
+
+  // El instructor no gestiona el inventario; almacén no edita ambientes ni ve las revisiones
+  assert.equal((await pedir('POST', '/inventory/categories', { token: instructor, cuerpo: { nombre: 'No' } })).status, 403);
+  assert.equal((await pedir('PATCH', `/environments/${amb.id}`, { token: almacen, cuerpo: { codigo: amb.codigo, nombre: amb.nombre } })).status, 403);
+  assert.equal((await pedir('GET', '/inspections', { token: almacen })).status, 403);
+
+  // Novedades filtradas por categoría (el aire del 107 es de Electrodomésticos o similar: se filtra por la suya)
+  const enCurso = (await pedir('GET', '/persistent-issues?estado=en_curso', { token: almacen })).datos;
+  assert.ok(enCurso.length >= 1 && enCurso.every((n) => 'categoria' in n));
+  const conCategoria = enCurso.find((n) => n.categoria);
+  const filtradas = (await pedir('GET', `/persistent-issues?estado=en_curso&categoriaId=${conCategoria.categoria.id}`, { token: almacen })).datos;
+  assert.ok(filtradas.length >= 1 && filtradas.every((n) => n.categoria?.id === conCategoria.categoria.id));
+  const historial = (await pedir('GET', `/issues?categoriaId=${conCategoria.categoria.id}`, { token: almacen })).datos;
+  assert.ok(historial.every((x) => x.categoria?.id === conCategoria.categoria.id));
 });

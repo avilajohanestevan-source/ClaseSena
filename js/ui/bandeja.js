@@ -52,7 +52,7 @@ export function crearBandeja() {
             cerrar();
             if (!n.leida) { n.leida = true; apiAmb.leerNotificacion(n.id).then(consultar).catch(() => {}); }
             // Novedades permanentes: administrativos e instructores van a la novedad; el portero, a la planilla.
-            if (n.novedadId && ['administrativo', 'instructor'].includes(estado.usuario?.rol)) location.hash = `#/novedades?id=${n.novedadId}`;
+            if (n.novedadId && ['administrativo', 'instructor', 'almacen'].includes(estado.usuario?.rol)) location.hash = `#/novedades?id=${n.novedadId}`;
             else if (n.inspeccionId) location.hash = `#/planilla?id=${n.inspeccionId}`;
             else if (n.tipo === 'asignacion') location.hash = '#/asignaciones';
           },

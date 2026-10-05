@@ -73,6 +73,8 @@ const RUTAS_ICONOS = {
   ambiente: 'M3 21V8l9-5 9 5v13M9 21v-6h6v6M3 21h18',
   // Entrega y revisión de ambientes.
   perfil: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+  // Almacén: estantería con cajas.
+  almacen: 'M3 21V4h18v17M3 12h18M7 8h3M14 16h3M7 16h3',
   portero: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3zM9 12l2 2 4-4',
   inspeccion: 'M9 4h6v3H9zM7 5.5H5.5A1.5 1.5 0 0 0 4 7v12.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V7a1.5 1.5 0 0 0-1.5-1.5H17M8 13l2.5 2.5L16 10',
   reporte: 'M4 20V11M10 20V5M16 20v-6M21 20H3',

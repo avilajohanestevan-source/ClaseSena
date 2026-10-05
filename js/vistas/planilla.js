@@ -210,10 +210,10 @@ export async function render(raiz, { params, alSalir }) {
     const texto = aviso === 'recibida'
       ? [h('strong', {}, `Recibiste el ambiente ${d.ambiente.codigo}`),
         h('span', {}, `Entregado por ${d.portero.nombre} · ${fecha.hora(d.recibidaEn)}${d.recibidaVia === 'qr_instructor' ? ' (escaneó tu QR)' : ''}`),
-        h('span', {}, d.resultado === 'con_danos' ? 'Con novedades: se avisó a coordinación, administrativo e inventario; las permanentes quedan activas hasta que las resuelvan.' : 'En buen estado, sin novedades.')]
+        h('span', {}, d.resultado === 'con_danos' ? 'Con novedades: se avisó a coordinación, administrativo y almacén; las permanentes quedan activas hasta que las resuelvan.' : 'En buen estado, sin novedades.')]
       : [h('strong', {}, `Ambiente ${d.ambiente.codigo} entregado`),
         h('span', {}, `${d.instructor.nombre} lo recibió a las ${fecha.hora(d.recibidaEn)}`),
-        d.resultado === 'con_danos' && h('span', {}, 'Coordinación, administrativo e inventario recibieron el aviso de las novedades.')];
+        d.resultado === 'con_danos' && h('span', {}, 'Coordinación, administrativo y almacén recibieron el aviso de las novedades.')];
     return h('section', { class: `resultado ${d.resultado === 'con_danos' ? 'resultado--tarde' : 'resultado--aceptado'} entrega-aviso no-imprimir`, role: 'status' },
       icono_, h('div', { class: 'resultado-texto' }, texto));
   }

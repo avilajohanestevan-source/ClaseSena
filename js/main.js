@@ -14,8 +14,10 @@ import { alVencerSesion } from './api/cliente.js';
 import { apiAmb } from './api/ambientes.js';
 import { ETIQUETA_ROL } from './reglas.js';
 
-const TODOS = ['instructor', 'portero', 'administrativo', 'aprendiz'];
-const PERSONAL = ['instructor', 'portero', 'administrativo'];
+const TODOS = ['instructor', 'portero', 'administrativo', 'aprendiz', 'almacen'];
+const PERSONAL = ['instructor', 'portero', 'administrativo', 'almacen'];
+// Entrega de ambientes: almacén no revisa ni entrega salones.
+const ENTREGA = ['instructor', 'portero', 'administrativo'];
 
 // grupo: dónde aparece en el menú (sin grupo = no aparece, p. ej. pantallas de detalle).
 // activa: qué ítem del menú se marca cuando la ruta no está en el menú.
@@ -25,12 +27,12 @@ const RUTAS = {
   // Sin grupo: el único acceso es la tarjeta con nombre y rol en la cabecera del menú.
   perfil: { vista: () => import('./vistas/perfil.js'), roles: TODOS, titulo: 'Mi perfil' },
   ambientes: { vista: () => import('./vistas/ambientes.js'), roles: TODOS, titulo: 'Ambientes', icono: 'ambiente', grupo: 'ambientes' },
-  inspecciones: { vista: () => import('./vistas/inspecciones.js'), roles: PERSONAL, titulo: 'Inspecciones', icono: 'inspeccion', grupo: 'ambientes' },
+  inspecciones: { vista: () => import('./vistas/inspecciones.js'), roles: ENTREGA, titulo: 'Inspecciones', icono: 'inspeccion', grupo: 'ambientes' },
   inspeccion: { vista: () => import('./vistas/inspeccion.js'), roles: ['instructor'], titulo: 'Revisión del ambiente', activa: 'inspecciones' },
-  planilla: { vista: () => import('./vistas/planilla.js'), roles: PERSONAL, titulo: 'Planilla de entrega', activa: 'inspecciones' },
+  planilla: { vista: () => import('./vistas/planilla.js'), roles: ENTREGA, titulo: 'Planilla de entrega', activa: 'inspecciones' },
   inventario: { vista: () => import('./vistas/inventario.js'), roles: PERSONAL, titulo: 'Inventario', icono: 'caja', grupo: 'ambientes' },
   etiquetas: { vista: () => import('./vistas/etiquetas.js'), roles: PERSONAL, titulo: 'Pegatinas', activa: 'inventario' },
-  novedades: { vista: () => import('./vistas/novedades.js'), roles: ['administrativo', 'instructor'], titulo: 'Novedades', icono: 'alerta', grupo: 'ambientes' },
+  novedades: { vista: () => import('./vistas/novedades.js'), roles: ['administrativo', 'instructor', 'almacen'], titulo: 'Novedades', icono: 'alerta', grupo: 'ambientes' },
   // Administrativo: ve y cambia todas; portero: ve todas sin cambiar; instructor: solo las suyas.
   asignaciones: { vista: () => import('./vistas/asignaciones.js'), roles: ['administrativo', 'portero', 'instructor'], titulo: 'Asignaciones', icono: 'calendario', grupo: 'ambientes' },
   auditoria: { vista: () => import('./vistas/auditoria.js'), roles: ['administrativo'], titulo: 'Auditoría', icono: 'historial', grupo: 'ambientes' },
@@ -100,11 +102,13 @@ async function actualizarInsignias() {
   const u = estado.usuario;
   if (!u || u.rol === 'aprendiz') return;
   try {
-    const n = u.rol === 'instructor'
-      ? (await apiAmb.inspecciones()).filter((s) => ['en_curso', 'pendiente_recepcion'].includes(s.estado)).length
-      : (await apiAmb.inspecciones({ estado: 'pendiente_recepcion', asignados: u.rol === 'portero' ? 1 : undefined })).length;
-    shell.insignia('inspecciones', n, u.rol === 'instructor' ? 'en proceso' : 'por entregar');
-    if (['administrativo', 'instructor'].includes(u.rol)) shell.insignia('novedades', (await apiAmb.novedades({ estado: 'en_curso' })).length, 'novedades permanentes en curso');
+    if (u.rol !== 'almacen') {
+      const n = u.rol === 'instructor'
+        ? (await apiAmb.inspecciones()).filter((s) => ['en_curso', 'pendiente_recepcion'].includes(s.estado)).length
+        : (await apiAmb.inspecciones({ estado: 'pendiente_recepcion', asignados: u.rol === 'portero' ? 1 : undefined })).length;
+      shell.insignia('inspecciones', n, u.rol === 'instructor' ? 'en proceso' : 'por entregar');
+    }
+    if (['administrativo', 'instructor', 'almacen'].includes(u.rol)) shell.insignia('novedades', (await apiAmb.novedades({ estado: 'en_curso' })).length, 'novedades permanentes en curso');
   } catch { /* la insignia es informativa */ }
 }
 escuchar('bandeja', actualizarInsignias);

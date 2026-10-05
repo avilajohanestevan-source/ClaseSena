@@ -13,7 +13,7 @@
  *
  * Cada cambio (creada, reportada de nuevo, modificada, resuelta, anulada)
  * queda en audit_events con fecha, usuario y evidencia. Al abrirse y al
- * resolverse se avisa a coordinación, administrativo e inventario.
+ * resolverse se avisa a coordinación, administrativo y almacén.
  *
  * El historial (GET /issues) reúne cada novedad reportada: equipo o
  * ambiente, fecha, usuario, evidencia, naturaleza, estado y fecha de resolución.
@@ -61,6 +61,22 @@ function areaChecklist(?string $nombre, ?string $categoria, ?string $ubicacion):
     ][$categoria] ?? null;
 }
 
+/**
+ * Categoría del inventario de una novedad: la del ítem, la del primer
+ * componente de la familia o, si es del salón (pared, techo…), Inmuebles.
+ * → {id, nombre} o null.
+ */
+function categoriaNovedad(?int $itemId, ?int $familiaId, ?string $ubicacion): ?array
+{
+    static $categorias = null, $porItem = [], $porFamilia = [];
+    $categorias ??= array_column(filas('SELECT id, nombre FROM inventory_categories'), 'nombre', 'id');
+    $id = null;
+    if ($itemId) $id = $porItem[$itemId] ??= (int) (fila('SELECT category_id FROM inventory_items WHERE id = ?', [$itemId])['category_id'] ?? 0);
+    elseif ($familiaId) $id = $porFamilia[$familiaId] ??= (int) (fila('SELECT category_id FROM inventory_items WHERE family_id = ? ORDER BY id LIMIT 1', [$familiaId])['category_id'] ?? 0);
+    elseif ($ubicacion) $id = (int) (array_search('Inmuebles', $categorias, true) ?: 0);
+    return $id && isset($categorias[$id]) ? ['id' => $id, 'nombre' => $categorias[$id]] : null;
+}
+
 /** Ítem, familia o salón al que se refiere una novedad (o un reporte). */
 function objetivoNovedad(array $n): array
 {
@@ -80,6 +96,8 @@ function novedadPublica(array $n): array
         'titulo' => $obj['nombre'] . ($obj['codigo'] ? " · {$obj['codigo']}" : ''),
         'itemEstado' => $n['item_estado'],
         'ubicacion' => $n['ubicacion'],
+        'categoria' => categoriaNovedad($n['inventory_item_id'] !== null ? (int) $n['inventory_item_id'] : null,
+            $n['family_id'] !== null ? (int) $n['family_id'] : null, $n['ubicacion']),
         'tipoDano' => $n['tipo_dano'],
         'severidad' => $n['severidad'],
         'descripcion' => $n['descripcion'],
@@ -126,7 +144,7 @@ function novedadEnCursoDe(?int $itemId, ?int $familiaId): ?array
 /**
  * Un reporte permanente de una revisión abre una novedad en curso (o se suma
  * a la que el ítem o la familia ya tenía) en el momento de reportarlo. Avisa
- * a coordinación, administrativo e inventario si es nueva.
+ * a coordinación, administrativo y almacén si es nueva.
  * @return int id de la novedad
  */
 function abrirNovedadDeReporte(int $reporteId, array $s, array $instructor): int
@@ -174,7 +192,7 @@ function retirarReporteDeNovedad(array $r, ?int $usuarioId): void
     }
 }
 
-/** Aviso a todos los administrativos (coordinación, administrativo e inventario). */
+/** Aviso a coordinación, administrativo y almacén. */
 function avisarNovedad(array $n, string $tipo, int $excepto): void
 {
     $obj = objetivoNovedad($n);
@@ -211,23 +229,26 @@ function fotoOpcional(array $d, string $campo = 'foto'): ?string
 
 /* ---------------- rutas ---------------- */
 
-/** GET /persistent-issues?estado=en_curso|resuelta|anulada&ambienteId */
+/** GET /persistent-issues?estado=en_curso|resuelta|anulada&ambienteId&categoriaId */
 function rutaNovedades(): never
 {
-    exigirRol('administrativo', 'instructor', 'portero');
+    exigirRol(...ROLES_PERSONAL);
     $where = [];
     $params = [];
     if ($v = opcion($_GET, 'estado', ESTADOS_NOVEDAD, false)) { $where[] = 'n.estado = ?'; $params[] = $v; }
     if ($v = entero($_GET, 'ambienteId', false)) { $where[] = 'n.environment_id = ?'; $params[] = $v; }
+    $categoriaId = entero($_GET, 'categoriaId', false);
     $sql = SQL_NOVEDADES . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
-        . " ORDER BY n.estado = 'en_curso' DESC, FIELD(n.severidad, 'grave', 'moderada', 'leve'), n.creada_en DESC LIMIT 300";
-    responder(array_map('novedadPublica', filas($sql, $params)));
+        . " ORDER BY n.estado = 'en_curso' DESC, FIELD(n.severidad, 'grave', 'moderada', 'leve'), n.creada_en DESC";
+    $lista = array_map('novedadPublica', filas($sql, $params));
+    if ($categoriaId) $lista = array_values(array_filter($lista, fn($n) => ($n['categoria']['id'] ?? 0) === $categoriaId));
+    responder(array_slice($lista, 0, 300));
 }
 
 /** GET /persistent-issues/{id}: con los ítems afectados, cada revisión que la reportó y sus eventos (auditoría). */
 function rutaNovedad(int $id): never
 {
-    exigirRol('administrativo', 'instructor', 'portero');
+    exigirRol(...ROLES_PERSONAL);
     responder(detalleNovedad(buscarNovedad($id)));
 }
 
@@ -256,7 +277,7 @@ function detalleNovedad(array $n): array
  */
 function rutaCrearNovedad(): never
 {
-    $u = exigirRol('administrativo', 'instructor');
+    $u = exigirRol('administrativo', 'instructor', 'almacen');
     $d = conAlias(cuerpo(), 'familiaId', 'familia_id');
     $item = $familia = $ubicacion = null;
     if (!empty($d['itemId'])) $item = fila(SQL_ITEMS . ' WHERE i.id = ?', [(int) $d['itemId']]) ?? fallar(404, 'El ítem no existe.', 'NO_ENCONTRADO');
@@ -276,7 +297,7 @@ function rutaCrearNovedad(): never
     $descripcion = texto($d, 'descripcion', 500, true, 'la descripción');
     if (mb_strlen($descripcion) < 10) fallar(422, 'Describe la novedad con al menos 10 caracteres.', 'VALIDACION');
     $estadoItem = opcion($d, 'estadoItem', ESTADOS_NOVEDAD_ITEM, false, 'el estado del ítem') ?? 'danado';
-    if ($estadoItem === 'baja' && $u['rol'] !== 'administrativo') fallar(403, 'Solo un administrativo puede dar de baja un ítem.', 'PERMISO');
+    if ($estadoItem === 'baja' && !in_array($u['rol'], ROLES_INVENTARIO, true)) fallar(403, 'Solo administrativo o almacén pueden dar de baja un ítem.', 'PERMISO');
     if ($u['rol'] === 'instructor' && empty($d['foto'])) fallar(422, 'Toma una foto de la novedad como evidencia.', 'VALIDACION');
     $foto = fotoOpcional($d);
 
@@ -312,12 +333,12 @@ function rutaCrearNovedad(): never
  */
 function rutaEditarNovedad(int $id): never
 {
-    $u = exigirRol('administrativo', 'instructor');
+    $u = exigirRol('administrativo', 'instructor', 'almacen');
     $n = buscarNovedad($id);
     if ($n['estado'] !== 'en_curso') fallar(409, 'La novedad ya no está en curso.', 'ESTADO');
     $d = cuerpo();
     $estadoItem = opcion($d, 'estadoItem', ESTADOS_NOVEDAD_ITEM, false, 'el estado del ítem');
-    if ($estadoItem === 'baja' && $u['rol'] !== 'administrativo') fallar(403, 'Solo un administrativo puede dar de baja un ítem.', 'PERMISO');
+    if ($estadoItem === 'baja' && !in_array($u['rol'], ROLES_INVENTARIO, true)) fallar(403, 'Solo administrativo o almacén pueden dar de baja un ítem.', 'PERMISO');
     if ($estadoItem && !$n['inventory_item_id'] && !$n['family_id']) fallar(422, 'Esta novedad es del salón: no tiene ítems que cambiar de estado.', 'VALIDACION');
     $severidad = opcion($d, 'severidad', SEVERIDADES, false, 'la severidad') ?? $n['severidad'];
     $descripcion = texto($d, 'descripcion', 500, false, 'la descripción') ?? $n['descripcion'];
@@ -357,14 +378,14 @@ function rutaEditarNovedad(int $id): never
  */
 function rutaResolverNovedad(int $id): never
 {
-    $u = exigirRol('administrativo', 'instructor');
+    $u = exigirRol('administrativo', 'instructor', 'almacen');
     $n = buscarNovedad($id);
     if ($n['estado'] !== 'en_curso') fallar(409, $n['estado'] === 'resuelta' ? 'La novedad ya estaba resuelta.' : 'La novedad fue anulada.', 'ESTADO');
     $d = cuerpo();
     $resolucion = texto($d, 'resolucion', 500, true, 'qué se hizo para resolverla');
     if (mb_strlen($resolucion) < 5) fallar(422, 'Describe la solución con al menos 5 caracteres.', 'VALIDACION');
     $estadoItem = opcion($d, 'estadoItem', ['operativo', 'en_reparacion', 'baja'], false, 'el estado del ítem') ?? 'operativo';
-    if ($estadoItem === 'baja' && $u['rol'] !== 'administrativo') fallar(403, 'Solo un administrativo puede dar de baja un ítem.', 'PERMISO');
+    if ($estadoItem === 'baja' && !in_array($u['rol'], ROLES_INVENTARIO, true)) fallar(403, 'Solo administrativo o almacén pueden dar de baja un ítem.', 'PERMISO');
     $revision = desdeRevision($d, $n, $u);
     $foto = fotoOpcional($d);
 
@@ -390,7 +411,7 @@ function rutaResolverNovedad(int $id): never
     $n = buscarNovedad($id);
     avisarNovedad($n, 'novedad_resuelta', (int) $u['id']);
     $reporto = fila('SELECT id, rol FROM users WHERE id = ? AND activo = 1', [(int) $n['reportada_por']]);
-    if ($reporto && $reporto['rol'] !== 'administrativo' && (int) $reporto['id'] !== (int) $u['id']) {
+    if ($reporto && !in_array($reporto['rol'], ROLES_INVENTARIO, true) && (int) $reporto['id'] !== (int) $u['id']) {
         notificar((int) $reporto['id'], 'novedad_resuelta', "Se resolvió la novedad que reportaste en el ambiente {$n['ambiente_codigo']}",
             objetivoNovedad($n)['nombre'] . ": $resolucion", $n['inspection_id'] !== null ? (int) $n['inspection_id'] : null, $id);
     }
@@ -408,9 +429,10 @@ function rutaResolverNovedad(int $id): never
  */
 function rutaHistorialNovedades(): never
 {
-    exigirRol('administrativo', 'instructor');
+    exigirRol('administrativo', 'instructor', 'almacen');
     $ambienteId = entero($_GET, 'ambienteId', false);
     $itemId = entero($_GET, 'itemId', false);
+    $categoriaId = entero($_GET, 'categoriaId', false);
     $naturaleza = opcion($_GET, 'naturaleza', array_keys(NATURALEZAS), false);
     $estado = opcion($_GET, 'estado', ['en_revision', 'en_curso', 'resuelta', 'anulada', 'cerrada'], false);
     foreach (['desde', 'hasta'] as $campo) {
@@ -444,6 +466,8 @@ function rutaHistorialNovedades(): never
             'novedadId' => $r['persistent_issue_id'] !== null ? (int) $r['persistent_issue_id'] : null,
             'ambiente' => ['id' => (int) $r['environment_id'], 'codigo' => $r['ambiente_codigo'], 'nombre' => $r['ambiente_nombre']],
             'objetivo' => objetivoNovedad($r), 'itemEstado' => $r['item_estado'],
+            'categoria' => categoriaNovedad($r['inventory_item_id'] !== null ? (int) $r['inventory_item_id'] : null,
+                $r['family_id'] !== null ? (int) $r['family_id'] : null, $r['ubicacion']),
             'naturaleza' => $r['naturaleza'], 'tipoDano' => $r['tipo_dano'], 'severidad' => $r['severidad'],
             'comentario' => $r['comentario'], 'foto' => $r['foto'], 'usuario' => $r['usuario'],
             'fecha' => iso($r['reportado_en']), 'estado' => $est,
@@ -458,6 +482,8 @@ function rutaHistorialNovedades(): never
             'inspeccionId' => $n['inspection_id'] !== null ? (int) $n['inspection_id'] : null, 'novedadId' => (int) $n['id'],
             'ambiente' => ['id' => (int) $n['environment_id'], 'codigo' => $n['ambiente_codigo'], 'nombre' => $n['ambiente_nombre']],
             'objetivo' => objetivoNovedad($n), 'itemEstado' => $n['item_estado'],
+            'categoria' => categoriaNovedad($n['inventory_item_id'] !== null ? (int) $n['inventory_item_id'] : null,
+                $n['family_id'] !== null ? (int) $n['family_id'] : null, $n['ubicacion']),
             'naturaleza' => 'permanente', 'tipoDano' => $n['tipo_dano'], 'severidad' => $n['severidad'],
             'comentario' => $n['descripcion'], 'foto' => $n['foto'], 'usuario' => $n['reportada_por_nombre'],
             'fecha' => iso($n['creada_en']), 'estado' => $n['estado'],
@@ -466,9 +492,10 @@ function rutaHistorialNovedades(): never
         ];
     }
     $familiaDelItem = $itemId ? (int) (fila('SELECT family_id FROM inventory_items WHERE id = ?', [$itemId])['family_id'] ?? 0) : 0;
-    $lista = array_values(array_filter($lista, function ($x) use ($ambienteId, $itemId, $familiaDelItem, $naturaleza, $estado) {
+    $lista = array_values(array_filter($lista, function ($x) use ($ambienteId, $itemId, $categoriaId, $familiaDelItem, $naturaleza, $estado) {
         $dia = substr($x['fecha'], 0, 10);
         return (!$ambienteId || $x['ambiente']['id'] === $ambienteId)
+            && (!$categoriaId || ($x['categoria']['id'] ?? 0) === $categoriaId)
             && (!$itemId || in_array($itemId, $x['_items'], true) || ($familiaDelItem && $x['_familia'] === $familiaDelItem))
             && (!$naturaleza || $x['naturaleza'] === $naturaleza)
             && (!$estado || $x['estado'] === $estado)

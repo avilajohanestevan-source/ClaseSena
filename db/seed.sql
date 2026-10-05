@@ -22,7 +22,7 @@ INSERT INTO users (id, tipo_documento, documento, nombre, email, telefono, rol, 
   (8,  'CC', '1122334456', 'Mateo Torres Ramírez',    'mtorres@soy.sena.edu.co',  '3014445567', 'aprendiz',       NULL,             '2758432', @hash),
   (9,  'CC', '1122334457', 'Sara Cárdenas Vega',      'scardenas@soy.sena.edu.co','3014445568', 'aprendiz',       NULL,             '2834519', @hash),
   (10, 'CC', '2020202021', 'Patricia Rondón Gil',     'prondon@sena.edu.co',      '3203334456', 'administrativo', 'coordinacion',   NULL,      @hash),
-  (11, 'CC', '2020202022', 'Hernán Darío Ospina',     'hdospina@sena.edu.co',     '3203334457', 'administrativo', 'inventario',     NULL,      @hash);
+  (11, 'CC', '2020202022', 'Hernán Darío Ospina',     'hdospina@sena.edu.co',     '3203334457', 'almacen',        NULL,             NULL,      @hash);
 
 INSERT INTO especialidades_ambiente (id, nombre, descripcion) VALUES
   (1, 'Sistemas',          'Computadores por puesto, red y video beam'),

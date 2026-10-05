@@ -237,7 +237,7 @@ function importarInventario(array $filas, ?int $usuarioId, bool $simular, string
  */
 function rutaCargaMasiva(): never
 {
-    $u = exigirRol('administrativo');
+    $u = exigirRol(...ROLES_INVENTARIO);
     $multipart = !empty($_FILES['archivo']);
     if ($multipart) {
         $subido = $_FILES['archivo'];
@@ -273,7 +273,7 @@ function rutaCargaMasiva(): never
 /** GET /items/export?ambienteId: inventario en Excel con las mismas columnas de la carga (sirve de plantilla). */
 function rutaExportarInventario(): never
 {
-    exigirRol('administrativo');
+    exigirRol(...ROLES_INVENTARIO);
     if (!hayPhpSpreadsheet()) fallar(500, 'Falta instalar PhpSpreadsheet (ejecuta "composer install").', 'SIN_PHPSPREADSHEET');
     $ambienteId = entero($_GET, 'ambienteId', false);
     $where = $ambienteId ? ' WHERE i.environment_id = ?' : '';

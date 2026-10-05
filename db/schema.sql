@@ -13,7 +13,7 @@
 --   (o al revés: el instructor muestra su QR de entrega → inspections (qr_instructor_token)
 --    y el portero lo escanea para confirmar             → inspections (recibida, portero_id, recibida_via))
 --                                                        + persistent_issues por cada novedad permanente
---                                                        + notifications al portero y a coordinación, administrativo e inventario
+--                                                        + notifications al portero y a coordinación, administrativo y almacén
 --   el instructor o un administrativo la marca resuelta → persistent_issues (resuelta) + ítems de nuevo operativos
 --   cada cambio de una novedad o de una asignación      → audit_events (fecha, usuario, detalle y evidencia)
 --
@@ -46,8 +46,8 @@ CREATE TABLE users (
   nombre          VARCHAR(120) NOT NULL,
   email           VARCHAR(160) NULL,
   telefono        VARCHAR(20)  NULL,
-  rol             ENUM('instructor','administrativo','portero','aprendiz') NOT NULL,
-  area            ENUM('coordinacion','administrativo','inventario') NULL, -- solo administrativos: a qué dependencia pertenece
+  rol             ENUM('instructor','administrativo','portero','aprendiz','almacen') NOT NULL, -- almacen: gestiona artículos, familias y códigos
+  area            ENUM('coordinacion','administrativo') NULL, -- solo administrativos: a qué dependencia pertenece
   ficha           VARCHAR(12)  NULL,              -- solo aprendices
   password_hash   VARCHAR(255) NOT NULL,
   activo          TINYINT(1)   NOT NULL DEFAULT 1,

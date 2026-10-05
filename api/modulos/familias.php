@@ -55,7 +55,7 @@ function siguienteCodigoFamilia(array $amb, string $tipo): string
 /** GET /inventory/families?ambienteId: con sus componentes. */
 function rutaFamilias(): never
 {
-    exigirRol('administrativo', 'instructor', 'portero');
+    exigirRol(...ROLES_PERSONAL);
     $ambienteId = entero($_GET, 'ambienteId', false);
     $lista = filas(SQL_FAMILIAS . ($ambienteId ? ' WHERE f.environment_id = ?' : '') . ' ORDER BY e.codigo, f.codigo', $ambienteId ? [$ambienteId] : []);
     responder(array_map(fn($f) => familiaPublica($f, true), $lista));
@@ -63,7 +63,7 @@ function rutaFamilias(): never
 
 function rutaFamilia(int $id): never
 {
-    exigirRol('administrativo', 'instructor', 'portero');
+    exigirRol(...ROLES_PERSONAL);
     responder(familiaPublica(buscarFamilia($id), true));
 }
 
@@ -101,7 +101,7 @@ function asignarComponentes(array $familia, array $ids, int $usuarioId): void
 /** POST /inventory/families {ambienteId, tipo, nombre, codigo?, itemIds?} */
 function rutaCrearFamilia(): never
 {
-    $u = exigirRol('administrativo');
+    $u = exigirRol(...ROLES_INVENTARIO);
     $d = cuerpo();
     $amb = buscarAmbiente(entero($d, 'ambienteId'));
     $tipo = texto($d, 'tipo', 40, true, 'el tipo de familia');
@@ -126,7 +126,7 @@ function verificarCodigoFamiliaLibre(string $codigo, int $excepto = 0): void
 /** PATCH /inventory/families/{id} {tipo, nombre, itemIds?}: sin itemIds no cambia los componentes. */
 function rutaEditarFamilia(int $id): never
 {
-    $u = exigirRol('administrativo');
+    $u = exigirRol(...ROLES_INVENTARIO);
     $f = buscarFamilia($id);
     $d = cuerpo();
     db()->begin_transaction();
@@ -140,7 +140,7 @@ function rutaEditarFamilia(int $id): never
 /** DELETE /inventory/families/{id}: los componentes quedan como ítems sueltos. */
 function rutaBorrarFamilia(int $id): never
 {
-    $u = exigirRol('administrativo');
+    $u = exigirRol(...ROLES_INVENTARIO);
     $f = buscarFamilia($id);
     if (fila('SELECT id FROM inspection_items WHERE family_id = ? LIMIT 1', [$id]) || fila('SELECT id FROM persistent_issues WHERE family_id = ? LIMIT 1', [$id])) {
         fallar(409, 'La familia tiene novedades reportadas; no se puede borrar.', 'EN_USO');
