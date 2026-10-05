@@ -18,7 +18,7 @@ import { cabecera, vacio, lineaDeTiempo } from '../ui/ambientes-ui.js';
 import { apiAmb } from '../api/ambientes.js';
 import { estado } from '../estado.js';
 import { crearFechasAsignacion, modoDe } from '../ui/fechas-asignacion.js';
-import { describirAsignacion as describirFechas } from '../ui/asignaciones-ambiente.js';
+import { describirAsignacion as describirFechas, avisoRevisionInventario } from '../ui/asignaciones-ambiente.js';
 import { fechaIso, JORNADAS, ETIQUETA_JORNADA, MODOS_ASIGNACION, DIAS_SEMANA, validarAsignacion, diaSemana } from '../reglas.js';
 
 const DIAS = 7;
@@ -310,6 +310,7 @@ export async function render(raiz, { params }) {
     // Sin definir, por semanas, por días o por rango de fechas (js/ui/fechas-asignacion.js).
     const fechas = crearFechasAsignacion({ prefijo: 'as', hoy, fechaInicio, jornada: jornadaElegida, modo: 'permanente' });
     const motivo = h('input', { type: 'text', id: 'as-motivo', maxlength: 300, placeholder: 'Ej.: ficha 2758432, reemplazo por incapacidad…' });
+    const esCuentadante = h('input', { type: 'checkbox', id: 'as-cuentadante' });
     const guardar = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => enviar() }, icono('check'), 'Asignar');
     const { cerrar } = abrirModal({
       titulo: 'Nueva asignación', subtitulo: 'El instructor recibe un aviso con el ambiente, la jornada y las fechas.', ancho: 'normal',
@@ -317,13 +318,16 @@ export async function render(raiz, { params }) {
         c('as-amb', 'Ambiente', ambSel), c('as-inst', 'Instructor', instSel),
         h('div', { class: 'full campo' }, h('label', { id: 'as-jornada' }, 'Jornada'), jornadas),
         fechas.el,
-        h('div', { class: 'full' }, c('as-motivo', 'Motivo o ficha (opcional)', motivo))),
+        h('div', { class: 'full' }, c('as-motivo', 'Motivo o ficha (opcional)', motivo)),
+        h('label', { class: 'interruptor full' }, esCuentadante, h('span', { class: 'interruptor-pista', 'aria-hidden': 'true' }),
+          'Queda como cuentadante del ambiente (revisa y acepta el inventario)'),
+        h('p', { class: 'full text-muted' }, 'Si el instructor nunca ha estado en este ambiente, antes de su primera entrega debe revisar el inventario.')),
       acciones: [({ cerrar: x }) => h('button', { class: 'btn btn-outline', type: 'button', onclick: () => x() }, 'Cancelar'), guardar],
     });
     async function enviar() {
       const datos = {
         ambienteId: Number(ambSel.value) || null, instructorId: Number(instSel.value) || null,
-        jornada: jornadaElegida(), ...fechas.leer(), motivo: motivo.value.trim() || undefined,
+        jornada: jornadaElegida(), ...fechas.leer(), motivo: motivo.value.trim() || undefined, cuentadante: esCuentadante.checked || undefined,
       };
       const errores = validarAsignacion(datos, hoy);
       errorCampo(ambSel, errores.ambienteId); errorCampo(instSel, errores.instructorId); errorCampo(jornadas, errores.jornada);
@@ -335,6 +339,7 @@ export async function render(raiz, { params }) {
         toast('exito', 'Instructor asignado', `${r.asignacion.instructor.nombre} · ambiente ${r.asignacion.ambiente.codigo} · ${ETIQUETA_JORNADA[r.asignacion.jornada]}`
           + (r.asignaciones.length > 1 ? ` · ${r.asignaciones.length} días` : ` · ${describirFechas(r.asignacion)}`));
         avisar(r.advertencias);
+        avisoRevisionInventario(r, r.asignacion.instructor.nombre, datos.cuentadante);
         cerrar();
         cargar();
       } catch (e) {

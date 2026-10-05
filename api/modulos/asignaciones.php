@@ -298,7 +298,10 @@ function rutaAsignacion(int $id): never
 /* ---------------- cambios (administrativo) ---------------- */
 
 /**
- * POST /assignments {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, fechas?, diasSemana?, motivo?}
+ * POST /assignments {ambienteId, instructorId, jornada, tipo, fechaInicio, fechaFin?, fechas?, diasSemana?, motivo?, cuentadante?}
+ * Un instructor que llega por primera vez al ambiente debe revisar su
+ * inventario antes de su primera entrega; con cuentadante: true, además queda
+ * como cuentadante al aceptar esa revisión (modulos/cuentadante.php).
  *   → {asignacion, asignaciones, advertencias}
  * Con tipo "dia" y fechas: [aaaa-mm-dd, …] se asignan varios días sueltos de
  * una vez (una asignación por día); con "periodo", de fechaInicio a fechaFin;
@@ -344,12 +347,15 @@ function rutaCrearAsignacion(): never
             ['instructorId' => (int) $instructor['id'], 'jornada' => $jornada, 'tipo' => $tipo, 'fechaInicio' => $inicio, 'fechaFin' => $fin, 'diasSemana' => $diasSemana]);
         $creadas[] = $a;
     }
+    $revision = !empty($d['cuentadante'])
+        ? crearRevision((int) $amb['id'], 'cuentadante', (int) $instructor['id'], (int) $u['id'], "Asignado como cuentadante · " . describirAsignacion($creadas[0]), (int) $creadas[0]['id'])
+        : crearRevision((int) $amb['id'], 'instructor', (int) $instructor['id'], (int) $u['id'], 'Asignación nueva · ' . describirAsignacion($creadas[0]), (int) $creadas[0]['id']);
     $resumen = count($creadas) === 1 ? describirAsignacion($creadas[0])
         : "{$instructor['nombre']} · " . JORNADAS[$jornada] . ' · ' . count($creadas) . ' días: ' . implode(', ', array_column($creadas, 'fecha_inicio'));
     avisarInstructor((int) $instructor['id'], "Te asignaron al ambiente {$amb['codigo']}", $resumen . ' (' . HORARIO_JORNADA[$jornada] . ')');
     db()->commit();
     responder(['asignacion' => asignacionPublica($creadas[0]), 'asignaciones' => array_map('asignacionPublica', $creadas),
-               'advertencias' => array_values(array_unique($advertencias))], 201);
+               'advertencias' => array_values(array_unique($advertencias)), 'revisionInventarioId' => $revision], 201);
 }
 
 /**
@@ -400,6 +406,7 @@ function rutaEditarAsignacion(int $id): never
     auditar('asignacion', $id, (int) $a['environment_id'], 'modificada', $texto, (int) $u['id'], null,
         ['antes' => array_intersect_key($antes, array_flip($cambios)), 'despues' => array_intersect_key($despues, array_flip($cambios))]);
     avisarInstructor($instructorId, "Cambió tu asignación en el ambiente {$a['ambiente_codigo']}", describirAsignacion($editada));
+    if ($nuevo) crearRevision((int) $a['environment_id'], 'instructor', $instructorId, (int) $u['id'], 'Asignación · ' . describirAsignacion($editada), $id);
     if ($nuevo) avisarInstructor((int) $a['instructor_id'], "Ya no tienes la asignación en el ambiente {$a['ambiente_codigo']}",
         JORNADAS[$a['jornada']] . " desde el $inicio queda a cargo de {$nuevo['nombre']}");
     db()->commit();
@@ -462,6 +469,9 @@ function rutaReasignar(int $id): never
         [(int) $a['environment_id'], (int) $nuevo['id'], $a['jornada'], $a['tipo'], $desde, $a['fecha_fin'], $a['dias_semana'], $motivo, (int) $a['id'], (int) $u['id']]
     );
     $nueva = buscarAsignacion($nuevaId);
+    $revision = !empty($d['cuentadante'])
+        ? crearRevision((int) $a['environment_id'], 'cuentadante', (int) $nuevo['id'], (int) $u['id'], "Reasignado como cuentadante · $motivo", $nuevaId)
+        : crearRevision((int) $a['environment_id'], 'instructor', (int) $nuevo['id'], (int) $u['id'], "Reasignación · $motivo", $nuevaId);
     $texto = "{$a['instructor_nombre']} → {$nuevo['nombre']} · " . JORNADAS[$a['jornada']] . " desde el $desde · $motivo";
     auditar('asignacion', (int) $a['id'], (int) $a['environment_id'], 'reasignada', $texto, (int) $u['id'], null,
         ['desde' => $desde, 'antes' => (int) $a['instructor_id'], 'despues' => (int) $nuevo['id'], 'nuevaAsignacionId' => $nuevaId, 'resultado' => $resultado]);
@@ -470,7 +480,7 @@ function rutaReasignar(int $id): never
         "Desde el $desde la jornada de la " . JORNADAS[$a['jornada']] . " queda a cargo de {$nuevo['nombre']} · $motivo");
     avisarInstructor((int) $nuevo['id'], "Te asignaron al ambiente {$a['ambiente_codigo']}", describirAsignacion($nueva) . ' (' . HORARIO_JORNADA[$a['jornada']] . ')');
     db()->commit();
-    responder(['asignacion' => asignacionPublica($nueva), 'anterior' => asignacionPublica(buscarAsignacion($id)), 'advertencias' => $advertencias]);
+    responder(['asignacion' => asignacionPublica($nueva), 'anterior' => asignacionPublica(buscarAsignacion($id)), 'advertencias' => $advertencias, 'revisionInventarioId' => $revision]);
 }
 
 /**

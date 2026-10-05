@@ -28,7 +28,8 @@ export async function render(raiz, { params, alSalir }) {
 
 async function instructor(raiz, params) {
   const u = estado.usuario;
-  const [ambientes, mias] = await Promise.all([apiAmb.ambientes(), apiAmb.inspecciones()]);
+  const [ambientes, mias, revisiones] = await Promise.all([apiAmb.ambientes(), apiAmb.inspecciones(), apiAmb.revisiones({ estado: 'pendiente', mias: 1 })]);
+  const revisionDe = (ambienteId) => revisiones.find((r) => r.ambiente.id === ambienteId);
   const enCurso = mias.find((s) => s.estado === 'en_curso');
   const porRecibir = mias.filter((s) => s.estado === 'pendiente_recepcion');
   const ocupado = (a) => ABIERTAS.includes(a.ultimaInspeccion?.estado) && a.ultimaInspeccion.instructorId !== u.id;
@@ -47,7 +48,8 @@ async function instructor(raiz, params) {
           h('span', { class: 'amb-opcion-datos' },
             h('strong', {}, a.nombre),
             h('span', { class: 'text-muted' }, [`${a.itemsTotal} ítems`, a.especialidad].filter(Boolean).join(' · ')),
-            ocupado(a) ? h('span', { class: 'status-chip azul' }, `${ESTADOS_INSPECCION[ult.estado][0]} · ${ult.instructor}`)
+            revisionDe(a.id) ? h('span', { class: 'status-chip out' }, 'Inventario por revisar')
+              : ocupado(a) ? h('span', { class: 'status-chip azul' }, `${ESTADOS_INSPECCION[ult.estado][0]} · ${ult.instructor}`)
               : hoy ? chipInspeccion(ult.estado) : h('span', { class: 'status-chip neutro' }, 'Sin revisión hoy')),
           h('span', { class: 'amb-opcion-marca', 'aria-hidden': 'true' }, icono('check'))));
     }));
@@ -55,10 +57,13 @@ async function instructor(raiz, params) {
   function actualizar() {
     iniciar.disabled = !elegido;
     const a = ambientes.find((x) => x.id === elegido);
-    iniciar.lastChild.textContent = a ? `Ingresé al ${a.codigo} · iniciar revisión` : 'Ingresé';
+    const rev = a && revisionDe(a.id);
+    iniciar.lastChild.textContent = !a ? 'Ingresé' : rev ? `Revisar el inventario del ${a.codigo} primero` : `Ingresé al ${a.codigo} · iniciar revisión`;
   }
 
   async function arrancar() {
+    const rev = revisionDe(elegido);
+    if (rev) { location.hash = `#/revision-inventario?id=${rev.id}`; return; }
     iniciar.disabled = true;
     iniciar.classList.add('cargando-boton');
     try {
@@ -68,6 +73,11 @@ async function instructor(raiz, params) {
       toast('exito', `Ingresaste al ambiente ${s.ambiente.codigo}`, `Ingreso registrado a las ${fecha.hora(s.iniciadaEn)}: revisa el salón.`);
       location.hash = `#/inspeccion?id=${s.id}`;
     } catch (e) {
+      if (e.codigo === 'REVISION_INVENTARIO' && revisionDe(elegido)) {
+        toast('aviso', 'Primero revisa el inventario', e.message, 8000);
+        location.hash = `#/revision-inventario?id=${revisionDe(elegido).id}`;
+        return;
+      }
       toast('error', 'No se pudo iniciar', e.message);
       iniciar.disabled = false;
       iniciar.classList.remove('cargando-boton');

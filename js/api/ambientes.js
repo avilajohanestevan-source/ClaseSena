@@ -85,6 +85,18 @@ export const apiAmb = {
   ambiente: (id) => p('GET', `/environments/${id}`),
   crearAmbiente: (datos) => p('POST', '/environments', datos),        // {codigo, nombre, capacidadAprendices?, especialidadId?, porteroId?, activo?}
   editarAmbiente: (id, datos) => p('PATCH', `/environments/${id}`, datos),
+  // Inventario del cuentadante en Excel (exportar: personal; importar: administrativo y almacén)
+  exportarInventarioCuentadante: (id) => descargarAmbientes(`/environments/${id}/inventory/export`, {}, 'inventario-cuentadante.xlsx'),
+  importarInventarioCuentadante: (id, datos) => p('POST', `/environments/${id}/inventory/import`, datos), // {nombre, archivo (data URL), simular}
+
+  // Revisión del inventario (cuentadante nuevo o instructor nuevo en el ambiente)
+  revisiones: (filtros) => p('GET', '/inventory-reviews', filtros),   // {estado?, ambienteId?, mias?}
+  revision: (id) => p('GET', `/inventory-reviews/${id}`),
+  marcarRevision: (id, datos) => p('PATCH', `/inventory-reviews/${id}/items`, datos), // {items:[{itemId|codigo, estado, observacion?}]} | {todoBien:true}
+  aceptarRevision: (id, observaciones) => p('POST', `/inventory-reviews/${id}/accept`, { observaciones }),
+  anularRevision: (id, motivo) => p('POST', `/inventory-reviews/${id}/cancel`, { motivo }),
+  exportarRevision: (id) => descargarAmbientes(`/inventory-reviews/${id}/export`, {}, 'revision-inventario.xlsx'),
+  importarRevision: (id, datos) => p('POST', `/inventory-reviews/${id}/import`, datos), // {nombre, archivo, simular}
   borrarAmbiente: (id) => p('DELETE', `/environments/${id}`),
 
   // Inventario

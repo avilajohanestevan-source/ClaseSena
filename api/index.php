@@ -23,6 +23,7 @@ require __DIR__ . '/modulos/notificaciones.php';
 require __DIR__ . '/modulos/reportes.php';
 require __DIR__ . '/modulos/fichas.php';
 require __DIR__ . '/modulos/instructores.php';
+require __DIR__ . '/modulos/cuentadante.php';
 require __DIR__ . '/modulos/asistencia.php';
 
 header('Cache-Control: no-store');
@@ -50,6 +51,17 @@ $RUTAS = [
     ['PATCH',  '#^/environments/(\d+)$#',                'rutaEditarAmbiente'],
     ['DELETE', '#^/environments/(\d+)$#',                'rutaBorrarAmbiente'],
     ['GET',    '#^/environments/(\d+)/items$#',          'rutaItemsAmbiente'],
+    ['GET',    '#^/environments/(\d+)/inventory/export$#', 'rutaExportarInventarioCuentadante'],
+    ['POST',   '#^/environments/(\d+)/inventory/import$#', 'rutaImportarInventarioCuentadante'],
+
+    // Revisión del inventario (cuentadante e instructores nuevos)
+    ['GET',    '#^/inventory-reviews$#',                 'rutaRevisiones'],
+    ['GET',    '#^/inventory-reviews/(\d+)$#',           'rutaRevision'],
+    ['PATCH',  '#^/inventory-reviews/(\d+)/items$#',     'rutaMarcarRevision'],
+    ['POST',   '#^/inventory-reviews/(\d+)/accept$#',    'rutaAceptarRevision'],
+    ['POST',   '#^/inventory-reviews/(\d+)/cancel$#',    'rutaAnularRevision'],
+    ['GET',    '#^/inventory-reviews/(\d+)/export$#',    'rutaExportarRevision'],
+    ['POST',   '#^/inventory-reviews/(\d+)/import$#',    'rutaImportarRevision'],
 
     ['GET',    '#^/inventory/categories$#',              'rutaCategorias'],
     ['POST',   '#^/inventory/categories$#',              'rutaCrearCategoria'],

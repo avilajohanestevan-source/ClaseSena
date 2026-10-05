@@ -368,3 +368,27 @@ Tablas nuevas: `fichas`, `competencias`, `clases`, `clase_qr` (nonces de los
 QR), `asistencias` (presente | tarde), `excusas`, `p004`, `correos`; en
 `users`: `debe_cambiar_password`, `email_verificado_en`,
 `codigo_verificacion`, `codigo_expira`, `credenciales_enviadas_en`.
+
+## Cuentadante y revisión del inventario
+
+`environments.cuentadante_id` = quien responde por el inventario;
+`inventory_items.valor` = valor de compra. `GET /environments` trae
+`cuentadante: {id, nombre}` y `cuentadantePendiente: {revisionId, id, nombre}`.
+Elegir `cuentadanteId` al crear o editar un ambiente (o asignar con
+`cuentadante: true` en `POST /assignments` o `/reassign`) abre una revisión
+de tipo `cuentadante`; asignar un instructor que nunca ha revisado el ambiente
+abre una de tipo `instructor` (la respuesta trae `revisionInventarioId`).
+Mientras la persona tenga una revisión pendiente en el ambiente,
+`POST /inspections` → `409 REVISION_INVENTARIO`.
+
+| Método | Ruta | Rol | Notas |
+|---|---|---|---|
+| GET | `/inventory-reviews?estado&ambienteId&mias` | personal (administrativo y almacén: todas; los demás: las suyas) | `[{id, tipo, estado, ambiente, responsable, cuentadanteAnterior, motivo, observaciones, conteo: {total, pendientes, ok, faltantes, danados}, creadaEn, cerradaEn}]` |
+| GET | `/inventory-reviews/{id}` | quien recibe, administrativo, almacén | + `items: [{itemId, codigo, qr, nombre, serial, valor, estadoItem, categoria, familia, revision, observacion}]`, `valorTotal`. Mientras está pendiente siempre tiene todos los ítems del ambiente |
+| PATCH | `/inventory-reviews/{id}/items` | quien recibe | `{items: [{itemId \| codigo (lo escaneado; una familia marca sus componentes), estado: ok \| faltante \| danado \| pendiente, observacion (obligatoria si faltante o dañado)}]}` o `{todoBien: true}` (los pendientes en OK) |
+| POST | `/inventory-reviews/{id}/accept` | quien recibe | `{observaciones}` (obligatoria con faltantes o dañados). Todo revisado o `422 REVISION_INCOMPLETA`. Dañados → `danado`; trazabilidad; si es de cuentadante, `cuentadante_id` pasa a esa persona; avisos |
+| POST | `/inventory-reviews/{id}/cancel` | administrativo, almacén | `{motivo}` → `anulada` (el cuentadante no cambia) |
+| GET | `/inventory-reviews/{id}/export` | quien recibe, administrativo, almacén | Acta en .xlsx (encabezado + `codigo, nombre, serial, categoria, familia, valor, estado, revision, observacion`, con lista desplegable en *revision*) |
+| POST | `/inventory-reviews/{id}/import` | quien recibe | El acta llena (como `/inventory/import`): por `codigo`/placa toma `revision` (OK, FALTANTE, DAÑADO…) y `observacion` → `{total, actualizados, sinCambios, errores, revision}` |
+| GET | `/environments/{id}/inventory/export` | personal | Inventario del cuentadante en .xlsx (encabezado con ambiente, cuentadante, fecha y valor total) |
+| POST | `/environments/{id}/inventory/import` | administrativo, almacén | Inventario del cuentadante (Excel/CSV, `simular` = vista previa): columnas de la carga masiva sin `ambiente`; acepta placa, descripción, valor y un encabezado arriba de los títulos; sin categoría → *Sin clasificar*. Los ítems nuevos se suman a la revisión pendiente |

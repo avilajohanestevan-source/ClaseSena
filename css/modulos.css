@@ -754,3 +754,28 @@ button.asig-boton:hover{ border-color:var(--color-border-strong); background:var
 .instructor-fila{ grid-template-columns:auto minmax(0, 1fr) auto; }
 .instructor-fila .inv-fila-acciones{ grid-column:2 / -1; }
 @media (max-width: 599px){ .instructor-fila .reporte-chips{ grid-column:2; } }
+
+/* ================= Cuentadante y revisión del inventario ================= */
+.inv-cuentadante-acciones{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.inv-cuentadante-acciones label.btn{ cursor:pointer; }
+.revisiones-lista{ display:grid; gap:12px; }
+.revision-tarjeta{ display:grid; grid-template-columns:auto minmax(0, 1fr) auto; gap:14px; align-items:center; border-left:4px solid var(--c-oro-400); }
+.revision-tarjeta--aceptada{ border-left-color:var(--c-verde-500); }
+.revision-tarjeta--anulada{ border-left-color:var(--c-n-400); opacity:.8; }
+.revision-datos{ display:grid; gap:3px; min-width:0; }
+@media (max-width: 599px){ .revision-tarjeta{ grid-template-columns:auto minmax(0, 1fr); } .revision-tarjeta > .btn{ grid-column:1 / -1; justify-self:start; } }
+.revision-resumen{ display:grid; gap:12px; }
+.revision-resumen-fila{ display:grid; gap:6px; }
+.revision-ayuda{ margin:0; }
+.revision-atajos{ display:grid; gap:12px; }
+@media (min-width: 900px){ .revision-atajos{ grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); align-items:start; } }
+.revision-filtros{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.revision-filtros .adm-buscar{ flex:1 1 260px; }
+.revision-item{ grid-template-columns:minmax(0, 1fr) auto; border-left:4px solid var(--color-border); }
+.revision-item--ok{ border-left-color:var(--c-verde-500); }
+.revision-item--faltante{ border-left-color:var(--color-danger); background:var(--c-rojo-50); }
+.revision-item--danado{ border-left-color:var(--c-oro-400); background:var(--c-oro-50); }
+.revision-item > input{ grid-column:1 / -1; }
+.revision-item .checklist-opciones{ flex-wrap:wrap; }
+.accion-fija.revision-aceptar{ display:flex; justify-content:flex-end; margin:12px 0 0; border-radius:0; background:linear-gradient(transparent, var(--color-bg, #F7F7F5) 30%); }
+.revision-aceptar .btn{ box-shadow:var(--sh-3); }

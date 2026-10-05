@@ -72,6 +72,7 @@ que también funciona con el teclado.
 | 2020202020 | Administrativo (área administrativo) | Carlos Méndez Ruiz |
 | 2020202021 | Administrativo (área coordinación) | Patricia Rondón Gil |
 | 2020202022 | Almacén | Hernán Darío Ospina |
+| 5050505050 | Instructora nueva (revisiones de inventario pendientes) | Rosa Elena Quintero |
 | 1122334455 (TI) | Aprendiz · ficha 2758432 (al día) | Camila Rojas Herrera |
 | 1122334456 | Aprendiz · ficha 2758432 (riesgo de deserción) | Mateo Torres Ramírez |
 | 1122334457 | Aprendiz · ficha 2834519 | Sara Cárdenas Vega |
@@ -217,6 +218,42 @@ desde Laura) y un turno anulado en el 111.
 
 Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
 
+## Cuentadante y revisión del inventario
+
+Cada ambiente tiene un **cuentadante**: quien responde por su inventario.
+Antes de recibir el inventario hay que **revisarlo ítem por ítem** y
+aceptarlo, como un acta de entrega:
+
+- **Al crear un ambiente** (*Ambientes → Nuevo ambiente*) se elige el
+  cuentadante (instructor, administrativo o almacén) y, opcionalmente, se sube
+  el **Excel con el inventario que tenía** (placa, descripción, serial,
+  categoría, valor…; acepta un encabezado arriba de los títulos y sin
+  categoría los ítems quedan en *Sin clasificar*). El cuentadante lo revisa y
+  queda como cuentadante al aceptarlo.
+- **Al cambiar el cuentadante** (*Editar ambiente*) o al **asignar un
+  instructor** marcando *Queda como cuentadante*, se abre la misma revisión;
+  hasta que la acepte responde el anterior (la tarjeta del ambiente muestra
+  *Laura → Rosa (revisando)*).
+- **Un instructor asignado por primera vez** al ambiente también revisa el
+  inventario: hasta aceptarlo **no puede hacer "Ingresé"** (la entrega diaria
+  responde `409 REVISION_INVENTARIO` y la app lo lleva a la revisión).
+- La revisión (*Revisión de inventario*, con insignia de pendientes): cada
+  ítem **OK**, **Faltante** o **Dañado** (con observación), escaneando la
+  pegatina (OK), con **Todo está bien** para los pendientes, o **descargando
+  el acta en Excel**, llenando la columna *revision* (OK, FALTANTE, DAÑADO;
+  con lista desplegable) y **subiéndola**. *Aceptar inventario* exige todo
+  revisado y una observación general si hay faltantes o dañados; los dañados
+  pasan a *Dañado*, todo queda en la trazabilidad de cada ítem y se avisa a
+  coordinación, administrativo, almacén y al cuentadante anterior.
+- **Excel del inventario del cuentadante** en *Editar ambiente*: descargar
+  (con el ambiente, el cuentadante, la fecha y el valor total arriba) y volver
+  a subir corregido (con vista previa); los ítems nuevos se suman a la
+  revisión pendiente. Administrativo y almacén ven todas las revisiones y
+  pueden anular una pendiente.
+
+Demostración: **Rosa** (5050505050) tiene pendiente la revisión del **108**
+(la asignaron a la tarde) y la del **111** como cuentadante (hoy lo es Laura).
+
 ## Inventario, pegatinas y carga masiva
 
 Cada elemento del aula tiene una **pegatina** con su QR y su código de
@@ -237,7 +274,7 @@ pulsan Enter). El código puede ser el consecutivo (`AMB107-012`), uno propio
 - **Carga masiva** (*Inventario → Carga masiva*, administrativo): Excel
   (.xlsx, .xls, .ods) o CSV leídos con PhpSpreadsheet. Columnas `ambiente,
   codigo, nombre, categoria, serial, estado, familia, familia_nombre,
-  familia_tipo, qr`. La categoría debe existir; la familia que no exista se
+  familia_tipo, qr, valor`. La categoría debe existir; la familia que no exista se
   crea; `qr` llena el `qr_value`. Muestra una vista previa (nuevos,
   actualizados, familias nuevas, sin cambios y filas con error) antes de
   guardar. Si el código ya existe se actualiza; sin código se reconoce el

@@ -45,6 +45,7 @@ function itemPublico(array $i): array
             'id' => (int) $i['family_id'], 'codigo' => $i['familia_codigo'], 'nombre' => $i['familia_nombre'], 'tipo' => $i['familia_tipo'],
         ] : null,
         'serial' => $i['serial'],
+        'valor' => isset($i['valor']) ? (float) $i['valor'] : null,
         'estado' => $i['estado'],
         // Novedad permanente activa del ítem o de su familia (null si no tiene).
         'novedadActivaId' => isset($i['novedad_activa_id']) ? (int) $i['novedad_activa_id'] : null,

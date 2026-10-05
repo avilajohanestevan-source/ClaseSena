@@ -29,6 +29,13 @@ export function describirAsignacion(a) {
   return `Desde el ${dia(a.fechaInicio)}${solo}`;
 }
 
+/** Aviso tras asignar: si el instructor es nuevo en el ambiente (o queda como cuentadante) debe revisar el inventario. */
+export function avisoRevisionInventario(r, nombre, cuentadante) {
+  if (!r?.revisionInventarioId) return;
+  toast('info', cuentadante ? `${nombre} recibirá el inventario como cuentadante` : `${nombre} debe revisar el inventario`,
+    cuentadante ? 'Queda como cuentadante cuando revise y acepte el inventario del ambiente.' : 'Es su primera vez en el ambiente: revisará el inventario antes de su primera entrega.', 9000);
+}
+
 /**
  * @param {{ambiente:?{id:number, codigo:string, asignadosHoy?:any[]}, instructores:{id:number, nombre:string}[]}} o
  * @returns {{el:HTMLElement, guardarPendientes:(ambienteId:number)=>Promise<number>}}
@@ -101,12 +108,16 @@ export function crearGestorAsignaciones({ ambiente, instructores }) {
     const desde = h('input', { type: 'date', id: id('desde'), value: hoy, min: hoy, max: a?.fechaFin || undefined });
     const campoDesde = empezo && a.tipo !== 'dia' ? campo('desde', 'Si cambias el instructor, desde', desde) : null;
     const motivo = h('input', { type: 'text', id: id('motivo'), maxlength: 300, value: a?.motivo || '', placeholder: 'Ficha, competencia o motivo (opcional)' });
+    // Solo al asignar: el instructor puede quedar además como cuentadante (revisa el inventario y lo acepta).
+    const esCuentadante = !a && h('input', { type: 'checkbox', id: id('cuentadante') });
 
     const guardar = h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => enviar() }, icono('check'), a ? 'Guardar cambios' : (ambiente ? 'Asignar' : 'Agregar'));
     const caja = h('div', { class: 'asig-amb-editor' },
       h('div', { class: 'form-grid' }, campo('jornada', 'Jornada', jornada), campo('inst', a && empezo ? 'Instructor (para cambiarlo se reasigna)' : 'Instructor', instructor), campoDesde),
       fechas.el,
       campo('motivo', 'Motivo', motivo),
+      esCuentadante && h('label', { class: 'interruptor' }, esCuentadante, h('span', { class: 'interruptor-pista', 'aria-hidden': 'true' }),
+        'Queda como cuentadante del ambiente (revisa y acepta el inventario)'),
       empezo && h('p', { class: 'text-muted asig-amb-ayuda' }, 'Esta asignación ya empezó: se conserva su fecha de inicio y los días anteriores quedan con quien los tuvo.'),
       h('div', { class: 'asig-amb-botones' },
         h('button', { class: 'btn btn-outline btn-sm', type: 'button', onclick: () => { editando = null; pintar(); } }, 'Cancelar'), guardar));
@@ -116,7 +127,7 @@ export function crearGestorAsignaciones({ ambiente, instructores }) {
     async function enviar() {
       const datos = {
         ambienteId: ambiente?.id || -1, instructorId: Number(instructor.value) || null, jornada: jornada.value,
-        ...fechas.leer(), motivo: motivo.value.trim() || undefined,
+        ...fechas.leer(), motivo: motivo.value.trim() || undefined, cuentadante: esCuentadante?.checked || undefined,
       };
       // Al editar algo que ya empezó, la fecha de inicio pasada es válida.
       const errores = validarAsignacion({ ...datos, fechaInicio: empezo ? hoy : datos.fechaInicio }, hoy);
@@ -139,6 +150,7 @@ export function crearGestorAsignaciones({ ambiente, instructores }) {
         if (!a) {
           const r = await apiAmb.crearAsignacion(datos);
           advertencias = r.advertencias;
+          avisoRevisionInventario(r, nombre, datos.cuentadante);
           toast('exito', 'Instructor asignado', `${nombre} · ${ETIQUETA_JORNADA[datos.jornada]} · ${r.asignaciones.length > 1 ? `${r.asignaciones.length} días` : describirAsignacion(r.asignacion)}`);
         } else {
           let actual = a;
@@ -202,7 +214,7 @@ export function crearGestorAsignaciones({ ambiente, instructores }) {
     for (const p of pendientes) {
       try {
         await apiAmb.crearAsignacion({ ambienteId, instructorId: p.instructorId, jornada: p.jornada, tipo: p.tipo, fechaInicio: p.fechaInicio,
-          fechaFin: p.tipo === 'periodo' ? p.fechaFin : undefined, diasSemana: p.diasSemana?.length ? p.diasSemana : undefined, motivo: p.motivo });
+          fechaFin: p.tipo === 'periodo' ? p.fechaFin : undefined, diasSemana: p.diasSemana?.length ? p.diasSemana : undefined, motivo: p.motivo, cuentadante: p.cuentadante });
         creadas++;
       } catch (e) { toast('error', `No se asignó a ${p.instructor.nombre}`, e.message); }
     }

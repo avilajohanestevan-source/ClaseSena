@@ -58,8 +58,17 @@ function listaAmbientes(ambientes, accion) {
     accion?.(a))));
 }
 
+/** Inventarios que la persona debe revisar antes de recibir el ambiente (o como cuentadante). */
+function avisosRevision(revisiones) {
+  return revisiones.map((r) => h('a', { class: 'accion-grande accion-grande--alerta', href: `#/revision-inventario?id=${r.id}`, 'data-anim': '' },
+    h('span', { class: 'accion-grande-icono' }, icono('caja')),
+    h('span', {}, h('strong', {}, `${r.tipo === 'cuentadante' ? 'Recibe como cuentadante' : 'Revisa el inventario'} · ambiente ${r.ambiente.codigo}`),
+      h('span', {}, `${r.conteo.total - r.conteo.pendientes} de ${r.conteo.total} ítems revisados. ${r.tipo === 'cuentadante' ? 'Quedas como cuentadante al aceptarlo.' : 'Hazlo antes de tu primera entrega.'}`)),
+    icono('flecha')));
+}
+
 async function instructor() {
-  const [mias, ambientes] = await Promise.all([apiAmb.inspecciones(), apiAmb.ambientes()]);
+  const [mias, ambientes, revisiones] = await Promise.all([apiAmb.inspecciones(), apiAmb.ambientes(), apiAmb.revisiones({ estado: 'pendiente', mias: 1 })]);
   const actual = mias.find((s) => s.estado === 'en_curso');
   const porRecibir = mias.find((s) => s.estado === 'pendiente_recepcion');
   const cta = porRecibir
@@ -80,6 +89,7 @@ async function instructor() {
         icono('flecha'));
   const recientes = mias.filter((s) => s.estado === 'recibida').slice(0, 3);
   return [
+    ...avisosRevision(revisiones),
     h('div', { 'data-anim': '' }, cta),
     h('section', { class: 'card', 'data-anim': '' },
       h('h3', { class: 'bloque-titulo' }, 'Estado de los ambientes hoy'),
@@ -153,11 +163,12 @@ async function aprendiz() {
 }
 
 async function almacen() {
-  const [ambientes, novedades] = await Promise.all([apiAmb.ambientes(), apiAmb.novedades({ estado: 'en_curso' })]);
+  const [ambientes, novedades, revisiones] = await Promise.all([apiAmb.ambientes(), apiAmb.novedades({ estado: 'en_curso' }), apiAmb.revisiones({ estado: 'pendiente', mias: 1 })]);
   const conNovedad = ambientes.reduce((n, a) => n + a.itemsNovedad, 0);
   const acceso = (href, ic, titulo, texto) => h('a', { class: 'accion-grande', href, 'data-anim': '' },
     h('span', { class: 'accion-grande-icono' }, icono(ic)), h('span', {}, h('strong', {}, titulo), h('span', {}, texto)), icono('flecha'));
   return [
+    ...avisosRevision(revisiones),
     h('a', { class: `accion-grande${novedades.length ? ' accion-grande--alerta' : ''}`, href: '#/novedades', 'data-anim': '' },
       h('span', { class: 'accion-grande-numero' }, String(novedades.length)),
       h('span', {}, h('strong', {}, novedades.length === 1 ? 'Novedad permanente en curso' : 'Novedades permanentes en curso'),

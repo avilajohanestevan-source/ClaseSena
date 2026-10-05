@@ -1,12 +1,20 @@
 <?php
 /**
  * Ambientes: consulta para todos los roles, CRUD para administrativos.
- * Cada ambiente tiene su capacidad en aprendices (capacidad_aprendices) y una
- * especialidad (especialidades_ambiente: Cocina, Laboratorio, Audiovisual…).
+ * Cada ambiente tiene su capacidad en aprendices (capacidad_aprendices), una
+ * especialidad (especialidades_ambiente: Cocina, Laboratorio, Audiovisual…) y
+ * un cuentadante, que responde por el inventario. Elegir un cuentadante nuevo
+ * (al crear o al editar) abre una revisión del inventario: queda como
+ * cuentadante cuando la acepta (modulos/cuentadante.php).
  */
 
 const SQL_AMBIENTES = "
-    SELECT e.*, p.nombre AS portero_nombre, es.nombre AS especialidad_nombre,
+    SELECT e.*, p.nombre AS portero_nombre, es.nombre AS especialidad_nombre, cu.nombre AS cuentadante_nombre,
+           (SELECT r.id FROM revisiones_inventario r WHERE r.environment_id = e.id AND r.tipo = 'cuentadante' AND r.estado = 'pendiente' ORDER BY r.id DESC LIMIT 1) AS rev_cuentadante_id,
+           (SELECT ru.nombre FROM revisiones_inventario r JOIN users ru ON ru.id = r.responsable_id
+             WHERE r.environment_id = e.id AND r.tipo = 'cuentadante' AND r.estado = 'pendiente' ORDER BY r.id DESC LIMIT 1) AS rev_cuentadante_nombre,
+           (SELECT r.responsable_id FROM revisiones_inventario r
+             WHERE r.environment_id = e.id AND r.tipo = 'cuentadante' AND r.estado = 'pendiente' ORDER BY r.id DESC LIMIT 1) AS rev_cuentadante_resp,
            (SELECT COUNT(*) FROM inventory_items i WHERE i.environment_id = e.id AND i.estado <> 'baja') AS items_total,
            (SELECT COUNT(*) FROM inventory_items i WHERE i.environment_id = e.id AND i.estado IN ('danado','en_reparacion','fuera_servicio')) AS items_novedad,
            (SELECT COUNT(*) FROM item_families f WHERE f.environment_id = e.id) AS familias_total,
@@ -15,6 +23,7 @@ const SQL_AMBIENTES = "
            u.instructor_id AS ult_instructor_id, ui.nombre AS ult_instructor, u.portero_id AS ult_portero_id, up.nombre AS ult_portero
     FROM environments e
     LEFT JOIN users p ON p.id = e.portero_id
+    LEFT JOIN users cu ON cu.id = e.cuentadante_id
     LEFT JOIN especialidades_ambiente es ON es.id = e.especialidad_id
     LEFT JOIN inspections u ON u.id = (
         SELECT x.id FROM inspections x WHERE x.environment_id = e.id AND x.estado <> 'cancelada'
@@ -33,6 +42,10 @@ function ambientePublico(array $e): array
         'especialidad' => $e['especialidad_nombre'] ?? null,
         'porteroId' => $e['portero_id'] !== null ? (int) $e['portero_id'] : null,
         'portero' => $e['portero_nombre'] ?? null,
+        'cuentadante' => $e['cuentadante_id'] ? ['id' => (int) $e['cuentadante_id'], 'nombre' => $e['cuentadante_nombre']] : null,
+        // Cambio de cuentadante en curso: el nuevo aún no acepta la revisión del inventario.
+        'cuentadantePendiente' => !empty($e['rev_cuentadante_id'])
+            ? ['revisionId' => (int) $e['rev_cuentadante_id'], 'id' => (int) $e['rev_cuentadante_resp'], 'nombre' => $e['rev_cuentadante_nombre']] : null,
         'activo' => (bool) $e['activo'],
         'itemsTotal' => (int) ($e['items_total'] ?? 0),
         'itemsNovedad' => (int) ($e['items_novedad'] ?? 0),
@@ -97,6 +110,7 @@ function datosAmbiente(array $d): array
     $capacidad = entero($d, 'capacidadAprendices', false);
     if ($capacidad !== null && ($capacidad < 1 || $capacidad > 500)) fallar(422, 'La capacidad de aprendices debe estar entre 1 y 500.', 'VALIDACION');
     $especialidadId = idCatalogo('especialidad', $d['especialidadId'] ?? null, $d['especialidad'] ?? null, false);
+    $d = conAlias($d, 'cuentadanteId', 'cuentadante_id');
     return [
         strtoupper($codigo),
         texto($d, 'nombre', 120, true, 'el nombre'),
@@ -105,6 +119,18 @@ function datosAmbiente(array $d): array
         $porteroId,
         array_key_exists('activo', $d) ? (int) (bool) $d['activo'] : 1,
     ];
+}
+
+/** Cuentadante elegido (instructor, administrativo o almacén activo), o null si no viene. */
+function cuentadanteElegido(array $d): ?int
+{
+    $d = conAlias($d, 'cuentadanteId', 'cuentadante_id');
+    $id = entero($d, 'cuentadanteId', false);
+    if ($id === null) return null;
+    if (!fila("SELECT id FROM users WHERE id = ? AND activo = 1 AND rol IN ('instructor', 'administrativo', 'almacen')", [$id])) {
+        fallar(422, 'El cuentadante debe ser un instructor, un administrativo o almacén activo.', 'VALIDACION');
+    }
+    return $id;
 }
 
 function verificarCodigoLibre(string $codigo, int $excepto = 0): void
@@ -116,20 +142,32 @@ function verificarCodigoLibre(string $codigo, int $excepto = 0): void
 
 function rutaCrearAmbiente(): never
 {
-    exigirRol('administrativo');
+    $u = exigirRol('administrativo');
     $v = datosAmbiente(cuerpo());
+    $cuentadante = cuentadanteElegido(cuerpo());
     verificarCodigoLibre($v[0]);
+    db()->begin_transaction();
     $id = insertar('INSERT INTO environments (codigo, nombre, capacidad_aprendices, especialidad_id, portero_id, activo) VALUES (?, ?, ?, ?, ?, ?)', $v);
+    // El cuentadante recibe el inventario revisándolo (se carga después con su Excel).
+    if ($cuentadante) crearRevision($id, 'cuentadante', $cuentadante, (int) $u['id'], "Ambiente nuevo {$v[0]}");
+    db()->commit();
     responder(ambientePublico(buscarAmbiente($id)), 201);
 }
 
 function rutaEditarAmbiente(int $id): never
 {
-    exigirRol('administrativo');
-    buscarAmbiente($id);
+    $u = exigirRol('administrativo');
+    $antes = buscarAmbiente($id);
     $v = datosAmbiente(cuerpo());
+    $cuentadante = cuentadanteElegido(cuerpo());
     verificarCodigoLibre($v[0], $id);
+    db()->begin_transaction();
     consulta('UPDATE environments SET codigo = ?, nombre = ?, capacidad_aprendices = ?, especialidad_id = ?, portero_id = ?, activo = ? WHERE id = ?', [...$v, $id]);
+    // Cambio de cuentadante: el nuevo lo es cuando revise y acepte el inventario.
+    if ($cuentadante && $cuentadante !== (int) $antes['cuentadante_id']) {
+        crearRevision($id, 'cuentadante', $cuentadante, (int) $u['id'], 'Cambio de cuentadante' . ($antes['cuentadante_nombre'] ? " (antes {$antes['cuentadante_nombre']})" : ''));
+    }
+    db()->commit();
     responder(ambientePublico(buscarAmbiente($id)));
 }
 

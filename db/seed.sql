@@ -249,3 +249,30 @@ INSERT INTO p004 (documento, nombre, ficha, programa, estado, actualizado_por, a
          CASE u.documento WHEN '1122334465' THEN 'APLAZADO' WHEN '1122334461' THEN 'CONDICIONADO' ELSE 'EN FORMACION' END,
          10, NOW() - INTERVAL 20 DAY
   FROM users u JOIN fichas f ON f.codigo = u.ficha WHERE u.rol = 'aprendiz';
+
+-- ===================== Cuentadantes y revisiones de inventario =====================
+-- Cada ambiente tiene su cuentadante (quien responde por el inventario). Los
+-- instructores de prueba ya revisaron el inventario de todos los ambientes.
+-- Rosa Quintero es nueva: la asignaron a la tarde del 108 (debe revisar su
+-- inventario antes de su primera entrega) y va a recibir el 111 como
+-- cuentadante (hoy lo es Laura) cuando revise y acepte su inventario.
+UPDATE environments SET cuentadante_id = ELT(id, 1, 2, 3, 2, 1);
+
+INSERT INTO users (id, tipo_documento, documento, nombre, email, telefono, rol, password_hash, email_verificado_en) VALUES
+  (23, 'CC', '5050505050', 'Rosa Elena Quintero', 'rquintero@sena.edu.co', '3105556677', 'instructor', @hash, NOW() - INTERVAL 2 DAY);
+
+INSERT INTO revisiones_inventario (environment_id, tipo, responsable_id, estado, motivo, observaciones, resumen, creada_por, creada_en, cerrada_por, cerrada_en)
+  SELECT e.id, IF(e.cuentadante_id = u.id, 'cuentadante', 'instructor'), u.id, 'aceptada', 'Revisión inicial del inventario', 'Sin novedades',
+         JSON_OBJECT('total', 0, 'ok', 0, 'faltantes', 0, 'danados', 0), 10, NOW() - INTERVAL 40 DAY, u.id, NOW() - INTERVAL 40 DAY
+  FROM environments e CROSS JOIN users u WHERE u.id IN (1, 2, 3);
+
+INSERT INTO instructor_assignments (id, environment_id, instructor_id, jornada, tipo, fecha_inicio, fecha_fin, estado, motivo, creada_por, creada_en) VALUES
+  (11, 2, 23, 'tarde', 'permanente', CURDATE(), NULL, 'vigente', 'Instructora nueva · ficha de contabilidad', 10, NOW() - INTERVAL 1 HOUR);
+
+INSERT INTO revisiones_inventario (environment_id, tipo, responsable_id, cuentadante_anterior_id, asignacion_id, estado, motivo, creada_por, creada_en) VALUES
+  (2, 'instructor',  23, NULL, 11,   'pendiente', 'Asignación nueva · tarde, sin tiempo definido', 10, NOW() - INTERVAL 1 HOUR),
+  (5, 'cuentadante', 23, 1,    NULL, 'pendiente', 'Cambio de cuentadante (antes Laura Gómez Patiño)', 10, NOW() - INTERVAL 50 MINUTE);
+
+INSERT INTO notifications (user_id, tipo, titulo, detalle, created_at) VALUES
+  (23, 'revision_inventario', 'Revisa el inventario del ambiente 108', 'Antes de tu primera entrega del ambiente revisa su inventario.', NOW() - INTERVAL 1 HOUR),
+  (23, 'revision_inventario', 'Recibe el inventario del ambiente 111 como cuentadante', 'Quedarás como cuentadante cuando revises y aceptes el inventario.', NOW() - INTERVAL 50 MINUTE);

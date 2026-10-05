@@ -37,7 +37,8 @@ USE sena_ambientes;
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS audit_events, instructor_assignments, item_history, notifications, inspection_items, persistent_issues,
                      inspections, inventory_items, item_families, inventory_categories, environments, especialidades_ambiente,
-                     api_tokens, users, fichas, competencias, clases, clase_qr, asistencias, excusas, p004, correos, plantillas_correo;
+                     api_tokens, users, fichas, competencias, clases, clase_qr, asistencias, excusas, p004, correos, plantillas_correo,
+                     revisiones_inventario, revision_inventario_items;
 SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE users (
@@ -88,11 +89,13 @@ CREATE TABLE environments (
   capacidad_aprendices  SMALLINT UNSIGNED NULL,     -- cuántos aprendices caben (antes "capacidad" en puestos)
   especialidad_id       INT UNSIGNED NULL,
   portero_id            INT UNSIGNED NULL,          -- portero asignado (recibe las notificaciones)
+  cuentadante_id        INT UNSIGNED NULL,          -- responsable del inventario; cambia solo cuando el nuevo acepta la revisión
   activo                TINYINT(1)   NOT NULL DEFAULT 1,
   created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_environments_codigo (codigo),
   CONSTRAINT fk_env_especialidad FOREIGN KEY (especialidad_id) REFERENCES especialidades_ambiente(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_env_portero      FOREIGN KEY (portero_id)      REFERENCES users(id) ON DELETE SET NULL
+  CONSTRAINT fk_env_portero      FOREIGN KEY (portero_id)      REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_env_cuentadante  FOREIGN KEY (cuentadante_id)  REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- Categorías del inventario: Inmuebles, Mobiliario, Electrodomésticos, Equipos Informáticos, Periféricos…
@@ -129,6 +132,7 @@ CREATE TABLE inventory_items (
   category_id        INT UNSIGNED NOT NULL,
   family_id          INT UNSIGNED NULL,            -- familia a la que pertenece (NULL = ítem suelto)
   serial             VARCHAR(60)  NULL,
+  valor              DECIMAL(14,2) NULL,           -- valor de compra (inventario del cuentadante)
   -- fuera_servicio: daño permanente, no se usa mientras la novedad siga activa; baja: inactivo, retirado del inventario
   estado             ENUM('operativo','danado','en_reparacion','fuera_servicio','baja') NOT NULL DEFAULT 'operativo',
   ultimo_escaneo_en  DATETIME     NULL,            -- última vez que se escaneó su pegatina en el registro con lector
@@ -263,7 +267,7 @@ CREATE TABLE notifications (
   id                   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id              INT UNSIGNED NOT NULL,
   tipo                 ENUM('revision_lista','entrega_recibida','dano_reportado','dano_grave','novedad_permanente','novedad_resuelta','asignacion',
-                            'clase_cancelada','riesgo','excusa','excusa_revisada','p004') NOT NULL,
+                            'clase_cancelada','riesgo','excusa','excusa_revisada','p004','revision_inventario') NOT NULL,
   titulo               VARCHAR(160) NOT NULL,
   detalle              VARCHAR(300) NOT NULL,
   inspection_id        INT UNSIGNED NULL,
@@ -472,4 +476,52 @@ CREATE TABLE plantillas_correo (
   actualizado_por  INT UNSIGNED  NULL,
   actualizado_en   DATETIME      NOT NULL,
   CONSTRAINT fk_plantilla_user FOREIGN KEY (actualizado_por) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- ===================== Cuentadante y revisión del inventario =====================
+--
+-- El cuentadante es quien responde por el inventario del ambiente. Antes de
+-- recibirlo hay que revisar el inventario ítem por ítem (OK, faltante o
+-- dañado) y aceptarlo, como un acta de entrega:
+--   cuentadante  al crear el ambiente o al cambiar de cuentadante (también al
+--                asignar un instructor marcándolo como cuentadante); al
+--                aceptarla, environments.cuentadante_id pasa a esa persona;
+--   instructor   un instructor asignado por primera vez al ambiente.
+-- Mientras la revisión esté pendiente, esa persona no puede iniciar la
+-- entrega diaria del ambiente ("Ingresé"). Se exporta y se importa en Excel.
+CREATE TABLE revisiones_inventario (
+  id                      INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  environment_id          INT UNSIGNED NOT NULL,
+  tipo                    ENUM('cuentadante','instructor') NOT NULL,
+  responsable_id          INT UNSIGNED NOT NULL,      -- quien revisa y recibe el inventario
+  cuentadante_anterior_id INT UNSIGNED NULL,          -- quien entrega (tipo cuentadante)
+  asignacion_id           INT UNSIGNED NULL,          -- asignación que la originó
+  estado                  ENUM('pendiente','aceptada','anulada') NOT NULL DEFAULT 'pendiente',
+  motivo                  VARCHAR(300) NOT NULL,
+  observaciones           VARCHAR(500) NULL,
+  resumen                 JSON         NULL,          -- al aceptarla: total, ok, faltantes, dañados
+  creada_por              INT UNSIGNED NULL,
+  creada_en               DATETIME     NOT NULL,
+  cerrada_por             INT UNSIGNED NULL,
+  cerrada_en              DATETIME     NULL,
+  KEY ix_rev_resp (responsable_id, estado),
+  KEY ix_rev_env (environment_id, estado),
+  CONSTRAINT fk_rev_env   FOREIGN KEY (environment_id)          REFERENCES environments(id) ON DELETE CASCADE,
+  CONSTRAINT fk_rev_resp  FOREIGN KEY (responsable_id)          REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_rev_ant   FOREIGN KEY (cuentadante_anterior_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_rev_asig  FOREIGN KEY (asignacion_id)           REFERENCES instructor_assignments(id) ON DELETE SET NULL,
+  CONSTRAINT fk_rev_crea  FOREIGN KEY (creada_por)              REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_rev_cierra FOREIGN KEY (cerrada_por)            REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE revision_inventario_items (
+  id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  revision_id        INT UNSIGNED NOT NULL,
+  inventory_item_id  INT UNSIGNED NOT NULL,
+  estado             ENUM('pendiente','ok','faltante','danado') NOT NULL DEFAULT 'pendiente',
+  observacion        VARCHAR(300) NULL,
+  revisado_en        DATETIME     NULL,
+  UNIQUE KEY uq_rev_item (revision_id, inventory_item_id),
+  CONSTRAINT fk_ri_rev  FOREIGN KEY (revision_id)       REFERENCES revisiones_inventario(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ri_item FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

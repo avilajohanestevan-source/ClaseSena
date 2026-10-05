@@ -16,10 +16,13 @@
  *   familia_nombre  nombre de la familia nueva ("PC puesto 1"); vacío = "Familia <código>"
  *   familia_tipo    tipo de la familia nueva (PC, Estación de cocina…); vacío = "General"
  *   qr              contenido del QR (qr_value); vacío = SENA-INV:<codigo> en los nuevos y sin cambio en los existentes
+ *   valor           valor de compra (1.250.000 o 1250000,50); vacío = sin cambio
  * Si el código ya existe, la fila actualiza ese ítem (y lo puede mover de ambiente).
  */
 
-const COLUMNAS_CARGA = ['ambiente', 'codigo', 'nombre', 'categoria', 'serial', 'estado', 'familia', 'familia_nombre', 'familia_tipo', 'qr'];
+const COLUMNAS_CARGA = ['ambiente', 'codigo', 'nombre', 'categoria', 'serial', 'estado', 'familia', 'familia_nombre', 'familia_tipo', 'qr', 'valor'];
+/** Categoría de los ítems sin categoría en el inventario del cuentadante (se crea si no existe). */
+const CATEGORIA_SIN_CLASIFICAR = 'Sin clasificar';
 const MAX_FILAS_CARGA = 2000;
 
 $autoload = __DIR__ . '/../vendor/autoload.php';
@@ -37,7 +40,9 @@ function normalizarTitulo(string $t): string
     return ['item' => 'nombre', 'elemento' => 'nombre', 'descripcion' => 'nombre', 'codigoambiente' => 'ambiente', 'salon' => 'ambiente',
             'placa' => 'codigo', 'codigodebarras' => 'codigo', 'numerodeserie' => 'serial',
             'familianombre' => 'familia_nombre', 'nombrefamilia' => 'familia_nombre', 'familiatipo' => 'familia_tipo', 'tipofamilia' => 'familia_tipo',
-            'codigofamilia' => 'familia', 'qrvalue' => 'qr', 'valorqr' => 'qr', 'codigoqr' => 'qr', 'contenidoqr' => 'qr'][$t] ?? $t;
+            'codigofamilia' => 'familia', 'qrvalue' => 'qr', 'valorqr' => 'qr', 'codigoqr' => 'qr', 'contenidoqr' => 'qr',
+            'numerodeplaca' => 'codigo', 'placasena' => 'codigo', 'descripciondelelemento' => 'nombre', 'nombredelelemento' => 'nombre',
+            'valordecompra' => 'valor', 'valorunitario' => 'valor', 'costo' => 'valor', 'valorcompra' => 'valor'][$t] ?? $t;
 }
 
 /**
@@ -69,6 +74,14 @@ function leerTabla(string $ruta, string $nombreArchivo): array
  */
 function filasDeTabla(array $tabla, array $columnas, array $obligatorias, callable $normalizar, int $max = MAX_FILAS_CARGA): array
 {
+    // Los títulos pueden no estar en la primera fila (p. ej. el inventario del cuentadante
+    // exportado trae arriba el ambiente y el cuentadante): se busca la fila que los tenga.
+    $desplazamiento = 0;
+    foreach (array_slice($tabla, 0, 15) as $n => $fila) {
+        $t = array_map(fn($x) => $normalizar((string) $x), $fila ?? []);
+        if (!array_diff($obligatorias, $t)) { $desplazamiento = $n; break; }
+    }
+    $tabla = array_slice($tabla, $desplazamiento);
     $titulos = array_map(fn($t) => $normalizar((string) $t), array_shift($tabla) ?? []);
     foreach ($obligatorias as $obligatoria) {
         if (!in_array($obligatoria, $titulos, true)) {
@@ -77,7 +90,7 @@ function filasDeTabla(array $tabla, array $columnas, array $obligatorias, callab
     }
     $filas = [];
     foreach ($tabla as $n => $valores) {
-        $f = ['fila' => $n + 2];
+        $f = ['fila' => $n + 2 + $desplazamiento];
         foreach ($titulos as $i => $t) {
             if (in_array($t, $columnas, true)) $f[$t] = trim((string) ($valores[$i] ?? ''));
         }
@@ -107,6 +120,17 @@ function leerCsv(string $ruta): array
     return $tabla;
 }
 
+/** "1.250.000", "$ 1,250,000.50", "1250000,5" → número; vacío → null; texto no numérico → false. */
+function valorDeCarga(string $v)
+{
+    $v = preg_replace('/[^\d.,-]/', '', $v);
+    if ($v === '') return null;
+    // El último separador con 1 o 2 cifras detrás es el decimal; los demás, de miles.
+    if (preg_match('/^(.*)[.,](\d{1,2})$/', $v, $m)) $v = preg_replace('/[.,]/', '', $m[1]) . '.' . $m[2];
+    else $v = preg_replace('/[.,]/', '', $v);
+    return is_numeric($v) && (float) $v >= 0 && (float) $v < 1e12 ? round((float) $v, 2) : false;
+}
+
 /** Acepta la clave (fuera_servicio) o la etiqueta (Fuera de servicio). Vacío = operativo. */
 function estadoDeCarga(string $v): ?string
 {
@@ -122,7 +146,7 @@ function estadoDeCarga(string $v): ?string
  * guarda nada (vista previa).
  * @return array{total:int, nuevos:int, actualizados:int, sinCambios:int, familiasNuevas:int, errores:array, filas:array}
  */
-function importarInventario(array $filas, ?int $usuarioId, bool $simular, string $origen): array
+function importarInventario(array $filas, ?int $usuarioId, bool $simular, string $origen, ?string $categoriaPorDefecto = null): array
 {
     $r = ['total' => count($filas), 'nuevos' => 0, 'actualizados' => 0, 'sinCambios' => 0, 'familiasNuevas' => 0, 'errores' => [], 'filas' => []];
     $ambientes = [];
@@ -137,12 +161,15 @@ function importarInventario(array $filas, ?int $usuarioId, bool $simular, string
         if (!$amb) { $error('El ambiente "' . ($f['ambiente'] ?? '') . '" no existe.'); continue; }
         $nombre = $f['nombre'] ?? '';
         if (mb_strlen($nombre) < 2 || mb_strlen($nombre) > 120) { $error('Escribe el nombre (2 a 120 caracteres).'); continue; }
+        if (($f['categoria'] ?? '') === '' && $categoriaPorDefecto) $f['categoria'] = $categoriaPorDefecto;
         $categoria = ($f['categoria'] ?? '') !== '' ? catalogoPorNombre('categoria', $f['categoria']) : null;
         if (!$categoria || !$categoria['activo']) {
             $error(($f['categoria'] ?? '') === '' ? 'Escribe la categoría.' : "La categoría \"{$f['categoria']}\" no existe o está desactivada. Regístrala en Inventario → Categorías o usa: " . implode(', ', nombresCatalogo('categoria')) . '.');
             continue;
         }
         $serial = ($f['serial'] ?? '') !== '' ? mb_substr($f['serial'], 0, 60) : null;
+        $valor = valorDeCarga($f['valor'] ?? '');
+        if ($valor === false) { $error('El valor "' . $f['valor'] . '" no es un número.'); continue; }
         $estado = estadoDeCarga($f['estado'] ?? '');
         if (!$estado) { $error('Estado "' . $f['estado'] . '" no válido: Operativo, Dañado, En reparación, Fuera de servicio o De baja.'); continue; }
 
@@ -202,8 +229,8 @@ function importarInventario(array $filas, ?int $usuarioId, bool $simular, string
             $codigo ??= siguienteCodigo($amb);
             if (fila('SELECT id FROM inventory_items WHERE qr_value = ?', [$qr ?? qrPorDefecto($codigo)])) { $error("El QR de $codigo ya es de otro ítem."); continue; }
             $id = insertar(
-                'INSERT INTO inventory_items (environment_id, codigo, qr_value, nombre, category_id, family_id, serial, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                [(int) $amb['id'], $codigo, $qr ?? qrPorDefecto($codigo), $nombre, (int) $categoria['id'], $familia ? (int) $familia['id'] : null, $serial, $estado]
+                'INSERT INTO inventory_items (environment_id, codigo, qr_value, nombre, category_id, family_id, serial, valor, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [(int) $amb['id'], $codigo, $qr ?? qrPorDefecto($codigo), $nombre, (int) $categoria['id'], $familia ? (int) $familia['id'] : null, $serial, $valor, $estado]
             );
             historial($id, 'carga_masiva', "Registrado por carga masiva ($origen, fila {$f['fila']}) en el ambiente {$amb['codigo']}"
                 . ($familia ? " · familia {$familia['codigo']}" : ''), $usuarioId);
@@ -218,14 +245,16 @@ function importarInventario(array $filas, ?int $usuarioId, bool $simular, string
             }
             if ((int) $existente['category_id'] !== (int) $categoria['id']) $cambios[] = "categoría → {$categoria['nombre']}";
             if ($existente['estado'] !== $estado) $cambios[] = 'estado → ' . ETIQUETA_ESTADO[$estado];
+            $nuevoValor = $valor ?? ($existente['valor'] !== null ? (float) $existente['valor'] : null);
+            if ($valor !== null && (float) $existente['valor'] !== $valor) $cambios[] = 'valor → ' . number_format($valor, 0, ',', '.');
             $nuevoQr = $qr ?? $existente['qr_value'];
             if ($nuevoQr !== $existente['qr_value']) $cambios[] = "QR → $nuevoQr";
             // Sin familia en la fila se conserva la que tenía, salvo que el ítem cambie de ambiente.
             $familiaId = $familia ? (int) $familia['id'] : ($movido ? null : ($existente['family_id'] !== null ? (int) $existente['family_id'] : null));
             if ($familiaId !== ($existente['family_id'] !== null ? (int) $existente['family_id'] : null)) $cambios[] = 'familia → ' . ($familia['codigo'] ?? '—');
             if ($cambios) {
-                consulta('UPDATE inventory_items SET environment_id = ?, nombre = ?, category_id = ?, serial = ?, estado = ?, qr_value = ?, family_id = ? WHERE id = ?',
-                    [(int) $amb['id'], $nombre, (int) $categoria['id'], $serial, $estado, $nuevoQr, $familiaId, (int) $existente['id']]);
+                consulta('UPDATE inventory_items SET environment_id = ?, nombre = ?, category_id = ?, serial = ?, valor = ?, estado = ?, qr_value = ?, family_id = ? WHERE id = ?',
+                    [(int) $amb['id'], $nombre, (int) $categoria['id'], $serial, $nuevoValor, $estado, $nuevoQr, $familiaId, (int) $existente['id']]);
                 historial((int) $existente['id'], 'carga_masiva', "Actualizado por carga masiva ($origen, fila {$f['fila']}): " . implode(' · ', $cambios), $usuarioId);
                 $r['actualizados']++;
                 $accion = 'actualizado';
@@ -311,15 +340,16 @@ function rutaExportarInventario(): never
     $fila = 2;
     foreach ($items as $i) {
         $hoja->fromArray([$i['ambiente_codigo'], $i['codigo'], $i['nombre'], $i['categoria'], $i['serial'], ETIQUETA_ESTADO[$i['estado']],
-                          $i['familia_codigo'], $i['familia_nombre'], $i['familia_tipo'], $i['qr_value']], null, "A$fila");
+                          $i['familia_codigo'], $i['familia_nombre'], $i['familia_tipo'], $i['qr_value'], $i['valor'] !== null ? (float) $i['valor'] : null], null, "A$fila");
         // Texto explícito para que Excel no convierta códigos numéricos (p. ej. 0770…) en números.
         $hoja->setCellValueExplicit("B$fila", $i['codigo'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         $hoja->setCellValueExplicit("J$fila", $i['qr_value'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         $fila++;
     }
-    $hoja->getStyle('A1:J1')->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
-    $hoja->getStyle('A1:J1')->getFill()->setFillType('solid')->getStartColor()->setRGB('39A900');
-    foreach (range('A', 'J') as $col) $hoja->getColumnDimension($col)->setAutoSize(true);
+    $hoja->getStyle('A1:K1')->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+    $hoja->getStyle('A1:K1')->getFill()->setFillType('solid')->getStartColor()->setRGB('39A900');
+    $hoja->getStyle('K2:K' . max(2, $fila))->getNumberFormat()->setFormatCode('#,##0');
+    foreach (range('A', 'K') as $col) $hoja->getColumnDimension($col)->setAutoSize(true);
     $hoja->freezePane('A2');
 
     $nombre = 'inventario' . ($ambienteId && $items ? '-' . $items[0]['ambiente_codigo'] : '') . '-' . date('Y-m-d') . '.xlsx';
