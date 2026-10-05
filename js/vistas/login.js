@@ -188,7 +188,7 @@ export function render(raiz, { desdeSalida = false } = {}) {
     enviar.replaceChildren(icono('check'), h('span', {}, `¡Hola, ${respuesta.usuario.nombre.split(' ')[0]}!`));
     await anim.salidaLogin({ tarjeta, piezaA, piezaB, extras: [linea, aro] });
     let tokenMock = null, usuarioMock = null;
-    if (DEMO_ASISTENCIA[rol]) {
+    if (CONFIG.usarMock && DEMO_ASISTENCIA[rol]) {
       try { ({ token: tokenMock, usuario: usuarioMock } = await api.login({ identificacion: DEMO_ASISTENCIA[rol], password: PASSWORD_PRUEBA, rol })); } catch { /* asistencia no disponible */ }
     }
     iniciarSesion({ token: respuesta.token, usuario: respuesta.usuario, tokenMock, usuarioMock });

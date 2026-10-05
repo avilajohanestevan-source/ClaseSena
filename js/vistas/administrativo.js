@@ -3,8 +3,9 @@
 // riesgo de deserción), PanelSemaforo con distribución, filtros plegables
 // y lista por aprendiz, y notificaciones. En móvil todo va en una sola
 // columna; desde 1000 px el semáforo y las notificaciones van lado a lado.
-import { h, icono, vaciar, formato } from '../ui/dom.js';
+import { h, icono, vaciar, formato, descargar } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
+import { toast } from '../ui/avisos.js';
 import { badgeSemaforo, cargando, tarjetaError } from '../ui/componentes.js';
 import { calcularSemaforo, NIVELES_SEMAFORO, fechaIso, estadoVentana } from '../reglas.js';
 import { api } from '../api/contratos.js';
@@ -13,14 +14,17 @@ import { catalogos, emitir, estado } from '../estado.js';
 const ICONO_NOTI = { 'clase-cancelada': 'prohibido', 'dano-grave': 'herramienta', riesgo: 'alerta', p004: 'archivo' };
 const fmtDia = new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
 
-export async function render(raiz, { alSalir }) {
+export async function render(raiz, { alSalir, params }) {
   const cat = await catalogos();
-  const filtros = { ambienteId: '', competenciaId: '', fecha: fechaIso() };
+  // Control por ficha: #/semaforo?ficha=2758432 llega filtrado desde Fichas.
+  const filtros = { ambienteId: '', competenciaId: '', ficha: params?.get('ficha') || '', fecha: fechaIso() };
   let datos = [], colorActivo = '', busqueda = '', canceladasHoy = [], sinLeer = 0;
 
   /* --- filtros (plegables en móvil) --- */
   const selectAmbiente = h('select', { onchange: () => { filtros.ambienteId = selectAmbiente.value; alFiltrar(); } },
     h('option', { value: '' }, 'Todos los ambientes'), cat.ambientes.map((a) => h('option', { value: a.id }, a.nombre)));
+  const selectFicha = h('select', { onchange: () => { filtros.ficha = selectFicha.value; alFiltrar(); } },
+    h('option', { value: '' }, 'Todas las fichas'), cat.fichas.map((f) => h('option', { value: f.ficha, selected: f.ficha === filtros.ficha }, `${f.ficha} · ${f.programa}`)));
   const selectCompetencia = h('select', { onchange: () => { filtros.competenciaId = selectCompetencia.value; alFiltrar(); } },
     h('option', { value: '' }, 'Todas las competencias'), cat.competencias.map((c) => h('option', { value: c.id }, c.nombre)));
   const inputFecha = h('input', { type: 'date', value: filtros.fecha, max: fechaIso(), onchange: () => { filtros.fecha = inputFecha.value; alFiltrar(); } });
@@ -29,11 +33,12 @@ export async function render(raiz, { alSalir }) {
   const panelFiltros = h('details', { class: 'adm-filtros' },
     h('summary', {}, icono('filtro'), 'Filtros', contadorFiltros),
     h('div', { class: 'filtros' },
+      h('div', { class: 'campo' }, h('label', {}, 'Ficha'), selectFicha),
       h('div', { class: 'campo' }, h('label', {}, 'Ambiente'), selectAmbiente),
       h('div', { class: 'campo' }, h('label', {}, 'Competencia'), selectCompetencia),
       h('div', { class: 'campo' }, h('label', {}, 'Corte a la fecha'), inputFecha)));
   // En escritorio los filtros arrancan abiertos.
-  if (window.matchMedia('(min-width: 1000px)').matches) panelFiltros.open = true;
+  if (window.matchMedia('(min-width: 1000px)').matches || filtros.ficha) panelFiltros.open = true;
 
   /* --- indicadores --- */
   const kpi = (clave, etiqueta, ic, pie, accion) => {
@@ -78,14 +83,17 @@ export async function render(raiz, { alSalir }) {
         h('span', { class: 'eyebrow eyebrow-verde' }, hoy[0].toUpperCase() + hoy.slice(1)),
         h('h2', { class: 'vista-titulo' }, nombre ? `Hola, ${nombre}` : 'Panel administrativo'),
         h('p', { class: 'section-sub' }, 'Lo más importante de asistencia y ambientes hoy.')),
-      h('a', { class: 'btn btn-outline btn-sm', href: '#/p004' }, icono('archivo'), 'Gestión P004')),
+      h('div', { class: 'vista-acciones' },
+        h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => listadoRiesgo() }, icono('descargar'), 'Listado de riesgo'),
+        h('a', { class: 'btn btn-outline btn-sm', href: '#/excusas' }, icono('archivo'), 'Excusas'),
+        h('a', { class: 'btn btn-outline btn-sm', href: '#/p004' }, icono('archivo'), 'Gestión P004'))),
     h('section', { class: 'adm-kpis', 'data-anim': '', 'aria-label': 'Indicadores del día' }, Object.values(K).map((k) => k.nodo)),
     alertas,
     h('div', { class: 'admin-grid' }, semaforoCard, notificaciones));
   anim.entrarVista(raiz);
 
   function alFiltrar() {
-    const activos = [filtros.ambienteId, filtros.competenciaId, filtros.fecha !== fechaIso() && filtros.fecha].filter(Boolean).length;
+    const activos = [filtros.ficha, filtros.ambienteId, filtros.competenciaId, filtros.fecha !== fechaIso() && filtros.fecha].filter(Boolean).length;
     contadorFiltros.textContent = activos;
     contadorFiltros.hidden = !activos;
     cargarSemaforo();
@@ -141,7 +149,9 @@ export async function render(raiz, { alSalir }) {
       badgeSemaforo(d, { compacto: true }),
       h('div', { class: 'fila-semaforo-datos' },
         h('strong', {}, d.nombre),
-        h('span', { class: 'text-muted' }, `${d.documento} · Ficha ${d.ficha}`)),
+        h('span', { class: 'text-muted' }, `${d.documento} · Ficha ${d.ficha}`
+          + (d.justificadas ? ` · ${d.justificadas} justificada${d.justificadas === 1 ? '' : 's'}` : '')
+          + (d.excusasPendientes ? ` · ${d.excusasPendientes} excusa${d.excusasPendientes === 1 ? '' : 's'} por revisar` : ''))),
       h('div', { class: 'fila-semaforo-conteo' },
         h('span', { title: 'Faltas consecutivas' }, h('strong', {}, d.faltasConsecutivas), ' consec.'),
         h('span', { title: 'Faltas totales' }, h('strong', {}, d.faltasTotales), ` / ${d.sesiones}`)),
@@ -149,6 +159,17 @@ export async function render(raiz, { alSalir }) {
       : h('li', { class: 'empty-state' }, 'Ningún aprendiz coincide con los filtros.'));
     if (entrada) anim.lista(lista.children, { autoAlpha: 0, y: 8 });
     else anim.aplicarFlip(estadoFlip);
+  }
+
+  /** Listado de riesgo (naranja, rojo claro y rojo) en CSV, con los filtros actuales. */
+  function listadoRiesgo() {
+    const riesgo = datos.filter((d) => d.semaforo.nivel >= 2);
+    if (!riesgo.length) { toast('info', 'Sin aprendices en riesgo', 'Con estos filtros nadie está en naranja o rojo.'); return; }
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const filas = [['documento', 'nombre', 'ficha', 'programa', 'semaforo', 'faltas_consecutivas', 'faltas_totales', 'sesiones', 'justificadas', 'excusas_pendientes', 'ultima_falta']]
+      .concat(riesgo.map((d) => [d.documento, d.nombre, d.ficha, d.programa, d.semaforo.etiqueta, d.faltasConsecutivas, d.faltasTotales, d.sesiones, d.justificadas ?? 0, d.excusasPendientes ?? 0, d.ultimaFalta ? fechaIso(d.ultimaFalta) : '']));
+    descargar(`riesgo-${filtros.ficha || 'todas'}-${filtros.fecha}.csv`, '﻿' + filas.map((r) => r.map(esc).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+    toast('exito', 'Listado de riesgo descargado', `${riesgo.length} aprendices.`);
   }
 
   /* --- alertas visuales --- */

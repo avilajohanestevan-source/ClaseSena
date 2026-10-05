@@ -37,7 +37,72 @@ function rutaLogout(): never
 
 function rutaYo(): never
 {
+    permitirPrimerIngreso();
     responder(usuarioPublico(usuario()));
+}
+
+/** "camila.rojas@soy.sena.edu.co" → "ca•••••••••@soy.sena.edu.co" */
+function correoOculto(string $email): string
+{
+    [$usuario, $dominio] = explode('@', $email) + [1 => ''];
+    return mb_substr($usuario, 0, 2) . str_repeat('•', max(3, mb_strlen($usuario) - 2)) . '@' . $dominio;
+}
+
+/**
+ * POST /me/first-login/code {email?}: primer ingreso, paso 1. Envía un código
+ * de 6 dígitos (vale 15 minutos) al correo del usuario (o al que escriba, si
+ * lo corrige). En modo 'registro' la respuesta trae codigoDemo para la demostración.
+ */
+function rutaCodigoPrimerIngreso(): never
+{
+    permitirPrimerIngreso();
+    $u = usuario();
+    if (!(int) $u['debe_cambiar_password']) fallar(409, 'Ya hiciste tu primer ingreso.', 'ESTADO');
+    $email = texto(cuerpo(), 'email', 160, false, 'el correo') ?? $u['email'];
+    if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) fallar(422, 'Escribe un correo válido.', 'VALIDACION');
+    $codigo = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    consulta('UPDATE users SET email = ?, codigo_verificacion = ?, codigo_expira = NOW() + INTERVAL 15 MINUTE WHERE id = ?', [$email, $codigo, (int) $u['id']]);
+    enviarCorreo((int) $u['id'], $email, "Tu código de verificación: $codigo",
+        "Hola, " . explode(' ', $u['nombre'])[0] . ":
+
+Tu código para confirmar este correo en Ambientes SENA es:
+
+    $codigo
+
+Vence en 15 minutos. Si no lo pediste, ignora este mensaje.
+");
+    responder(['enviadoA' => correoOculto($email), 'expiraEn' => iso(date('Y-m-d H:i:s', time() + 900))]
+        + (CORREO_MODO === 'registro' ? ['codigoDemo' => $codigo] : []));
+}
+
+/**
+ * POST /me/first-login {codigo, nueva}: primer ingreso, paso 2. Con el código
+ * correcto confirma el correo y cambia la contraseña temporal por la nueva.
+ */
+function rutaPrimerIngreso(): never
+{
+    permitirPrimerIngreso();
+    $u = usuario();
+    if (!(int) $u['debe_cambiar_password']) fallar(409, 'Ya hiciste tu primer ingreso.', 'ESTADO');
+    $d = cuerpo();
+    $codigo = trim((string) ($d['codigo'] ?? ''));
+    if (!$u['codigo_verificacion'] || !$u['codigo_expira']) fallar(422, 'Primero pide el código de verificación.', 'VALIDACION');
+    if (strtotime($u['codigo_expira']) < time()) fallar(422, 'El código venció. Pide uno nuevo.', 'CODIGO_VENCIDO');
+    if (!hash_equals($u['codigo_verificacion'], $codigo)) fallar(422, 'El código no coincide. Revisa el correo.', 'CODIGO');
+    $nueva = (string) ($d['nueva'] ?? '');
+    validarPasswordNueva($nueva);
+    if (password_verify($nueva, $u['password_hash'])) fallar(422, 'La nueva contraseña debe ser distinta de la temporal.', 'VALIDACION');
+    consulta('UPDATE users SET password_hash = ?, debe_cambiar_password = 0, email_verificado_en = NOW(), codigo_verificacion = NULL, codigo_expira = NULL WHERE id = ?',
+        [password_hash($nueva, PASSWORD_BCRYPT), (int) $u['id']]);
+    consulta('DELETE FROM api_tokens WHERE user_id = ? AND token <> ?', [(int) $u['id'], tokenDeLaPeticion()]);
+    responder(usuarioPublico(fila('SELECT * FROM users WHERE id = ?', [(int) $u['id']])));
+}
+
+function validarPasswordNueva(string $nueva): void
+{
+    if (strlen($nueva) < 8 || !preg_match('/[A-Za-z]/', $nueva) || !preg_match('/\d/', $nueva)) {
+        fallar(422, 'La nueva contraseña debe tener al menos 8 caracteres, con letras y números.', 'VALIDACION');
+    }
 }
 
 function rutaActualizarPerfil(): never
@@ -59,9 +124,7 @@ function rutaCambiarPassword(): never
     $d = cuerpo();
     if (!password_verify((string) ($d['actual'] ?? ''), $u['password_hash'])) fallar(422, 'La contraseña actual no coincide.', 'VALIDACION');
     $nueva = (string) ($d['nueva'] ?? '');
-    if (strlen($nueva) < 8 || !preg_match('/[A-Za-z]/', $nueva) || !preg_match('/\d/', $nueva)) {
-        fallar(422, 'La nueva contraseña debe tener al menos 8 caracteres, con letras y números.', 'VALIDACION');
-    }
+    validarPasswordNueva($nueva);
     consulta('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($nueva, PASSWORD_BCRYPT), (int) $u['id']]);
     // Cierra las otras sesiones abiertas de este usuario.
     consulta('DELETE FROM api_tokens WHERE user_id = ? AND token <> ?', [(int) $u['id'], tokenDeLaPeticion()]);

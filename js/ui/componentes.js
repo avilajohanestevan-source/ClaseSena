@@ -20,7 +20,7 @@ export function badgeSemaforo(datos, { compacto = false } = {}) {
 }
 
 const ESTADOS_ASISTENCIA = {
-  presente: ['Presente', 'in'], tarde: ['Tarde', 'out'], falla: ['Falla', 'error'], cancelada: ['Cancelada', 'neutro'],
+  presente: ['Presente', 'in'], tarde: ['Tarde', 'out'], falla: ['Falla', 'error'], justificada: ['Justificada', 'azul'], cancelada: ['Cancelada', 'neutro'],
 };
 export function chipAsistencia(estado) {
   const [texto, clase] = ESTADOS_ASISTENCIA[estado] || [estado, 'neutro'];

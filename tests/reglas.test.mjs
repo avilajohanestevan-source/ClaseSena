@@ -74,3 +74,15 @@ test('P004: valida campos, estados y duplicados', () => {
   assert.match(errores[0].mensaje, /repetido/);
 });
 
+
+test('excusa: periodo, motivo y foto obligatorios', async () => {
+  const { validarExcusa } = await import('../js/reglas.js');
+  const HOY = '2026-10-05';
+  const ok = { desde: '2026-10-01', hasta: '2026-10-03', motivo: 'Incapacidad médica de tres días', foto: 'data:image/jpeg;base64,xx' };
+  assert.deepEqual(validarExcusa(ok, HOY), {});
+  assert.ok(validarExcusa({ ...ok, foto: null }, HOY).foto);
+  assert.ok(validarExcusa({ ...ok, motivo: 'corto' }, HOY).motivo);
+  assert.ok(validarExcusa({ ...ok, hasta: '2026-09-30' }, HOY).hasta, 'fin antes del inicio');
+  assert.ok(validarExcusa({ ...ok, desde: '2026-08-01', hasta: '2026-08-02' }, HOY).desde, 'más de 30 días atrás');
+  assert.ok(validarExcusa({ ...ok, hasta: '2026-11-15' }, HOY).hasta, 'más de 31 días');
+});

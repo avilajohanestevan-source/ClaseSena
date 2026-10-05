@@ -38,7 +38,7 @@ const SUBTITULO = {
   instructor: 'Revisa el salón al entrar y recíbelo escaneando el QR del portero.',
   portero: 'Entrega los ambientes con un QR cuando el instructor termine la revisión.',
   administrativo: 'Así van las entregas de ambientes hoy.',
-  aprendiz: 'Consulta el estado de los ambientes de formación.',
+  aprendiz: 'Registra tu asistencia, consulta tu horario y presenta excusas.',
   almacen: 'Gestiona los artículos, sus familias y sus códigos QR y de barras.',
 };
 
@@ -139,11 +139,15 @@ async function administrativo() {
 
 async function aprendiz() {
   const ambientes = await apiAmb.ambientes();
+  const acceso = (href, ic, titulo, texto) => h('a', { class: 'accion-grande accion-grande--secundaria', href, 'data-anim': '' },
+    h('span', { class: 'accion-grande-icono' }, icono(ic)), h('span', {}, h('strong', {}, titulo), h('span', {}, texto)), icono('flecha'));
   return [
     h('a', { class: 'accion-grande', href: '#/asistencia', 'data-anim': '' },
       h('span', { class: 'accion-grande-icono' }, icono('escanear')),
       h('span', {}, h('strong', {}, 'Registrar asistencia'), h('span', {}, 'Escanea el QR que proyecta tu instructor')),
       icono('flecha')),
+    acceso('#/horario', 'calendario', 'Mi horario', 'Tus clases, profesores y ambientes'),
+    acceso('#/excusas', 'archivo', 'Mis excusas', 'Sube una excusa con foto si faltaste'),
     h('section', { class: 'card', 'data-anim': '' }, h('h3', { class: 'bloque-titulo' }, 'Ambientes de formación'), listaAmbientes(ambientes)),
   ];
 }

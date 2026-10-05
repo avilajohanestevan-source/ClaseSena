@@ -18,7 +18,7 @@ export async function render(raiz) {
   const selectAmbiente = h('select', { onchange: () => { filtros.ambienteId = selectAmbiente.value; cargar(); } },
     h('option', { value: '' }, 'Todos los ambientes'), cat.ambientes.map((a) => h('option', { value: a.id }, a.nombre)));
   const selectEstado = h('select', { onchange: () => { estadoFiltro = selectEstado.value; pintar(); } },
-    h('option', { value: '' }, 'Todos'), ['presente', 'tarde', 'falla', 'cancelada'].map((e) => h('option', { value: e }, e[0].toUpperCase() + e.slice(1))));
+    h('option', { value: '' }, 'Todos'), ['presente', 'tarde', 'falla', 'justificada', 'cancelada'].map((e) => h('option', { value: e }, e[0].toUpperCase() + e.slice(1))));
   const resumen = h('div', { class: 'stat-grid stat-grid--4', 'data-anim': '' });
   const tabla = tablaAsistencias();
   const visibles = () => registros.filter((r) => !estadoFiltro || r.estado === estadoFiltro);

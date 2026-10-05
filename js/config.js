@@ -12,12 +12,12 @@ export const CONFIG = {
   // Muestra en el login la lista de usuarios de prueba (quitar en producción).
   mostrarUsuariosDemo: true,
 
-  // Módulos de asistencia (QR de clase, semáforo, P004): siguen con datos
-  // simulados mientras no exista su backend.
-  // true: las llamadas se resuelven con el servidor simulado (js/api/mock).
-  // false: se hacen con fetch contra apiBase (ver API.md).
-  usarMock: true,
-  apiBase: '/api/v1',
+  // Módulos de asistencia (QR de clase, semáforo, excusas, P004): ya tienen
+  // backend real en api/ (modulos/asistencia.php), con los contratos de API.md.
+  // true: se resuelven con el servidor simulado (js/api/mock; lo usan las pruebas).
+  // false: van al mismo backend que el resto, con la misma sesión.
+  usarMock: false,
+  apiBase: 'api/index.php',
   // Latencia simulada de los mocks, en milisegundos [mínima, máxima].
   latenciaMock: [250, 650],
 

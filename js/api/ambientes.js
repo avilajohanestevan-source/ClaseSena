@@ -45,6 +45,18 @@ export const apiAmb = {
   yo: () => p('GET', '/me'),                                          // → Usuario
   actualizarPerfil: (datos) => p('PATCH', '/me', datos),              // → Usuario  {nombre, email?, telefono?}
   cambiarPassword: (actual, nueva) => p('POST', '/me/password', { actual, nueva }),
+  // Primer ingreso: código al correo (paso 1) y confirmación + contraseña nueva (paso 2).
+  codigoPrimerIngreso: (email) => p('POST', '/me/first-login/code', { email }), // → {enviadoA, expiraEn, codigoDemo?}
+  primerIngreso: (codigo, nueva) => p('POST', '/me/first-login', { codigo, nueva }), // → Usuario
+
+  // Fichas y aprendices (credenciales por correo)
+  fichas: () => p('GET', '/fichas'),
+  ficha: (id) => p('GET', `/fichas/${id}`),                           // + listaAprendices
+  crearFicha: (datos) => p('POST', '/fichas', datos),                 // {codigo, programa, jornada, ambienteId?, instructorId?, fechaInicio?, fechaFin?}
+  editarFicha: (id, datos) => p('PATCH', `/fichas/${id}`, datos),
+  importarAprendices: (id, datos) => p('POST', `/fichas/${id}/students/import`, datos), // {nombre, archivo (data URL), simular}
+  reenviarCredenciales: (fichaId, userId) => p('POST', `/fichas/${fichaId}/students/${userId}/credentials`),
+  correos: (userId) => p('GET', '/mail-outbox', { userId }),
   usuarios: (rol) => p('GET', '/users', { rol }),                     // → Usuario[] (administrativo)
 
   // Catálogos: especialidades de ambiente y categorías del inventario

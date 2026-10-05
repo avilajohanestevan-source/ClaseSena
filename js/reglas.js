@@ -104,6 +104,27 @@ export function prevalidarEscaneo(payload, sesion, ahora = Date.now()) {
   return null;
 }
 
+/* ---------------- excusas ---------------- */
+
+/**
+ * Excusa del aprendiz (mismas reglas que api/modulos/asistencia.php):
+ * periodo de máximo 31 días que empiece en los últimos 30, motivo de 10+
+ * caracteres y foto de la evidencia.
+ */
+export function validarExcusa({ desde, hasta, motivo, foto }, hoy = fechaIso()) {
+  const errores = {};
+  const fecha = /^\d{4}-\d{2}-\d{2}$/;
+  const dias = (a, b) => Math.round((new Date(`${b}T12:00:00`) - new Date(`${a}T12:00:00`)) / 86_400_000);
+  if (!fecha.test(desde || '')) errores.desde = 'Elige desde qué día.';
+  else if (dias(desde, hoy) > 30) errores.desde = 'Solo excusas de los últimos 30 días.';
+  if (!fecha.test(hasta || '')) errores.hasta = 'Elige hasta qué día.';
+  else if (!errores.desde && hasta < desde) errores.hasta = 'No puede ser antes del inicio.';
+  else if (!errores.desde && dias(desde, hasta) > 30) errores.hasta = 'Máximo 31 días.';
+  if (String(motivo ?? '').trim().length < 10) errores.motivo = 'Describe el motivo (mínimo 10 caracteres).';
+  if (!foto) errores.foto = 'Toma o adjunta una foto de la evidencia.';
+  return errores;
+}
+
 /* ---------------- semáforo de faltas ---------------- */
 
 export const NIVELES_SEMAFORO = [

@@ -1,7 +1,7 @@
 # Ambientes SENA
 
 Prueba de concepto móvil y web para la **entrega y revisión de ambientes**
-de formación, más el módulo de **asistencia a clases** que ya existía.
+de formación y la **asistencia a clases** por ficha, con backend real en PHP + MySQL.
 
 - **Entrega y revisión de ambientes** (backend real: PHP + MySQL de XAMPP):
   login por rol, perfiles, CRUD de ambientes (con capacidad de aprendices y
@@ -12,8 +12,13 @@ de formación, más el módulo de **asistencia a clases** que ya existía.
   y resuelven (en curso hasta su resolución), asignación de instructores por
   jornada, avisos a coordinación, administrativo y almacén, historial de
   auditoría y reportes.
-- **Asistencia a clases** (QR de clase, semáforo de faltas, P004): sigue
-  con datos simulados en el navegador (`js/api/mock`), como antes.
+- **Fichas y asistencia** (backend real desde esta versión): fichas con
+  importación masiva de aprendices (PhpSpreadsheet), credenciales por correo,
+  primer ingreso obligatorio (confirmar correo con código y cambiar la
+  contraseña), clases por ficha con QR del instructor, faltas calculadas,
+  excusas con foto y periodo de cobertura, semáforo de faltas con listado de
+  riesgo, horario del aprendiz con su profesor y P004. El servidor simulado
+  (`js/api/mock`) se conserva para las pruebas (`CONFIG.usarMock`).
 
 ## Instalar y abrir
 
@@ -67,9 +72,21 @@ que también funciona con el teclado.
 | 2020202020 | Administrativo (área administrativo) | Carlos Méndez Ruiz |
 | 2020202021 | Administrativo (área coordinación) | Patricia Rondón Gil |
 | 2020202022 | Almacén | Hernán Darío Ospina |
-| 1122334455 (TI) | Aprendiz | Camila Rojas Herrera |
-| 1122334456 | Aprendiz | Mateo Torres Ramírez |
-| 1122334457 | Aprendiz | Sara Cárdenas Vega |
+| 1122334455 (TI) | Aprendiz · ficha 2758432 (al día) | Camila Rojas Herrera |
+| 1122334456 | Aprendiz · ficha 2758432 (riesgo de deserción) | Mateo Torres Ramírez |
+| 1122334457 | Aprendiz · ficha 2834519 | Sara Cárdenas Vega |
+| 1122334468 | Aprendiz · ficha 2901122 (riesgo alto) | Natalia Rincón Ortiz |
+| 1122334470 | Aprendiz · ficha 2901122 · **primer ingreso pendiente**, contraseña temporal `Temporal2026` | Valentina Ospina Rueda |
+
+Hay 15 aprendices en tres fichas: **2758432** (Análisis y desarrollo de
+software, mañana, ambiente 107, líder Laura), **2834519** (Electrónica,
+mañana, 109, líder Diana) y **2901122** (Cocina, tarde, 110, líder Andrés),
+con cuatro semanas de clases y asistencias para que el semáforo tenga todos
+los colores, una excusa aprobada (Daniela) y una pendiente (María José).
+Kevin (1122334465) está *aplazado* en el P004 y no puede registrar
+asistencia. Justo después de instalar, la ficha 2758432 tiene una clase con la
+ventana de registro abierta 30 minutos (para probar el QR enseguida); si ya
+pasó, Laura puede **Programar clase** para ahora mismo.
 
 Ambientes con su especialidad y capacidad de aprendices: 107 Sistemas (30),
 108 Aula convencional (28), 109 Laboratorio (24), 110 Cocina (20) y 111
@@ -155,6 +172,35 @@ desde Laura) y un turno anulado en el 111.
 9. El administrativo consulta el historial en *Inspecciones* y genera
    **Reportes** (CSV o impresión).
 
+10. **Fichas** (administrativo) → **Importar aprendices** desde Excel o CSV
+    (`tipo_documento, documento, nombre, email, telefono`; hay plantilla):
+    vista previa con nuevos, actualizados y filas con error; al confirmar,
+    cada aprendiz nuevo recibe un correo con su usuario y una **contraseña
+    temporal**. Los correos quedan en **Correos enviados** (en la prueba de
+    concepto no salen a internet: `CORREO_MODO = 'registro'` en
+    `api/config.php`; con `'mail'` se envían con `mail()` de PHP). Desde la
+    ficha se reenvían credenciales.
+11. **Primer ingreso** (Valentina, 1122334470 / `Temporal2026`): la app no
+    deja hacer nada más hasta **confirmar el correo** (código de 6 dígitos;
+    en modo registro la pantalla muestra el código de demostración) y
+    **cambiar la contraseña** temporal. El backend responde
+    `403 PRIMER_INGRESO` a cualquier otra ruta.
+12. **Asistencia a clases** (instructor) → la clase de hoy → **Generar QR**.
+    El aprendiz (Camila) → **Registrar asistencia** → escanea el QR (o pega
+    su texto): queda *presente* (o *tarde* después de 5 minutos). Laura ve
+    el registro en el modal. **Programar clase** crea otra sesión para una de
+    sus fichas.
+13. **Excusas**: el aprendiz sube la excusa con **foto** y el **periodo** que
+    cubre; el instructor líder de la ficha (o coordinación) la **aprueba** o la
+    **rechaza** con motivo. Aprobada, las faltas de esos días quedan
+    *justificadas* y no cuentan en el semáforo.
+14. **Semáforo de faltas** (administrativo): filtro por **ficha**, ambiente y
+    competencia, conteos de faltas consecutivas y totales (las justificadas
+    aparte) y **Listado de riesgo** en CSV (naranja, rojo claro y rojo). Cuando
+    un aprendiz llega a rojo se avisa a coordinación y a su instructor líder.
+15. **Mi horario** (aprendiz): sus clases de las próximas dos semanas con el
+    **profesor**, el ambiente y la competencia.
+
 Para volver al estado inicial: `C:\xampp\php\php.exe db\instalar.php`.
 
 ## Inventario, pegatinas y carga masiva
@@ -228,7 +274,8 @@ pulsan Enter). El código puede ser el consecutivo (`AMB107-012`), uno propio
 | Asignaciones | Tablero y mis turnos | — | Asignar, reasignar y anular por jornada | — |
 | Auditoría | — | — | Eventos de novedades y asignaciones | — |
 | Reportes | — | — | ✓ | — |
-| Asistencia (datos simulados) | Clases, historial | — | Semáforo, P004, historial | Registrar asistencia |
+| Fichas | Las suyas (consulta) | — | Crear, importar aprendices, credenciales, correos | — |
+| Asistencia | Clases (QR, programar), excusas, historial | — | Semáforo y riesgo, excusas, P004, historial | Mi horario, registrar asistencia, excusas |
 
 ### Rol Almacén
 
@@ -251,12 +298,12 @@ inventario: la del ítem, la del primer componente de la familia o
 ```
 index.html              Página única (enrutador por hash)
 API.md                  Contratos: asistencia (simulada) y entrega de ambientes (real)
-api/                    Backend PHP: index.php (rutas), config.php, lib/, modulos/ (catalogos, ambientes, inventario,
-                        familias, carga con PhpSpreadsheet, inspecciones, novedades, asignaciones, auditoria,
-                        notificaciones, reportes)
+api/                    Backend PHP: index.php (rutas), config.php, lib/ (base, correo), modulos/ (catalogos, ambientes,
+                        inventario, familias, carga con PhpSpreadsheet, inspecciones, novedades, asignaciones, auditoria,
+                        notificaciones, reportes, fichas, asistencia)
 api/vendor/             PhpSpreadsheet (composer install; no va en git)
 composer.json           Dependencias PHP
-db/                     schema.sql, seed.sql, inventario-prueba.xlsx e instalar.php (datos de prueba)
+db/                     schema.sql, seed.sql, asistencia-prueba.php, inventario-prueba.xlsx e instalar.php (datos de prueba)
 scripts/                vendor.mjs (librerías JS) y generar-inventario-prueba.php
 uploads/danos/          Fotos de daños subidas (no va en git)
 css/tokens.css          Tokens de diseño (copia de diseno/tokens.css)
@@ -282,7 +329,7 @@ tests/                  Pruebas (npm test y npm run test:api)
 
 ```
 npm test           # reglas, servidor simulado y códigos de barras
-npm run test:api   # flujo de entrega, carga masiva, escáner, pegatinas, familias, especialidades, novedades permanentes y asignaciones contra la API real
+npm run test:api   # entrega (en los dos sentidos del QR), inventario, almacén, novedades, asignaciones, fichas, primer ingreso, asistencia y excusas contra la API real
 ```
 
 `test:api` deja datos nuevos en la base; vuelve a correr `db\instalar.php`

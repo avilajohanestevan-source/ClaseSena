@@ -40,6 +40,8 @@ export const api = {
 
   // Sesiones de clase
   sesiones: (filtros) => pedir('GET', '/sessions', filtros),          // → Sesion[]  filtros: {instructorId?, ficha?, fecha?}
+  crearSesion: (datos) => pedir('POST', '/sessions', datos),          // {fichaId, competenciaId|competencia, ambienteId?, fecha, horaInicio, horaFin, ventanaMin?} → Sesion
+  miHorario: (dias) => pedir('GET', '/my/schedule', { dias }),         // aprendiz → {ficha, clases}
   generarQr: (id, validezSeg) => pedir('POST', `/sessions/${id}/qr`, { validezSeg }), // → {payload:PayloadQr, texto:string}
   cancelarSesion: (id, motivo) => pedir('POST', `/sessions/${id}/cancel`, { motivo }), // → Sesion
   asistenciaSesion: (id) => pedir('GET', `/sessions/${id}/attendance`), // → Asistencia[]
@@ -52,6 +54,11 @@ export const api = {
   semaforo: (filtros) => pedir('GET', '/students/absences', filtros), // → EstadoFaltas[]  filtros: {ambienteId?, competenciaId?, fecha?}
   notificaciones: () => pedir('GET', '/notifications'),               // → Notificacion[]
   marcarLeida: (id) => pedir('POST', `/notifications/${id}/read`),
+
+  // Excusas (aprendiz: con foto y periodo de cobertura; instructor y coordinación las revisan)
+  excusas: (filtros) => pedir('GET', '/excuses', filtros),            // {estado?, ficha?}
+  crearExcusa: (datos) => pedir('POST', '/excuses', datos),           // {desde, hasta, motivo, foto}
+  revisarExcusa: (id, datos) => pedir('POST', `/excuses/${id}/review`, datos), // {estado: aprobada|rechazada, observacion?}
 
   // P004
   p004: () => pedir('GET', '/p004'),                                  // → RegistroP004[]

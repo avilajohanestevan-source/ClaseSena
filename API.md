@@ -2,18 +2,19 @@
 
 Hay dos APIs:
 
-1. **Asistencia a clases** (esta primera parte): todavía sin backend. Son
-   los endpoints que el servidor real debe implementar. Mientras
-   `CONFIG.usarMock` (en `js/config.js`) sea `true`, los responde el
-   servidor simulado de `js/api/mock/servidor.js` con los mismos códigos de
-   estado y cuerpos de error.
+1. **Asistencia a clases** (esta primera parte): implementada en
+   `api/modulos/asistencia.php` con estos mismos contratos, en el mismo
+   backend y con la misma sesión que el resto (`CONFIG.usarMock = false`).
+   Con `CONFIG.usarMock = true` los responde el servidor simulado de
+   `js/api/mock/servidor.js` (lo usan las pruebas de `npm test`). Los ids
+   del backend real son números.
 2. **Entrega y revisión de ambientes** (sección al final): ya implementada
    en PHP + MySQL en `api/`. El inventario y los daños de ambientes viven
    ahí; la versión simulada anterior se retiró.
 
 Asistencia a clases:
 
-- Base: `/api/v1` (`CONFIG.apiBase`).
+- Base: `api/index.php` (`CONFIG.apiBase`), igual que la segunda parte.
 - Formato: JSON. Fechas en ISO 8601 (UTC).
 - Autenticación: `Authorization: Bearer <token>` en todo excepto el login.
 - Errores: `{ "mensaje": "texto para el usuario", "codigo": "CODIGO" }` con
@@ -26,8 +27,8 @@ Asistencia a clases:
 | POST | `/auth/login` | `{ tipoDocumento?, identificacion, password, rol }` | `{ token, usuario }` |
 | POST | `/auth/logout` | — | `204` |
 
-`usuario`: `{ id, identificacion, nombre, rol, ficha?, ambienteIds? }`.
-`rol` ∈ `instructor | administrativo | aprendiz`.
+`usuario`: `{ id, identificacion, nombre, rol, ficha?, debeCambiarPassword, emailVerificado }`.
+`rol` ∈ `instructor | administrativo | portero | aprendiz | almacen`.
 `tipoDocumento` (opcional) ∈ `CC | TI | CE | PPT`; lo envía el login desde el
 rediseño móvil v1. El servidor simulado lo ignora.
 
@@ -115,6 +116,24 @@ faltas consecutivas y las totales.
 `GET /notifications` → `[{ id, tipo, titulo, detalle, fecha, leida }]`,
 `tipo` ∈ `clase-cancelada | dano-grave | riesgo | p004`.
 `POST /notifications/{id}/read` → `204`.
+
+## Programar clases, horario y excusas (backend real)
+
+| Método | Ruta | Rol | Notas |
+|---|---|---|---|
+| POST | `/sessions` | instructor (sus fichas), administrativo | `{fichaId \| ficha, competenciaId \| competencia (nombre; si no existe se crea), ambienteId? (el de la ficha), fecha, horaInicio, horaFin, ventanaMin? (5–60, 15), instructorId? (administrativo)}` → `Sesion`. Días pasados → `422`; cruce con otra clase de la ficha → `409 DUPLICADO` |
+| GET | `/my/schedule?dias=14` | aprendiz | `{ficha, clases: [Sesion + miRegistro]}`: horario con profesor y ambiente |
+| GET | `/excuses?estado&ficha` | aprendiz (las suyas), instructor (sus fichas), administrativo | `[{id, aprendiz, ficha, desde, hasta, motivo, foto, estado, revisadaPor, revisadaEn, observacion, creadaEn, clasesCubiertas}]` |
+| POST | `/excuses` | aprendiz | `{desde, hasta, motivo (10+), foto}` → `pendiente`. Máximo 31 días, desde los últimos 30. Avisa al instructor líder y a coordinación. Cruce con otra excusa → `409` |
+| POST | `/excuses/{id}/review` | instructor de la ficha, administrativo | `{estado: aprobada \| rechazada, observacion (obligatoria al rechazar)}`. Avisa al aprendiz |
+
+**Faltas.** No se guardan: una clase no cancelada cuya ventana ya cerró, sin
+registro del aprendiz, es `falla`; si una excusa aprobada cubre ese día es
+`justificada` (estado nuevo en `Asistencia`). Las justificadas no suman ni
+rompen la racha de consecutivas. `/students/absences` acepta además `ficha`
+y trae `justificadas` y `excusasPendientes`; cuando un aprendiz llega a rojo
+se avisa (`riesgo`) a coordinación y al instructor líder, una vez por semana.
+Un aprendiz importado después de una clase no tiene falla en ella.
 
 ## P004
 
@@ -312,3 +331,24 @@ ambiente, se crea igual y la respuesta trae `advertencias`.
 | GET | `/inbox` | todos | `{sinLeer, notificaciones:[{id, tipo, titulo, detalle, inspeccionId, novedadId, ambiente, leida, fecha}]}` |
 | POST | `/inbox/{id}/read`, `/inbox/read-all` | todos | → `204` |
 | GET | `/reports?desde&hasta&ambienteId&instructorId` | administrativo | `{resumen, porAmbiente, danos}`; cada novedad trae `naturaleza`, `familiaId`, `novedadId` y `novedadEstado` |
+
+## Fichas, aprendices y primer ingreso
+
+| Método | Ruta | Rol | Notas |
+|---|---|---|---|
+| GET | `/fichas` | administrativo (todas), instructor (las que dirige o en las que dicta) | `[{id, codigo, programa, jornada, ambiente, instructor (líder), fechaInicio, fechaFin, activo, aprendices, primerIngresoPendiente}]` |
+| GET | `/fichas/{id}` | administrativo, instructor de la ficha | + `listaAprendices: [{id, tipoDocumento, documento, nombre, email, telefono, primerIngresoPendiente, emailVerificado, credencialesEnviadasEn, p004}]` |
+| POST / PATCH | `/fichas`, `/fichas/{id}` | administrativo | `{codigo (5–12 dígitos), programa, jornada, ambienteId?, instructorId?, fechaInicio?, fechaFin?, activo?}`. Número repetido → `409` |
+| POST | `/fichas/{id}/students/import` | administrativo | Carga masiva con PhpSpreadsheet (JSON `{nombre, archivo: data URL, simular}` o multipart, como `/inventory/import`). Columnas `tipo_documento, documento*, nombre*, email*, telefono`. Nuevos: usuario aprendiz con contraseña temporal y `debe_cambiar_password`, y correo con credenciales; existentes (mismo documento): se actualizan y pasan a la ficha. → `{total, nuevos, actualizados, sinCambios, correos, errores, filas}` |
+| POST | `/fichas/{id}/students/{userId}/credentials` | administrativo | Contraseña temporal nueva, correo y primer ingreso de nuevo |
+| GET | `/mail-outbox?userId` | administrativo | Correos registrados o enviados (`CORREO_MODO` en `api/config.php`) |
+| POST | `/me/first-login/code` | el usuario con primer ingreso pendiente | `{email?}` (corrige el correo) → envía un código de 6 dígitos que vence en 15 min → `{enviadoA, expiraEn, codigoDemo?}` (`codigoDemo` solo en modo registro) |
+| POST | `/me/first-login` | el mismo | `{codigo, nueva}` → confirma el correo y cambia la contraseña (distinta de la temporal) → `usuario` |
+
+Mientras `debeCambiarPassword` sea `true`, cualquier otra ruta (salvo `/me`,
+`/auth/logout` y las dos de arriba) responde `403 PRIMER_INGRESO`.
+
+Tablas nuevas: `fichas`, `competencias`, `clases`, `clase_qr` (nonces de los
+QR), `asistencias` (presente | tarde), `excusas`, `p004`, `correos`; en
+`users`: `debe_cambiar_password`, `email_verificado_en`,
+`codigo_verificacion`, `codigo_expira`, `credenciales_enviadas_en`.

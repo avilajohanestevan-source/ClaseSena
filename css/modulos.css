@@ -696,3 +696,45 @@ button.asig-boton:hover{ border-color:var(--color-border-strong); background:var
   .etiquetas{ grid-template-columns:repeat(3, 1fr); gap:8px; }
   .etiqueta{ break-inside:avoid; border-style:solid; }
 }
+
+/* ================= Fichas, excusas, horario y primer ingreso ================= */
+.accion-grande--secundaria{ background:linear-gradient(135deg, var(--c-azul-700), var(--c-azul-900)); box-shadow:var(--sh-2); }
+.inicio > .accion-grande + .accion-grande{ margin-top:12px; }
+.fichas-lista{ display:grid; gap:14px; }
+@media (min-width: 1100px){ .fichas-lista{ grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+.ficha-numero{ font-size:15px; min-width:88px; padding:0 10px; }
+.tabla-aprendices td{ vertical-align:middle; }
+.tabla-aprendices td .status-chip{ margin-left:6px; }
+.correos-lista{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.correo details{ border:1px solid var(--color-border); border-radius:12px; padding:10px 12px; background:var(--color-surface); }
+.correo summary{ cursor:pointer; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.correo-cuerpo{ white-space:pre-wrap; font:13px/1.5 var(--font-mono, monospace); background:var(--color-surface-muted); padding:12px; border-radius:10px; margin:10px 0 0; }
+
+.excusas-lista{ display:grid; gap:12px; }
+.excusa{ display:grid; grid-template-columns:96px minmax(0, 1fr); gap:14px; align-items:start; border-left:4px solid var(--c-oro-400); }
+.excusa--aprobada{ border-left-color:var(--c-verde-500); }
+.excusa--rechazada{ border-left-color:var(--color-danger); }
+.excusa-foto img{ width:96px; height:96px; object-fit:cover; border-radius:12px; display:block; border:1px solid var(--color-border); }
+.excusa-datos{ display:grid; gap:4px; min-width:0; }
+.excusa-datos p{ margin:2px 0; }
+.excusa .novedad-acciones{ grid-column:1 / -1; }
+
+.horario{ display:grid; gap:12px; }
+.horario-dia--hoy{ border-color:var(--c-verde-200); box-shadow:inset 4px 0 0 var(--c-verde-500); }
+.horario-lista{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.horario-clase{ display:grid; grid-template-columns:auto minmax(0, 1fr) auto; gap:12px; align-items:center; padding:10px 12px; border:1px solid var(--color-border); border-radius:12px; }
+.horario-clase > div{ display:grid; gap:2px; min-width:0; }
+.horario-clase--cancelada{ opacity:.7; }
+.horario-clase--cancelada strong{ text-decoration:line-through; }
+.horario-hora{ font-size:13px; color:var(--color-heading); white-space:nowrap; }
+@media (max-width: 599px){
+  .horario-clase{ grid-template-columns:minmax(0, 1fr) auto; }
+  .horario-hora{ grid-column:1 / -1; }
+}
+
+.pi-form{ max-width:720px; }
+.pi-pasos{ margin:0; padding:0; list-style:none; display:grid; gap:20px; }
+.pi-correo{ display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+.pi-correo .campo{ flex:1 1 260px; }
+.pi-codigo{ font-size:22px; letter-spacing:.3em; max-width:220px; }
+.pi-demo{ display:block; margin-top:4px; color:var(--c-azul-900); }

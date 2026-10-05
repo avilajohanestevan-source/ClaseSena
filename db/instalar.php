@@ -34,10 +34,13 @@ try {
         echo "✓ $archivo\n";
     }
 
+    // Clases de las últimas semanas, asistencias, excusas y una aprendiz con el primer ingreso pendiente.
+    require __DIR__ . '/asistencia-prueba.php';
+
     // Carga masiva del inventario de prueba (Excel) con PhpSpreadsheet, como la haría un administrativo.
     $excel = __DIR__ . '/inventario-prueba.xlsx';
     if (is_file(__DIR__ . '/../api/vendor/autoload.php')) {
-        require __DIR__ . '/../api/lib/base.php';
+        require_once __DIR__ . '/../api/lib/base.php';
         require __DIR__ . '/../api/modulos/catalogos.php';
         require __DIR__ . '/../api/modulos/ambientes.php';
         require __DIR__ . '/../api/modulos/inventario.php';
@@ -61,10 +64,13 @@ try {
     $conteos = $conn->query(
         "SELECT (SELECT COUNT(*) FROM users) usuarios, (SELECT COUNT(*) FROM environments) ambientes,
                 (SELECT COUNT(*) FROM inventory_items) items, (SELECT COUNT(*) FROM item_families) familias,
-                (SELECT COUNT(*) FROM inspections) inspecciones, (SELECT COUNT(*) FROM persistent_issues WHERE estado = 'en_curso') novedades"
+                (SELECT COUNT(*) FROM inspections) inspecciones, (SELECT COUNT(*) FROM persistent_issues WHERE estado = 'en_curso') novedades,
+                (SELECT COUNT(*) FROM fichas) fichas, (SELECT COUNT(*) FROM users WHERE rol = 'aprendiz') aprendices"
     )->fetch_assoc();
-    printf("Base %s lista: %d usuarios, %d ambientes, %d ítems, %d familias, %d inspecciones, %d novedades permanentes en curso.\n",
-        DB_NAME, $conteos['usuarios'], $conteos['ambientes'], $conteos['items'], $conteos['familias'], $conteos['inspecciones'], $conteos['novedades']);
+    printf("Base %s lista: %d usuarios, %d ambientes, %d ítems, %d familias, %d inspecciones, %d novedades permanentes en curso, %d fichas con %d aprendices.\n",
+        DB_NAME, $conteos['usuarios'], $conteos['ambientes'], $conteos['items'], $conteos['familias'], $conteos['inspecciones'], $conteos['novedades'],
+        $conteos['fichas'], $conteos['aprendices']);
+    echo "Primer ingreso pendiente: aprendiz 1122334470 con la contraseña temporal Temporal2026\n";
     echo "Contraseña de todos los usuarios de prueba: Sena2026*\n";
 } catch (mysqli_sql_exception $e) {
     fwrite(STDERR, "Error: " . $e->getMessage() . "\n¿Está encendido MySQL en el panel de XAMPP?\n");

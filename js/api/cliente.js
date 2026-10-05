@@ -1,8 +1,8 @@
 // Cliente HTTP. Hay dos backends:
 //  · pedirAmbientes → API real en PHP/MySQL (api/index.php): ambientes,
 //    inventario, inspecciones, notificaciones, perfil y login.
-//  · pedir → módulos de asistencia; en modo mock las peticiones van al
-//    servidor simulado con una latencia aleatoria.
+//  · pedir → módulos de asistencia; con CONFIG.usarMock van al servidor
+//    simulado (latencia aleatoria); si no, al mismo backend real.
 // Ambos agregan su token y normalizan los errores como ErrorApi.
 import { CONFIG } from '../config.js';
 import { responder } from './mock/servidor.js';
@@ -85,18 +85,12 @@ export async function descargarAmbientes(ruta, datos, nombrePorDefecto = 'archiv
 }
 
 export async function pedir(metodo, ruta, datos) {
+  // Backend real: es el mismo de los ambientes, con la misma sesión.
+  if (!CONFIG.usarMock) return pedirAmbientes(metodo, ruta, datos);
   const conQuery = metodo === 'GET' && datos;
-  if (CONFIG.usarMock) {
-    const [min, max] = CONFIG.latenciaMock;
-    await new Promise((r) => setTimeout(r, min + Math.random() * (max - min)));
-    const { status, cuerpo } = responder({ metodo, ruta, query: conQuery ? datos : {}, cuerpo: conQuery ? null : datos, token });
-    if (status >= 400) throw new ErrorApi(status, cuerpo.mensaje, cuerpo.codigo, 'asistencia');
-    return structuredClone(cuerpo);
-  }
-  try {
-    return await porFetch(CONFIG.apiBase, metodo, ruta, datos, token);
-  } catch (e) {
-    e.origen = 'asistencia';
-    throw e;
-  }
+  const [min, max] = CONFIG.latenciaMock;
+  await new Promise((r) => setTimeout(r, min + Math.random() * (max - min)));
+  const { status, cuerpo } = responder({ metodo, ruta, query: conQuery ? datos : {}, cuerpo: conQuery ? null : datos, token });
+  if (status >= 400) throw new ErrorApi(status, cuerpo.mensaje, cuerpo.codigo, 'asistencia');
+  return structuredClone(cuerpo);
 }

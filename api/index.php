@@ -8,6 +8,7 @@
  */
 
 require __DIR__ . '/lib/base.php';
+require __DIR__ . '/lib/correo.php';
 require __DIR__ . '/modulos/auth.php';
 require __DIR__ . '/modulos/catalogos.php';
 require __DIR__ . '/modulos/ambientes.php';
@@ -20,6 +21,8 @@ require __DIR__ . '/modulos/auditoria.php';
 require __DIR__ . '/modulos/asignaciones.php';
 require __DIR__ . '/modulos/notificaciones.php';
 require __DIR__ . '/modulos/reportes.php';
+require __DIR__ . '/modulos/fichas.php';
+require __DIR__ . '/modulos/asistencia.php';
 
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
@@ -31,6 +34,8 @@ $RUTAS = [
     ['GET',    '#^/me$#',                                'rutaYo'],
     ['PATCH',  '#^/me$#',                                'rutaActualizarPerfil'],
     ['POST',   '#^/me/password$#',                       'rutaCambiarPassword'],
+    ['POST',   '#^/me/first-login/code$#',               'rutaCodigoPrimerIngreso'],
+    ['POST',   '#^/me/first-login$#',                    'rutaPrimerIngreso'],
     ['GET',    '#^/users$#',                             'rutaUsuarios'],
 
     ['GET',    '#^/specialties$#',                       'rutaEspecialidades'],
@@ -105,6 +110,35 @@ $RUTAS = [
     ['POST',   '#^/inbox/(\d+)/read$#',                  'rutaLeerNotificacion'],
 
     ['GET',    '#^/reports$#',                           'rutaReporte'],
+
+    // Fichas, aprendices y correos (credenciales)
+    ['GET',    '#^/fichas$#',                            'rutaFichas'],
+    ['POST',   '#^/fichas$#',                            'rutaCrearFicha'],
+    ['GET',    '#^/fichas/(\d+)$#',                      'rutaFicha'],
+    ['PATCH',  '#^/fichas/(\d+)$#',                      'rutaEditarFicha'],
+    ['POST',   '#^/fichas/(\d+)/students/import$#',      'rutaImportarAprendices'],
+    ['POST',   '#^/fichas/(\d+)/students/(\d+)/credentials$#', 'rutaReenviarCredenciales'],
+    ['GET',    '#^/mail-outbox$#',                       'rutaCorreos'],
+
+    // Asistencia a clases (contratos de la primera parte de API.md)
+    ['GET',    '#^/catalogs$#',                          'rutaCatalogosAsistencia'],
+    ['GET',    '#^/sessions$#',                          'rutaSesiones'],
+    ['POST',   '#^/sessions$#',                          'rutaCrearSesion'],
+    ['POST',   '#^/sessions/(\d+)/qr$#',                 'rutaQrClase'],
+    ['POST',   '#^/sessions/(\d+)/cancel$#',             'rutaCancelarClase'],
+    ['GET',    '#^/sessions/(\d+)/attendance$#',         'rutaAsistenciaClase'],
+    ['GET',    '#^/attendance$#',                        'rutaAsistencias'],
+    ['POST',   '#^/attendance/scan$#',                   'rutaEscanearAsistencia'],
+    ['GET',    '#^/students/absences$#',                 'rutaFaltas'],
+    ['GET',    '#^/my/schedule$#',                       'rutaMiHorario'],
+    ['GET',    '#^/excuses$#',                           'rutaExcusas'],
+    ['POST',   '#^/excuses$#',                           'rutaCrearExcusa'],
+    ['POST',   '#^/excuses/(\d+)/review$#',              'rutaRevisarExcusa'],
+    ['GET',    '#^/notifications$#',                     'rutaNotificacionesAsistencia'],
+    ['POST',   '#^/notifications/(\d+)/read$#',          'rutaLeerNotificacionAsistencia'],
+    ['GET',    '#^/p004$#',                              'rutaP004'],
+    ['POST',   '#^/p004/import$#',                       'rutaImportarP004'],
+    ['PATCH',  '#^/p004/(\d{6,12})$#',                   'rutaEstadoP004'],
 ];
 
 try {

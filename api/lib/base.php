@@ -165,11 +165,15 @@ function tokenDeLaPeticion(): ?string
     return preg_match('/^[a-f0-9]{64}$/i', $alterno) ? strtolower($alterno) : null;
 }
 
-/** Usuario de la sesión actual o 401. */
+/**
+ * Usuario de la sesión actual o 401. Si todavía no hizo su primer ingreso
+ * (confirmar el correo y cambiar la contraseña temporal) solo puede usar las
+ * rutas que lo permiten (permitirPrimerIngreso()): el resto responde 403 PRIMER_INGRESO.
+ */
 function usuario(): array
 {
     static $u = null;
-    if ($u) return $u;
+    if ($u) return verificarPrimerIngreso($u);
     $token = tokenDeLaPeticion();
     if (!$token) fallar(401, 'Tu sesión no es válida. Ingresa de nuevo.', 'SIN_SESION');
     $u = fila(
@@ -178,6 +182,20 @@ function usuario(): array
         [$token]
     );
     if (!$u) fallar(401, 'Tu sesión venció. Ingresa de nuevo.', 'SIN_SESION');
+    return verificarPrimerIngreso($u);
+}
+
+/** Rutas que sí se pueden usar antes del primer ingreso (perfil, código y cambio de contraseña). */
+function permitirPrimerIngreso(): void
+{
+    $GLOBALS['PERMITE_PRIMER_INGRESO'] = true;
+}
+
+function verificarPrimerIngreso(array $u): array
+{
+    if ((int) $u['debe_cambiar_password'] && empty($GLOBALS['PERMITE_PRIMER_INGRESO'])) {
+        fallar(403, 'Antes de continuar confirma tu correo y cambia tu contraseña temporal.', 'PRIMER_INGRESO');
+    }
     return $u;
 }
 
@@ -202,6 +220,9 @@ function usuarioPublico(array $u): array
         // Administrativos: coordinacion | administrativo (reciben los avisos de novedades, igual que almacén).
         'area' => $u['area'] ?? null,
         'ficha' => $u['ficha'],
+        // Primer ingreso pendiente: la app lo lleva a confirmar el correo y cambiar la contraseña.
+        'debeCambiarPassword' => (bool) ($u['debe_cambiar_password'] ?? false),
+        'emailVerificado' => !empty($u['email_verificado_en']),
     ];
 }
 

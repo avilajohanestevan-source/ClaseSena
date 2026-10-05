@@ -37,7 +37,7 @@ USE sena_ambientes;
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS audit_events, instructor_assignments, item_history, notifications, inspection_items, persistent_issues,
                      inspections, inventory_items, item_families, inventory_categories, environments, especialidades_ambiente,
-                     api_tokens, users;
+                     api_tokens, users, fichas, competencias, clases, clase_qr, asistencias, excusas, p004, correos;
 SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE users (
@@ -51,6 +51,12 @@ CREATE TABLE users (
   area            ENUM('coordinacion','administrativo') NULL, -- solo administrativos: a qué dependencia pertenece
   ficha           VARCHAR(12)  NULL,              -- solo aprendices
   password_hash   VARCHAR(255) NOT NULL,
+  -- Primer ingreso (aprendices importados con su ficha): confirmar el correo con un código y cambiar la contraseña temporal.
+  debe_cambiar_password TINYINT(1) NOT NULL DEFAULT 0,
+  email_verificado_en   DATETIME   NULL,
+  codigo_verificacion   CHAR(6)    NULL,
+  codigo_expira         DATETIME   NULL,
+  credenciales_enviadas_en DATETIME NULL,
   activo          TINYINT(1)   NOT NULL DEFAULT 1,
   created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_users_documento (documento),
@@ -256,7 +262,8 @@ CREATE TABLE item_history (
 CREATE TABLE notifications (
   id                   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id              INT UNSIGNED NOT NULL,
-  tipo                 ENUM('revision_lista','entrega_recibida','dano_reportado','dano_grave','novedad_permanente','novedad_resuelta','asignacion') NOT NULL,
+  tipo                 ENUM('revision_lista','entrega_recibida','dano_reportado','dano_grave','novedad_permanente','novedad_resuelta','asignacion',
+                            'clase_cancelada','riesgo','excusa','excusa_revisada','p004') NOT NULL,
   titulo               VARCHAR(160) NOT NULL,
   detalle              VARCHAR(300) NOT NULL,
   inspection_id        INT UNSIGNED NULL,
@@ -320,4 +327,136 @@ CREATE TABLE audit_events (
   KEY ix_audit_fecha (created_at),
   CONSTRAINT fk_audit_env  FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE SET NULL,
   CONSTRAINT fk_audit_user FOREIGN KEY (user_id)        REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- ===================== Fichas y asistencia a clases =====================
+--
+-- Una ficha es un grupo de aprendices de un programa. Coordinación la crea,
+-- importa sus aprendices desde Excel/CSV (se crean como usuarios con una
+-- contraseña temporal que llega por correo) y el primer ingreso obliga a
+-- confirmar el correo y cambiar la contraseña. Las clases (sesiones) se
+-- programan por ficha; el instructor muestra un QR y cada aprendiz lo escanea
+-- dentro de la ventana de registro. Las faltas se calculan: clase no
+-- cancelada, ventana cerrada y sin registro = falla, salvo que una excusa
+-- aprobada cubra ese día (justificada).
+
+CREATE TABLE fichas (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  codigo          VARCHAR(12)  NOT NULL,                 -- número de la ficha: 2758432
+  programa        VARCHAR(160) NOT NULL,
+  jornada         ENUM('manana','tarde','noche','fin_semana') NOT NULL DEFAULT 'manana',
+  environment_id  INT UNSIGNED NULL,                     -- ambiente habitual
+  instructor_id   INT UNSIGNED NULL,                     -- instructor líder: revisa las excusas de la ficha
+  fecha_inicio    DATE         NULL,
+  fecha_fin       DATE         NULL,
+  activo          TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_fichas_codigo (codigo),
+  CONSTRAINT fk_ficha_env  FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE SET NULL,
+  CONSTRAINT fk_ficha_inst FOREIGN KEY (instructor_id)  REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE competencias (
+  id      INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nombre  VARCHAR(160) NOT NULL,
+  UNIQUE KEY uq_competencia (nombre)
+) ENGINE=InnoDB;
+
+-- Sesión de clase: ficha, competencia, ambiente, instructor y horario. La
+-- ventana de registro abre al inicio y dura ventana_min minutos.
+CREATE TABLE clases (
+  id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  ficha_id            INT UNSIGNED NOT NULL,
+  competencia_id      INT UNSIGNED NOT NULL,
+  environment_id      INT UNSIGNED NOT NULL,
+  instructor_id       INT UNSIGNED NOT NULL,
+  inicio              DATETIME     NOT NULL,
+  fin                 DATETIME     NOT NULL,
+  ventana_min         SMALLINT UNSIGNED NOT NULL DEFAULT 15,
+  cancelada           TINYINT(1)   NOT NULL DEFAULT 0,
+  motivo_cancelacion  VARCHAR(300) NULL,
+  creada_por          INT UNSIGNED NULL,
+  created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY ix_clases_ficha (ficha_id, inicio),
+  KEY ix_clases_inst (instructor_id, inicio),
+  CONSTRAINT fk_clase_ficha FOREIGN KEY (ficha_id)       REFERENCES fichas(id)       ON DELETE CASCADE,
+  CONSTRAINT fk_clase_comp  FOREIGN KEY (competencia_id) REFERENCES competencias(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_clase_env   FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_clase_inst  FOREIGN KEY (instructor_id)  REFERENCES users(id)        ON DELETE RESTRICT,
+  CONSTRAINT ck_clase_horas CHECK (fin > inicio)
+) ENGINE=InnoDB;
+
+-- QR emitidos para una clase: el nonce evita QR fabricados.
+CREATE TABLE clase_qr (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  clase_id    INT UNSIGNED NOT NULL,
+  nonce       CHAR(12)     NOT NULL,
+  expira      DATETIME     NOT NULL,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_qr_nonce (nonce),
+  CONSTRAINT fk_qr_clase FOREIGN KEY (clase_id) REFERENCES clases(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Registro de entrada a clase (escaneando el QR del instructor). Las faltas no se guardan: se calculan.
+CREATE TABLE asistencias (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  clase_id    INT UNSIGNED NOT NULL,
+  aprendiz_id INT UNSIGNED NOT NULL,
+  estado      ENUM('presente','tarde') NOT NULL,
+  hora        DATETIME     NOT NULL,
+  UNIQUE KEY uq_asistencia (clase_id, aprendiz_id),
+  KEY ix_asis_aprendiz (aprendiz_id),
+  CONSTRAINT fk_asis_clase    FOREIGN KEY (clase_id)    REFERENCES clases(id) ON DELETE CASCADE,
+  CONSTRAINT fk_asis_aprendiz FOREIGN KEY (aprendiz_id) REFERENCES users(id)  ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Excusa del aprendiz con foto de evidencia y periodo de cobertura. Aprobada,
+-- las faltas de esos días quedan "justificadas" (no cuentan en el semáforo).
+CREATE TABLE excusas (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  aprendiz_id   INT UNSIGNED NOT NULL,
+  ficha_id      INT UNSIGNED NULL,
+  desde         DATE         NOT NULL,
+  hasta         DATE         NOT NULL,
+  motivo        VARCHAR(500) NOT NULL,
+  foto          VARCHAR(160) NOT NULL,
+  estado        ENUM('pendiente','aprobada','rechazada') NOT NULL DEFAULT 'pendiente',
+  revisada_por  INT UNSIGNED NULL,
+  revisada_en   DATETIME     NULL,
+  observacion   VARCHAR(300) NULL,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY ix_excusa_aprendiz (aprendiz_id, desde),
+  KEY ix_excusa_estado (estado),
+  CONSTRAINT fk_excusa_aprendiz FOREIGN KEY (aprendiz_id)  REFERENCES users(id)  ON DELETE CASCADE,
+  CONSTRAINT fk_excusa_ficha    FOREIGN KEY (ficha_id)     REFERENCES fichas(id) ON DELETE SET NULL,
+  CONSTRAINT fk_excusa_revisa   FOREIGN KEY (revisada_por) REFERENCES users(id)  ON DELETE SET NULL,
+  CONSTRAINT ck_excusa_fechas CHECK (hasta >= desde)
+) ENGINE=InnoDB;
+
+-- Estado académico (Sofía Plus, reporte P004): solo EN FORMACION y CONDICIONADO registran asistencia.
+CREATE TABLE p004 (
+  documento        VARCHAR(12)  NOT NULL PRIMARY KEY,
+  nombre           VARCHAR(120) NOT NULL,
+  ficha            VARCHAR(12)  NOT NULL,
+  programa         VARCHAR(160) NOT NULL,
+  estado           VARCHAR(30)  NOT NULL,
+  actualizado_por  INT UNSIGNED NULL,
+  actualizado_en   DATETIME     NULL,
+  CONSTRAINT fk_p004_user FOREIGN KEY (actualizado_por) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Correos enviados (credenciales, códigos de verificación). En la prueba de
+-- concepto quedan registrados aquí (CORREO_MODO = 'registro' en api/config.php)
+-- y se consultan en Fichas → Correos enviados; con 'mail' además se envían.
+CREATE TABLE correos (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id     INT UNSIGNED NULL,
+  para        VARCHAR(160) NOT NULL,
+  asunto      VARCHAR(200) NOT NULL,
+  cuerpo      TEXT         NOT NULL,
+  estado      ENUM('registrado','enviado','error') NOT NULL,
+  error       VARCHAR(300) NULL,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY ix_correos_user (user_id),
+  CONSTRAINT fk_correo_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;

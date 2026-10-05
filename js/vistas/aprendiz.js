@@ -32,7 +32,9 @@ export async function render(raiz, { alSalir }) {
   } }, icono('qr'), 'Usar el último QR generado (demo)');
 
   raiz.append(
-    encabezado('Registrar asistencia', `${usuario.nombre} · Ficha ${usuario.ficha}`),
+    encabezado('Registrar asistencia', `${usuario.nombre} · Ficha ${usuario.ficha}`,
+      h('a', { class: 'btn btn-outline', href: '#/horario' }, icono('calendario'), 'Mi horario'),
+      h('a', { class: 'btn btn-outline', href: '#/excusas' }, icono('archivo'), 'Mis excusas')),
     h('div', { class: 'aprendiz-grid' },
       h('div', {}, panelClase,
         h('div', { class: 'card', 'data-anim': '' },
@@ -148,9 +150,14 @@ export async function render(raiz, { alSalir }) {
     let consecutivas = 0;
     for (let i = ordenadas.length - 1; i >= 0 && ordenadas[i].estado === 'falla'; i--) consecutivas++;
     const faltasTotales = validas.filter((r) => r.estado === 'falla').length;
+    // Las justificadas (excusa aprobada) no rompen la racha ni suman.
+    const sinJustificadas = ordenadas.filter((r) => r.estado !== 'justificada');
+    consecutivas = 0;
+    for (let i = sinJustificadas.length - 1; i >= 0 && sinJustificadas[i].estado === 'falla'; i--) consecutivas++;
     vaciar(resumen,
-      h('div', {}, h('span', { class: 'text-muted' }, 'Asistencias'), h('strong', {}, validas.filter((r) => r.estado !== 'falla').length)),
+      h('div', {}, h('span', { class: 'text-muted' }, 'Asistencias'), h('strong', {}, validas.filter((r) => r.estado === 'presente' || r.estado === 'tarde').length)),
       h('div', {}, h('span', { class: 'text-muted' }, 'Faltas'), h('strong', {}, faltasTotales)),
+      h('div', {}, h('span', { class: 'text-muted' }, 'Justificadas'), h('strong', {}, validas.filter((r) => r.estado === 'justificada').length)),
       h('div', {}, h('span', { class: 'text-muted' }, 'Mi semáforo'), badgeSemaforo({ faltasConsecutivas: consecutivas, faltasTotales })));
     tabla.mostrar(filas);
   }

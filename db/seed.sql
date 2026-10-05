@@ -211,3 +211,41 @@ INSERT INTO audit_events (entidad, entidad_id, environment_id, accion, detalle, 
 INSERT INTO audit_events (entidad, entidad_id, environment_id, accion, detalle, user_id, created_at) VALUES
   ('asignacion', 6, 4, 'reasignada', 'Laura Gómez Patiño → Andrés Felipe Castro desde el día siguiente · Cambio de horario de Laura Gómez', 10, TIMESTAMP(CURDATE() - INTERVAL 4 DAY, '17:00:00')),
   ('asignacion', 8, 5, 'anulada', 'Turno anulado: Se aplazó el taller', 6, TIMESTAMP(CURDATE() - INTERVAL 3 DAY, '11:00:00'));
+
+-- ===================== Fichas y asistencia =====================
+-- Fichas con su instructor líder y ambiente habitual; competencias; más
+-- aprendices (registrados hace 60 días para que cuenten las clases
+-- anteriores) y el P004. Las clases de las últimas cuatro semanas con sus
+-- asistencias (un patrón por aprendiz para que el semáforo tenga todos los
+-- colores), una excusa aprobada y una pendiente las genera db/asistencia-prueba.php.
+INSERT INTO fichas (id, codigo, programa, jornada, environment_id, instructor_id, fecha_inicio, fecha_fin) VALUES
+  (1, '2758432', 'Análisis y desarrollo de software',       'manana', 1, 1, CURDATE() - INTERVAL 120 DAY, CURDATE() + INTERVAL 400 DAY),
+  (2, '2834519', 'Electrónica y automatización industrial', 'manana', 3, 3, CURDATE() - INTERVAL 90 DAY,  CURDATE() + INTERVAL 450 DAY),
+  (3, '2901122', 'Cocina',                                  'tarde',  4, 2, CURDATE() - INTERVAL 60 DAY,  CURDATE() + INTERVAL 300 DAY);
+
+INSERT INTO competencias (id, nombre) VALUES
+  (1, 'Programar software'), (2, 'Bases de datos'), (3, 'Inglés técnico'),
+  (4, 'Instalaciones eléctricas'), (5, 'Electrónica digital'),
+  (6, 'Cocina colombiana'), (7, 'Higiene y manipulación de alimentos');
+
+UPDATE users SET created_at = NOW() - INTERVAL 60 DAY, email_verificado_en = NOW() - INTERVAL 60 DAY WHERE rol = 'aprendiz';
+
+INSERT INTO users (id, tipo_documento, documento, nombre, email, telefono, rol, ficha, password_hash, created_at, email_verificado_en) VALUES
+  (12, 'CC', '1122334458', 'Juan David Pérez Mora',       'jdperez@soy.sena.edu.co',     '3014445569', 'aprendiz', '2758432', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY),
+  (13, 'TI', '1122334459', 'Valeria Gómez Castaño',       'vgomez@soy.sena.edu.co',      '3014445570', 'aprendiz', '2758432', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY),
+  (14, 'CC', '1122334461', 'Santiago Herrera Ruiz',       'sherrera@soy.sena.edu.co',    '3014445571', 'aprendiz', '2758432', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY),
+  (15, 'CC', '1122334462', 'Daniela Moreno Silva',        'dmoreno@soy.sena.edu.co',     '3014445572', 'aprendiz', '2758432', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY),
+  (16, 'CC', '1122334463', 'Felipe Andrés Ríos',          'frios@soy.sena.edu.co',       '3014445573', 'aprendiz', '2758432', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY),
+  (17, 'CC', '1122334464', 'Laura Sofía Vargas',          'lsvargas@soy.sena.edu.co',    '3014445574', 'aprendiz', '2834519', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY),
+  (18, 'CC', '1122334465', 'Kevin Alejandro Díaz',        'kadiaz@soy.sena.edu.co',      '3014445575', 'aprendiz', '2834519', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY),
+  (19, 'CC', '1122334466', 'María José Cárdenas',         'mjcardenas@soy.sena.edu.co',  '3014445576', 'aprendiz', '2834519', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY),
+  (20, 'CC', '1122334467', 'Andrés Camilo Peña',          'acpena@soy.sena.edu.co',      '3014445577', 'aprendiz', '2901122', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY),
+  (21, 'CC', '1122334468', 'Natalia Rincón Ortiz',        'nrincon@soy.sena.edu.co',     '3014445578', 'aprendiz', '2901122', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY),
+  (22, 'CC', '1122334469', 'Esteban Muñoz Gil',           'emunoz@soy.sena.edu.co',      '3014445579', 'aprendiz', '2901122', @hash, NOW() - INTERVAL 60 DAY, NOW() - INTERVAL 60 DAY);
+
+-- P004: Kevin está aplazado (no puede registrar asistencia) y Santiago condicionado.
+INSERT INTO p004 (documento, nombre, ficha, programa, estado, actualizado_por, actualizado_en)
+  SELECT u.documento, u.nombre, u.ficha, f.programa,
+         CASE u.documento WHEN '1122334465' THEN 'APLAZADO' WHEN '1122334461' THEN 'CONDICIONADO' ELSE 'EN FORMACION' END,
+         10, NOW() - INTERVAL 20 DAY
+  FROM users u JOIN fichas f ON f.codigo = u.ficha WHERE u.rol = 'aprendiz';

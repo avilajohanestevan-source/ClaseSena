@@ -41,10 +41,10 @@ function normalizarTitulo(string $t): string
 }
 
 /**
- * Lee la hoja y devuelve [['fila' => 2, 'ambiente' => '107', …], …].
+ * Lee la primera hoja como tabla (la primera fila son los títulos).
  * Con PhpSpreadsheet lee xlsx, xls, ods y csv; sin él, solo csv.
  */
-function leerHojaInventario(string $ruta, string $nombreArchivo): array
+function leerTabla(string $ruta, string $nombreArchivo): array
 {
     $ext = strtolower(pathinfo($nombreArchivo, PATHINFO_EXTENSION));
     if (hayPhpSpreadsheet()) {
@@ -60,24 +60,38 @@ function leerHojaInventario(string $ruta, string $nombreArchivo): array
     } else {
         throw new ErrorApi(500, 'Falta instalar PhpSpreadsheet para leer Excel (ejecuta "composer install"). Mientras tanto puedes subir un CSV.', 'SIN_PHPSPREADSHEET');
     }
+    return $tabla;
+}
 
-    $titulos = array_map(fn($t) => normalizarTitulo((string) $t), array_shift($tabla) ?? []);
-    foreach (['ambiente', 'nombre', 'categoria'] as $obligatoria) {
+/**
+ * Filas con datos de una tabla: [['fila' => 2, '<columna>' => valor, …], …],
+ * solo con las columnas conocidas (los títulos pasan por $normalizar).
+ */
+function filasDeTabla(array $tabla, array $columnas, array $obligatorias, callable $normalizar, int $max = MAX_FILAS_CARGA): array
+{
+    $titulos = array_map(fn($t) => $normalizar((string) $t), array_shift($tabla) ?? []);
+    foreach ($obligatorias as $obligatoria) {
         if (!in_array($obligatoria, $titulos, true)) {
-            throw new ErrorApi(422, "Falta la columna \"$obligatoria\". La primera fila debe tener los títulos: " . implode(', ', COLUMNAS_CARGA) . '.', 'COLUMNAS');
+            throw new ErrorApi(422, "Falta la columna \"$obligatoria\". La primera fila debe tener los títulos: " . implode(', ', $columnas) . '.', 'COLUMNAS');
         }
     }
     $filas = [];
     foreach ($tabla as $n => $valores) {
         $f = ['fila' => $n + 2];
         foreach ($titulos as $i => $t) {
-            if (in_array($t, COLUMNAS_CARGA, true)) $f[$t] = trim((string) ($valores[$i] ?? ''));
+            if (in_array($t, $columnas, true)) $f[$t] = trim((string) ($valores[$i] ?? ''));
         }
         if (implode('', array_diff_key($f, ['fila' => 1])) === '') continue; // fila vacía
         $filas[] = $f;
     }
-    if (count($filas) > MAX_FILAS_CARGA) throw new ErrorApi(422, 'El archivo tiene más de ' . MAX_FILAS_CARGA . ' filas. Divídelo en varios.', 'ARCHIVO');
+    if (count($filas) > $max) throw new ErrorApi(422, "El archivo tiene más de $max filas. Divídelo en varios.", 'ARCHIVO');
     return $filas;
+}
+
+/** Lee la hoja del inventario: [['fila' => 2, 'ambiente' => '107', …], …]. */
+function leerHojaInventario(string $ruta, string $nombreArchivo): array
+{
+    return filasDeTabla(leerTabla($ruta, $nombreArchivo), COLUMNAS_CARGA, ['ambiente', 'nombre', 'categoria'], 'normalizarTitulo');
 }
 
 /** CSV separado por ; o , (el que aparezca en la primera línea). */
@@ -230,14 +244,13 @@ function importarInventario(array $filas, ?int $usuarioId, bool $simular, string
 }
 
 /**
- * POST /inventory/import (alias: /items/import)
+ * Archivo de una carga masiva (inventario o aprendices de una ficha):
  *   JSON: {archivo: data URL, nombre: "x.xlsx", simular}
  *   multipart/form-data: archivo (el archivo), simular=1
- * Con simular es una vista previa: no guarda nada.
+ * → ['tabla' => filas con los títulos, 'nombre' => nombre del archivo, 'simular' => bool]
  */
-function rutaCargaMasiva(): never
+function recibirTabla(): array
 {
-    $u = exigirRol(...ROLES_INVENTARIO);
     $multipart = !empty($_FILES['archivo']);
     if ($multipart) {
         $subido = $_FILES['archivo'];
@@ -257,15 +270,27 @@ function rutaCargaMasiva(): never
     if (!preg_match('/\.(xlsx|xls|ods|csv|txt)$/i', $nombre)) fallar(422, 'Sube un archivo .xlsx, .xls, .ods o .csv.', 'ARCHIVO');
 
     // El lector elige el formato por la extensión: se copia a un temporal con la extensión original.
-    $tmp = tempnam(sys_get_temp_dir(), 'inv');
+    $tmp = tempnam(sys_get_temp_dir(), 'tab');
     $ruta = $tmp . '.' . strtolower(pathinfo($nombre, PATHINFO_EXTENSION));
     rename($tmp, $ruta);
     $multipart ? copy($subido['tmp_name'], $ruta) : file_put_contents($ruta, $binario);
     try {
-        $filas = leerHojaInventario($ruta, $nombre);
+        $tabla = leerTabla($ruta, $nombre);
     } finally {
         @unlink($ruta);
     }
+    return ['tabla' => $tabla, 'nombre' => $nombre, 'simular' => $simular];
+}
+
+/**
+ * POST /inventory/import (alias: /items/import): archivo como en recibirTabla().
+ * Con simular es una vista previa: no guarda nada.
+ */
+function rutaCargaMasiva(): never
+{
+    $u = exigirRol(...ROLES_INVENTARIO);
+    ['tabla' => $tabla, 'nombre' => $nombre, 'simular' => $simular] = recibirTabla();
+    $filas = filasDeTabla($tabla, COLUMNAS_CARGA, ['ambiente', 'nombre', 'categoria'], 'normalizarTitulo');
     if (!$filas) fallar(422, 'El archivo no tiene filas con datos debajo de los títulos.', 'ARCHIVO');
     responder(importarInventario($filas, (int) $u['id'], $simular, $nombre));
 }

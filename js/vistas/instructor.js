@@ -1,13 +1,16 @@
 // Dashboard del instructor: clases de hoy con su ventana de registro,
 // GenerarQRButton (modal con QR dinámico), historial de la sesión,
 // inspección del ambiente, acceso a reportar daño y modo clase cancelada.
+// "Programar clase" crea una sesión para una de sus fichas (por defecto,
+// ahora mismo); las excusas de sus aprendices se revisan en Excusas.
 import { h, icono, vaciar, formato } from '../ui/dom.js';
 import { anim } from '../ui/anim.js';
 import { toast, abrirModal } from '../ui/avisos.js';
 import { chipAsistencia, cargando, tarjetaError, encabezado } from '../ui/componentes.js';
 import { estadoVentana, formatearDuracion, fechaIso } from '../reglas.js';
 import { api } from '../api/contratos.js';
-import { estado, usuarioAsistencia } from '../estado.js';
+import { estado, usuarioAsistencia, catalogos } from '../estado.js';
+import { apiAmb } from '../api/ambientes.js';
 import { CONFIG } from '../config.js';
 
 const TEXTO_VENTANA = {
@@ -20,6 +23,8 @@ export async function render(raiz, { alSalir }) {
   const resumen = h('div', { class: 'stat-grid', 'data-anim': '' });
   raiz.append(
     encabezado(`Hola, ${usuario.nombre.split(' ')[0]}`, 'Tus clases de hoy. Genera el QR mientras la ventana de registro esté abierta.',
+      h('button', { class: 'btn btn-primary', type: 'button', onclick: () => programarClase(cargar) }, icono('mas'), 'Programar clase'),
+      h('a', { class: 'btn btn-outline', href: '#/excusas' }, icono('archivo'), 'Excusas'),
       h('a', { class: 'btn btn-outline', href: '#/inspecciones' }, icono('inspeccion'), 'Inspección del ambiente')),
     resumen,
     h('h3', { class: 'bloque-titulo', 'data-anim': '' }, 'Clases activas hoy'),
@@ -141,6 +146,53 @@ export async function render(raiz, { alSalir }) {
   const reloj = setInterval(() => tarjetas.forEach((t) => t.tic()), 1000);
   alSalir(() => clearInterval(reloj));
   await cargar();
+}
+
+/* ---------------- programar una clase ---------------- */
+
+async function programarClase(alCrear) {
+  let fichas = [], cat;
+  try { [fichas, cat] = await Promise.all([apiAmb.fichas(), catalogos()]); } catch (e) { toast('error', 'No se cargaron tus fichas', e.message); return; }
+  if (!fichas.length) { toast('aviso', 'No tienes fichas', 'Coordinación te asigna como instructor líder de una ficha.'); return; }
+  const ahora = new Date();
+  const hh = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const c = (id, etiqueta, input) => h('div', { class: 'campo' }, h('label', { for: id }, etiqueta), input);
+  const ficha = h('select', { id: 'pc-ficha', onchange: () => { const f = fichas.find((x) => String(x.id) === ficha.value); if (f?.ambiente) ambiente.value = f.ambiente.id; } },
+    fichas.filter((f) => f.activo).map((f) => h('option', { value: f.id }, `${f.codigo} · ${f.programa}`)));
+  const competencia = h('input', { type: 'text', id: 'pc-comp', list: 'pc-competencias', maxlength: 160, placeholder: 'Elige o escribe la competencia' });
+  const opciones = h('datalist', { id: 'pc-competencias' }, cat.competencias.map((x) => h('option', { value: x.nombre })));
+  const ambiente = h('select', { id: 'pc-amb' }, cat.ambientes.map((a) => h('option', { value: a.id }, a.nombre)));
+  const dia = h('input', { type: 'date', id: 'pc-dia', value: fechaIso(), min: fechaIso() });
+  const inicio = h('input', { type: 'time', id: 'pc-ini', value: hh(ahora) });
+  const fin = h('input', { type: 'time', id: 'pc-fin', value: hh(new Date(ahora.getTime() + 2 * 3600_000)) > hh(ahora) ? hh(new Date(ahora.getTime() + 2 * 3600_000)) : '23:59' });
+  const ventana = h('select', { id: 'pc-ventana' }, [10, 15, 20, 30, 45, 60].map((m) => h('option', { value: m, selected: m === CONFIG.ventanaPorDefectoMin }, `${m} minutos`)));
+  ficha.dispatchEvent(new Event('change'));
+  const guardar = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => enviar() }, icono('check'), 'Programar');
+  const { cerrar } = abrirModal({
+    titulo: 'Programar clase', subtitulo: 'Por defecto empieza ahora: la ventana de registro abre al inicio y el QR se genera desde la tarjeta de la clase.', ancho: 'normal',
+    contenido: h('div', { class: 'form-grid' },
+      h('div', { class: 'full' }, c('pc-ficha', 'Ficha', ficha)),
+      h('div', { class: 'full' }, c('pc-comp', 'Competencia', competencia), opciones),
+      c('pc-amb', 'Ambiente', ambiente), c('pc-dia', 'Día', dia),
+      c('pc-ini', 'Hora de inicio', inicio), c('pc-fin', 'Hora final', fin),
+      c('pc-ventana', 'Ventana de registro', ventana)),
+    acciones: [({ cerrar: x }) => h('button', { class: 'btn btn-outline', type: 'button', onclick: () => x() }, 'Cancelar'), guardar],
+  });
+  async function enviar() {
+    const nombre = competencia.value.trim();
+    const existente = cat.competencias.find((x) => x.nombre.toLowerCase() === nombre.toLowerCase());
+    if (nombre.length < 3) { toast('aviso', 'Falta la competencia', 'Elige o escribe la competencia de la clase.'); competencia.focus(); return; }
+    if (fin.value <= inicio.value) { toast('aviso', 'Revisa las horas', 'La hora final debe ser posterior a la de inicio.'); return; }
+    guardar.disabled = true;
+    try {
+      const s = await api.crearSesion({ fichaId: Number(ficha.value), ...(existente ? { competenciaId: existente.id } : { competencia: nombre }),
+        ambienteId: Number(ambiente.value), fecha: dia.value, horaInicio: inicio.value, horaFin: fin.value, ventanaMin: Number(ventana.value) });
+      if (!existente) estado.catalogos = null; // la competencia nueva aparece la próxima vez
+      toast('exito', 'Clase programada', `${s.competencia} · ficha ${s.ficha} · ${formato.hora(s.startTime)}`);
+      cerrar();
+      alCrear?.();
+    } catch (e) { toast('error', 'No se programó', e.message); guardar.disabled = false; }
+  }
 }
 
 /* ---------------- modal del QR ---------------- */

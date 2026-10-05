@@ -5,6 +5,7 @@
 import { api } from './api/contratos.js';
 import { apiAmb } from './api/ambientes.js';
 import { usarToken, usarTokenAmbientes } from './api/cliente.js';
+import { CONFIG } from './config.js';
 
 const CLAVE_SESION = 'sena-ambientes.sesion';
 const oyentes = new Map();
@@ -108,6 +109,8 @@ export async function catalogos() {
  * muestre "No hay asistencias registradas" en lugar de un error técnico.
  */
 export function usuarioAsistencia() {
+  // Con el backend real, el usuario de la asistencia es el mismo de la sesión.
+  if (!CONFIG.usarMock && estado.usuario) return estado.usuario;
   if (!estado.usuarioAsistencia) {
     const e = new Error('No hay asistencias registradas por el momento.');
     e.origen = 'asistencia';

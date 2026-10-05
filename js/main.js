@@ -12,6 +12,7 @@ import { aplicarPreferencias, movimientoReducido } from './ui/preferencias.js';
 import { estado, escuchar, cerrarSesion, restaurarSesion, alCerrarSesion } from './estado.js';
 import { alVencerSesion } from './api/cliente.js';
 import { apiAmb } from './api/ambientes.js';
+import { api } from './api/contratos.js';
 import { ETIQUETA_ROL } from './reglas.js';
 
 const TODOS = ['instructor', 'portero', 'administrativo', 'aprendiz', 'almacen'];
@@ -37,9 +38,14 @@ const RUTAS = {
   asignaciones: { vista: () => import('./vistas/asignaciones.js'), roles: ['administrativo', 'portero', 'instructor'], titulo: 'Asignaciones', icono: 'calendario', grupo: 'ambientes' },
   auditoria: { vista: () => import('./vistas/auditoria.js'), roles: ['administrativo'], titulo: 'Auditoría', icono: 'historial', grupo: 'ambientes' },
   reportes: { vista: () => import('./vistas/reportes.js'), roles: ['administrativo'], titulo: 'Reportes', icono: 'reporte', grupo: 'ambientes' },
-  // Asistencia a clases (datos simulados, js/api/mock).
+  // Primer ingreso obligatorio (confirmar correo y cambiar la contraseña temporal): sin menú.
+  'primer-ingreso': { vista: () => import('./vistas/primer-ingreso.js'), roles: TODOS, titulo: 'Primer ingreso' },
+  // Asistencia a clases (backend real: api/modulos/asistencia.php y fichas.php).
+  fichas: { vista: () => import('./vistas/fichas.js'), roles: ['administrativo', 'instructor'], titulo: 'Fichas', icono: 'usuarios', grupo: 'asistencia' },
   clases: { vista: () => import('./vistas/instructor.js'), roles: ['instructor'], titulo: 'Asistencia a clases', icono: 'qr', grupo: 'asistencia' },
+  horario: { vista: () => import('./vistas/horario.js'), roles: ['aprendiz'], titulo: 'Mi horario', icono: 'calendario', grupo: 'asistencia' },
   asistencia: { vista: () => import('./vistas/aprendiz.js'), roles: ['aprendiz'], titulo: 'Registrar asistencia', icono: 'escanear', grupo: 'asistencia' },
+  excusas: { vista: () => import('./vistas/excusas.js'), roles: ['aprendiz', 'instructor', 'administrativo'], titulo: 'Excusas', icono: 'archivo', grupo: 'asistencia' },
   semaforo: { vista: () => import('./vistas/administrativo.js'), roles: ['administrativo'], titulo: 'Semáforo de faltas', icono: 'alerta', grupo: 'asistencia' },
   p004: { vista: () => import('./vistas/p004.js'), roles: ['administrativo'], titulo: 'Gestión P004', icono: 'archivo', grupo: 'asistencia' },
   historial: { vista: () => import('./vistas/historial.js'), roles: ['instructor', 'administrativo'], titulo: 'Historial de asistencia', icono: 'historial', grupo: 'asistencia' },
@@ -48,7 +54,7 @@ const RUTAS = {
 const GRUPOS = [
   { clave: 'general', titulo: '' },
   { clave: 'ambientes', titulo: 'Ambientes' },
-  { clave: 'asistencia', titulo: 'Asistencia · datos simulados' },
+  { clave: 'asistencia', titulo: 'Fichas y asistencia' },
   { clave: 'cuenta', titulo: 'Cuenta' },
 ];
 
@@ -94,13 +100,15 @@ function pintarMenu(u) {
         .map(([ruta, r]) => ({ ruta, etiqueta: r.titulo, icono: r.icono })),
     })).filter((g) => g.items.length),
   });
-  shell.campana.replaceChildren(u.rol === 'aprendiz' ? '' : bandeja.el);
+  shell.campana.replaceChildren(u.debeCambiarPassword ? '' : bandeja.el);
 }
 
 /** Insignia de Inspecciones: revisiones por entregar (portero y administrativo) o en proceso (instructor). */
 async function actualizarInsignias() {
   const u = estado.usuario;
-  if (!u || u.rol === 'aprendiz') return;
+  if (!u || u.debeCambiarPassword) return;
+  if (u.rol === 'aprendiz' || u.rol === 'instructor' || u.rol === 'administrativo') actualizarInsigniaExcusas(u);
+  if (u.rol === 'aprendiz') return;
   try {
     if (u.rol !== 'almacen') {
       const n = u.rol === 'instructor'
@@ -109,6 +117,13 @@ async function actualizarInsignias() {
       shell.insignia('inspecciones', n, u.rol === 'instructor' ? 'en proceso' : 'por entregar');
     }
     if (['administrativo', 'instructor', 'almacen'].includes(u.rol)) shell.insignia('novedades', (await apiAmb.novedades({ estado: 'en_curso' })).length, 'novedades permanentes en curso');
+  } catch { /* la insignia es informativa */ }
+}
+/** Excusas: pendientes de revisar (instructor y administrativo) o del aprendiz sin respuesta. */
+async function actualizarInsigniaExcusas(u) {
+  try {
+    const pendientes = await api.excusas({ estado: 'pendiente' });
+    shell.insignia('excusas', pendientes.length, u.rol === 'aprendiz' ? 'excusas sin revisar' : 'excusas por revisar');
   } catch { /* la insignia es informativa */ }
 }
 escuchar('bandeja', actualizarInsignias);
@@ -127,6 +142,10 @@ async function navegar() {
   if (!u) {
     clave = 'login';
     if (ruta !== 'login') history.replaceState(null, '', '#/login');
+  } else if (u.debeCambiarPassword && clave !== 'primer-ingreso') {
+    // Hasta confirmar el correo y cambiar la contraseña temporal no hay otra pantalla.
+    location.replace('#/primer-ingreso');
+    return;
   } else if (!clave || clave === 'login' || !RUTAS[clave].roles.includes(u.rol)) {
     if (clave && clave !== 'login') toast('aviso', 'Sin acceso', 'Esa sección no está disponible para tu rol.');
     location.replace('#/inicio');
@@ -173,7 +192,7 @@ escuchar('sesion', (u) => {
   vieneDeLogin = !!u;
   if (u) {
     pintarMenu(u);
-    if (u.rol !== 'aprendiz') bandeja.iniciar();
+    if (!u.debeCambiarPassword) bandeja.iniciar();
     toast('exito', `Bienvenido, ${u.nombre.split(' ')[0]}`, `Ingresaste como ${ETIQUETA_ROL[u.rol].toLowerCase()}.`);
   } else {
     bandeja.detener();
@@ -181,7 +200,10 @@ escuchar('sesion', (u) => {
   const destino = u ? '#/inicio' : '#/login';
   if (location.hash === destino) navegar(); else location.hash = destino;
 });
-escuchar('usuario', (u) => pintarMenu(u));
+escuchar('usuario', (u) => {
+  pintarMenu(u);
+  if (!u.debeCambiarPassword) bandeja.iniciar();
+});
 
 alVencerSesion(() => {
   if (!estado.usuario) return;
@@ -194,6 +216,6 @@ window.addEventListener('hashchange', navegar);
 // Retoma la sesión de esta pestaña (si el backend aún la acepta) antes de pintar.
 if (await restaurarSesion()) {
   pintarMenu(estado.usuario);
-  if (estado.usuario.rol !== 'aprendiz') bandeja.iniciar();
+  if (!estado.usuario.debeCambiarPassword) bandeja.iniciar();
 }
 navegar();
